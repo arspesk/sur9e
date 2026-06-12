@@ -1,0 +1,207 @@
+---
+exec: headless
+needs_tools: []
+---
+
+# Mode: pdf — ATS-Optimized PDF Generation
+
+## Full pipeline
+
+1. Read `inputs/personalization/cv.md` as source of truth
+2. Ask the user for the JD if it isn't already in context (text or URL)
+3. Extract 15-20 keywords from the JD
+4. Detect JD language → CV language (EN default)
+5. Detect company location → paper format:
+   - US/Canada → `letter`
+   - Rest of the world → `a4`
+6. Detect role archetype → adapt framing
+7. Rewrite the Professional Summary, injecting JD keywords + exit-narrative bridge ("Built and sold a business. Now applying systems thinking to [JD domain].")
+8. Pick the top 3-4 projects most relevant to the offer
+9. Reorder experience bullets by relevance to the JD
+10. Build the competency grid from JD requirements (6-8 keyword phrases)
+11. Inject keywords naturally into existing achievements (NEVER invent)
+12. Generate the full HTML from template + personalized content
+13. Read `name` from `inputs/personalization/profile.yml` → normalize to lowercase kebab-case (e.g. "John Doe" → "john-doe") → `{candidate}`. Compute `{company-slug}` = the offer's company lowercased with every run of non-alphanumeric characters collapsed to a single hyphen (e.g. "Otter.ai" → "otter-ai"). This MUST match the slug the app derives (companySlug) so the app auto-detects the PDF in the report's Attachments section.
+14. Emit `format: {letter|a4}` then the COMPLETE final HTML between
+    `<<<SUR9E_OUTPUT>>>` / `<<<SUR9E_END>>>` sentinels. The app writes the
+    HTML, runs the PDF build, and names the file
+    `artifacts/output/cv-{candidate}-{company-slug}-{num}-{YYYY-MM-DD}.pdf`
+    (`{num}` is the offer's tracker number — it keeps two offers at the same
+    company from overwriting each other's CVs).
+15. Report: PDF path, page count, % keyword coverage
+
+## ATS rules (clean parsing)
+
+- Single-column layout (no sidebars, no parallel columns)
+- Standard headers: "Professional Summary", "Work Experience", "Education", "Skills", "Certifications", "Projects"
+- No text inside images/SVGs
+- No critical info in PDF headers/footers (ATS ignores them)
+- UTF-8, selectable text (not rasterized)
+- No nested tables
+- JD keywords distributed: Summary (top 5), first bullet of every role, Skills section
+
+## PDF design
+
+- **Fonts**: Space Grotesk (headings, 600-700) + DM Sans (body, 400-500)
+- **Self-hosted fonts**: `fonts/`
+- **Header**: name in Space Grotesk 24px bold + 2px gradient line `linear-gradient(to right, hsl(187,74%,32%), hsl(270,70%,45%))` + contact row
+- **Section headers**: Space Grotesk 13px, uppercase, letter-spacing 0.05em, primary cyan
+- **Body**: DM Sans 11px, line-height 1.5
+- **Company names**: accent purple `hsl(270,70%,45%)`
+- **Margins**: 0.6in
+- **Background**: pure white
+
+## Section order (optimized for "6-second recruiter scan")
+
+1. Header (large name, gradient, contact, portfolio link)
+2. Professional Summary (3-4 lines, keyword-dense)
+3. Core Competencies (6-8 keyword phrases in a flex grid)
+4. Work Experience (reverse chronological)
+5. Projects (top 3-4 most relevant)
+6. Education & Certifications
+7. Skills (languages + technical)
+
+## Keyword-injection strategy (ethical, truth-based)
+
+Examples of legitimate rewording:
+
+- JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → rewrite as "RAG pipeline design and LLM orchestration workflows"
+- JD says "MLOps" and CV says "observability, evals, error handling" → rewrite as "MLOps and observability: evals, error handling, cost monitoring"
+- JD says "stakeholder management" and CV says "collaborated with team" → rewrite as "stakeholder management across engineering, operations, and business"
+
+**NEVER add skills the candidate doesn't have. Only restate real experience using the JD's exact vocabulary.**
+
+## HTML template
+
+Use the template at `cv-template.html`. Replace the `{{...}}` placeholders with personalized content:
+
+| Placeholder                  | Content                                                                                                                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{{LANG}}`                   | `en` or `es`                                                                                                                                                                                                     |
+| `{{PAGE_WIDTH}}`             | `8.5in` (letter) or `210mm` (A4)                                                                                                                                                                                 |
+| `{{NAME}}`                   | (from inputs/personalization/profile.yml)                                                                                                                                                                        |
+| `{{PHONE}}`                  | (from inputs/personalization/profile.yml — include with its separator only when `inputs/personalization/profile.yml` has a non-empty `phone` value; omit both `<span>` and `<span class="separator">` otherwise) |
+| `{{EMAIL}}`                  | (from inputs/personalization/profile.yml)                                                                                                                                                                        |
+| `{{LINKEDIN_URL}}`           | [from inputs/personalization/profile.yml]                                                                                                                                                                        |
+| `{{LINKEDIN_DISPLAY}}`       | [from inputs/personalization/profile.yml]                                                                                                                                                                        |
+| `{{PORTFOLIO_URL}}`          | [from inputs/personalization/profile.yml] (or /es depending on language)                                                                                                                                         |
+| `{{PORTFOLIO_DISPLAY}}`      | [from inputs/personalization/profile.yml] (or /es depending on language)                                                                                                                                         |
+| `{{LOCATION}}`               | [from inputs/personalization/profile.yml]                                                                                                                                                                        |
+| `{{SECTION_SUMMARY}}`        | Professional Summary / Resumen Profesional                                                                                                                                                                       |
+| `{{SUMMARY_TEXT}}`           | Personalized summary with keywords                                                                                                                                                                               |
+| `{{SECTION_COMPETENCIES}}`   | Core Competencies / Competencias Core                                                                                                                                                                            |
+| `{{COMPETENCIES}}`           | `<span class="competency-tag">keyword</span>` × 6-8                                                                                                                                                              |
+| `{{SECTION_EXPERIENCE}}`     | Work Experience / Experiencia Laboral                                                                                                                                                                            |
+| `{{EXPERIENCE}}`             | HTML for each job with reordered bullets                                                                                                                                                                         |
+| `{{SECTION_PROJECTS}}`       | Projects / Proyectos                                                                                                                                                                                             |
+| `{{PROJECTS}}`               | HTML for the top 3-4 projects                                                                                                                                                                                    |
+| `{{SECTION_EDUCATION}}`      | Education / Formación                                                                                                                                                                                            |
+| `{{EDUCATION}}`              | HTML for education entries                                                                                                                                                                                       |
+| `{{SECTION_CERTIFICATIONS}}` | Certifications / Certificaciones                                                                                                                                                                                 |
+| `{{CERTIFICATIONS}}`         | HTML for certifications                                                                                                                                                                                          |
+| `{{SECTION_SKILLS}}`         | Skills / Competencias                                                                                                                                                                                            |
+| `{{SKILLS}}`                 | HTML for skills                                                                                                                                                                                                  |
+
+## Canva CV Generation (optional)
+
+If `inputs/personalization/profile.yml` has `canva_resume_design_id` set, offer the user a choice before generating:
+
+- **"HTML/PDF (fast, ATS-optimized)"** — existing flow above
+- **"Canva CV (visual, design-preserving)"** — new flow below
+
+If the user has no `canva_resume_design_id`, skip this prompt and use the HTML/PDF flow.
+
+### Canva workflow
+
+#### Step 1 — Duplicate the base design
+
+a. `export-design` the base design (using `canva_resume_design_id`) as PDF → get download URL
+b. `import-design-from-url` using that download URL → creates a new editable design (the duplicate)
+c. Note the new `design_id` for the duplicate
+
+#### Step 2 — Read the design structure
+
+a. `get-design-content` on the new design → returns all text elements (richtexts) with their content
+b. Map text elements to CV sections by content matching:
+
+- Look for the candidate's name → header section
+- Look for "Summary" or "Professional Summary" → summary section
+- Look for company names from inputs/personalization/cv.md → experience sections
+- Look for degree/school names → education section
+- Look for skill keywords → skills section
+  c. If mapping fails, show the user what was found and ask for guidance
+
+#### Step 3 — Generate tailored content
+
+Same content generation as the HTML flow (Steps 1-11 above):
+
+- Rewrite Professional Summary with JD keywords + exit narrative
+- Reorder experience bullets by JD relevance
+- Select top competencies from JD requirements
+- Inject keywords naturally (NEVER invent)
+
+**IMPORTANT — Character budget rule:** Each replacement text MUST be approximately the same length as the original text it replaces (within ±15% character count). If tailored content is longer, condense it. The Canva design has fixed-size text boxes — longer text causes overlapping with adjacent elements. Count the characters in each original element from Step 2 and enforce this budget when generating replacements.
+
+#### Step 4 — Apply edits
+
+a. `start-editing-transaction` on the duplicate design
+b. `perform-editing-operations` with `find_and_replace_text` for each section:
+
+- Replace summary text with tailored summary
+- Replace each experience bullet with reordered/rewritten bullets
+- Replace competency/skills text with JD-matched terms
+- Replace project descriptions with top relevant projects
+  c. **Reflow layout after text replacement:**
+  After applying all text replacements, the text boxes auto-resize but neighboring elements stay in place. This causes uneven spacing between work experience sections. Fix this:
+
+1.  Read the updated element positions and dimensions from the `perform-editing-operations` response
+2.  For each work experience section (top to bottom), calculate where the bullets text box ends: `end_y = top + height`
+3.  The next section's header should start at `end_y + consistent_gap` (use the original gap from the template, typically ~30px)
+4.  Use `position_element` to move the next section's date, company name, role title, and bullets elements to maintain even spacing
+5.  Repeat for all work experience sections
+    d. **Verify layout before commit:**
+
+- `get-design-thumbnail` with the transaction_id and page_index=1
+- Visually inspect the thumbnail for: text overlapping, uneven spacing, text cut off, text too small
+- If issues remain, adjust with `position_element`, `resize_element`, or `format_text`
+- Repeat until layout is clean
+  d. Show the user the final preview and ask for approval
+  e. `commit-editing-transaction` to save (ONLY after user approval)
+
+#### Step 5 — Export and download PDF
+
+a. `export-design` the duplicate as PDF (format: a4 or letter based on JD location)
+b. **IMMEDIATELY** download the PDF using Bash:
+
+```bash
+curl -sL -o "artifacts/output/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf" "{download_url}"
+```
+
+The export URL is a pre-signed S3 link that expires in ~2 hours. Download it right away.
+c. Verify the download:
+
+```bash
+file artifacts/output/cv-{candidate}-{company}-canva-{YYYY-MM-DD}.pdf
+```
+
+Must show "PDF document". If it shows XML or HTML, the URL expired — re-export and retry.
+d. Report: PDF path, file size, Canva design URL (for manual tweaking)
+
+#### Error handling
+
+- If `import-design-from-url` fails → fall back to HTML/PDF pipeline with message
+- If text elements can't be mapped → warn user, show what was found, ask for manual mapping
+- If `find_and_replace_text` finds no matches → try broader substring matching
+- Always provide the Canva design URL so the user can edit manually if auto-edit fails
+
+## Post-generation
+
+1. Update the tracker if the offer is already recorded: change PDF from ❌ to ✅.
+2. Do NOT write any `**PDF:**` / `[Download CV]` line into the report body. The
+   app auto-detects the generated PDF and surfaces it in the report's
+   **Attachments** section by globbing `artifacts/output/cv-{candidate}-{company-slug}-{num}-{YYYY-MM-DD}.pdf`
+   (legacy num-less files still match as a fallback; the same mechanism the
+   cover-letter mode relies on). Writing a body line
+   pollutes the TL;DR section and is the legacy structured-report behaviour —
+   the only requirement now is that the PDF filename uses the correct
+   `{candidate}` + `{company-slug}` + `{num}` (steps 13-14) so the glob matches.

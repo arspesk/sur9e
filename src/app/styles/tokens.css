@@ -1,0 +1,320 @@
+/* src/app/styles/tokens.css
+ *
+ * Single source of truth for sur9e design tokens.
+ * Warm cream canvas, off-black text, warm orange accent, sharp 4px
+ * geometry, and a re-derived dark theme via a single oklab lift rule.
+ *
+ * Visual language: warm neutrals, sharp 4px geometry, one saturated accent.
+ */
+
+:root {
+  /* ─── Surface ─── */
+  --bg: #faf9f6; /* Warm cream — primary editorial canvas */
+  --surface: #ffffff; /* Lifted-card pattern: pure white above warm canvas */
+  --surface-2: #faf9f6; /* Secondary lifted tier (warm) */
+  --surface-warm: var(--surface-2); /* alias — for components needing the warm tier explicitly */
+  --bg-paper: #ffffff;
+
+  /* ─── Foreground ─── */
+  --text: #111111; /* Off-black — warmer than #000 against warm canvas */
+  --text-2: #313130;
+  --text-3: #626260;
+  --text-muted: #6e6e6b;
+  --text-3-strong: var(
+    --text-3
+  ); /* WCAG one-off: tertiary text at small sizes on --surface — dark theme lifts it (see dark block) */
+  --meta: #696969; /* Captions, metadata — #696969 ≈ 4.6:1 on --bg #faf9f6 */
+
+  /* ─── Border ─── */
+  --border: #dedbd6; /* Warm border (oat-tinted, never cool gray) */
+  --border-strong: #c4c0b8;
+  --border-form: #8e8c85; /* Form-control border — ≈3.1:1 on --bg; stronger than --border-strong for WCAG 3:1 UI component threshold */
+  --rule: #ebe9e4; /* Lighter warm border — inner row separators */
+
+  /* ─── Accent (warm orange) ─── */
+  --accent: #ff5600;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --accent-soft: color-mix(in oklab, var(--accent), white 90%);
+  --accent-text: color-mix(in oklab, var(--accent), black 14%);
+  --accent-text-strong: #be3e00; /* WCAG one-off: darkened --accent-text (#d14500 = 4.37:1 failed AA at ~11px) → ≈5.1:1 on light --bg */
+  --accent-border: var(--accent-soft);
+  /* Primary CTAs stay orange in both themes — preserves sur9e brand action color.
+     See spec §6.1 for the design decision. */
+  --accent-cta: #c9430f;
+  --accent-cta-hover: #a83609;
+
+  /* ─── Status (hybrid palette — 8 distinct hue families, ~35% desat from source) ─── */
+  --s-screened: #426591; /* blue — #426591 ≈ 4.6:1 on --bg #faf9f6 */
+  --s-evaluated: #24378e; /* deep blue */
+  --s-applied: #6b752c; /* lime — #6b752c ≈ 4.7:1 on --bg #faf9f6 (was #757f34 = 4.1:1, failed WCAG AA) */
+  --s-responded: #3a6e7a; /* teal — #3a6e7a ≈ 4.6:1 on --bg #faf9f6 */
+  --s-interview: #6f56a0; /* violet (deep-blue × pink mix) */
+  --s-offer: #2d7a3c; /* green — #2d7a3c ≈ 4.6:1 on --bg #faf9f6 */
+  --s-rejected: #a23838; /* red */
+  --s-discarded: #636669; /* neutral — #636669 ≈ 4.6:1 on --bg #faf9f6 */
+
+  /* ─── State (semantic UI) ─── */
+  --st-success: var(--s-offer);
+  --st-success-soft: color-mix(in oklab, var(--st-success), white 88%);
+  --st-warn: #8a5c1c; /* warm amber — #8a5c1c ≈ 4.6:1 on --bg #faf9f6 */
+  --st-warn-soft: color-mix(in oklab, var(--st-warn), white 88%);
+  --st-danger: var(--s-rejected);
+  --st-danger-soft: color-mix(in oklab, var(--st-danger), white 88%);
+  --st-danger-strong: color-mix(in oklab, var(--st-danger), black 8%);
+  --st-info: var(--s-screened);
+  --st-info-soft: color-mix(in oklab, var(--st-info), white 88%);
+  --st-neutral: var(--text-muted);
+  --st-neutral-soft: color-mix(in oklab, var(--st-neutral), white 88%);
+
+  /* ─── Score ─── Old muted values — user prefers these for the report
+     hero numeral + score chips. Decoupled from --st-* so status pills
+     keep the new hybrid C palette while score values use the older
+     editorial muted greens/ambers/reds. */
+  --score-high: #3d5d3a;
+  --score-mid: #7a5f1c;
+  --score-low: #8b3a30;
+
+  /* ─── Radius (sharp geometry) ─── */
+  --radius-2xs: 2px; /* micro radius — meter bars, skeleton chips, hairlines */
+  --radius-xs: 3px;
+  --radius-sm: 4px; /* Buttons — near-rectangular sharp identity */
+  --radius: 6px;
+  --radius-md: var(--radius); /* alias — identical to --radius (6px) */
+  --radius-lg: 8px; /* Cards top out at 8px */
+  --radius-pill: 999px;
+
+  /* ─── Spacing (unchanged from current sur9e 4px grid) ─── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+
+  /* ─── Layout (unchanged) ─── */
+  --rail-w: 64px;
+  --rail-w-full: 220px;
+  --topbar-h: 56px;
+
+  /* ─── Motion (unchanged) ─── */
+  --ease-calm: cubic-bezier(0.22, 0.61, 0.36, 1); /* deceleration, no bounce */
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-stand: cubic-bezier(0.4, 0, 1, 1);
+  --ease-firm: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-entrance: cubic-bezier(
+    0.2,
+    0,
+    0,
+    1
+  ); /* hard-decel entrance — toasts, quiet entrances, shimmer sweeps */
+  --dur-fast: 120ms; /* micro transitions (hover/focus color + background swaps) */
+  --dur-snappy: 160ms; /* short transform transitions + nudge delays */
+  --dur-quick: 180ms;
+  --dur-smooth: 200ms; /* mid hover/width transitions + stagger delays */
+  --dur-base: 240ms;
+  --dur-sheet: 280ms; /* side-peek / sheet / dialog slide motion */
+  --dur-deliberate: 480ms;
+  --dur-slow: 800ms;
+  --dur-loop: 1.6s; /* ambient skeleton/shimmer loop cycle (spinner rotation + cursor blink keep their own physical periods) */
+  --dur-considered: var(--dur-deliberate);
+  --dur-arrival: var(--dur-slow);
+
+  /* ─── Shadows (minimal — depth from borders + tint, not blur) ─── */
+  --shadow-sm: 0 0 0 1px var(--border);
+  --shadow: 0 2px 8px color-mix(in oklab, var(--text), transparent 94%);
+  --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-popover: 0 12px 28px -8px rgba(0, 0, 0, 0.18);
+  --shadow-modal: 0 24px 48px -16px rgba(0, 0, 0, 0.18);
+  --shadow-drawer: -16px 0 32px -16px rgba(0, 0, 0, 0.18); /* right-side peek panels (offer/board drawer, filter panel) */
+  --shadow-sheet: 0 -16px 32px -16px rgba(0, 0, 0, 0.18); /* upward twin of --shadow-drawer — mobile bottom-sheets */
+  --shadow-dialog: 0 24px 48px -16px rgba(0, 0, 0, 0.24); /* centered add-offer modal dialog (heavier than --shadow-modal) */
+
+  /* ─── Focus ring (orange-tinted, brand voice). Single source of truth for
+     every input/textarea/select focus ring — keep it thin (2px). ─── */
+  --focus-ring: 0 0 0 2px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Scrim ─── The single backdrop dim for every overlay layer:
+     dialogs, drawers, filter panel, add-offer modal, quick-report overlay,
+     and the mobile bottom-sheet. Always a black tint so the page DIMS in
+     both themes (dark overrides the alpha below). */
+  --scrim: rgba(0, 0, 0, 0.32);
+
+  /* ─── Derived surfaces (kept from current chrome.css — color-mix recipes) ─── */
+  --surface-danger: color-mix(in srgb, var(--st-danger) 8%, var(--bg));
+  --surface-danger-hover: color-mix(in srgb, var(--st-danger) 14%, var(--bg));
+  --border-danger: color-mix(in srgb, var(--st-danger) 22%, var(--bg));
+  --border-danger-strong: color-mix(in srgb, var(--st-danger) 38%, var(--bg));
+  --surface-good: color-mix(in srgb, var(--st-success) 8%, var(--bg));
+  --surface-good-hover: color-mix(in srgb, var(--st-success) 14%, var(--bg));
+  --border-good: color-mix(in srgb, var(--st-success) 22%, var(--bg));
+  --border-good-strong: color-mix(in srgb, var(--st-success) 38%, var(--bg));
+
+  /* ─── Z-index ───
+     The full stacking ladder, bottom to top. Every cross-file fixed/
+     floating layer consumes its token — no raw values for these tiers.
+     (Values are the long-standing ones; tokenized 2026-06-04 without
+     re-tiering.)
+
+       5 toc rail (in-page)
+      40 topbar
+      50 side rail
+      60 rail tooltip (flyout labels on the compact rail)
+      65 scrim (drawer/filter backdrops; panels sit at scrim+1)
+      70 page modal (add-offer) + batch action bar (desktop)
+      81 offers drawer
+      90 popovers / dropdown menus / selects
+      95 floating panels: status popover, loading modal, editor panels
+         (--z-modal is the historical name; these float above the drawer
+          and below dialogs)
+     100 bottom bar (mobile nav)
+     105 batch action bar (mobile — above the bottom bar)
+     106 dialogs (evaluate/delete/range + Radix overlay; content at
+         dialog+1). Above the mobile batch bar: confirm dialogs open FROM
+         the bar (bulk evaluate/delete) and their footer buttons were
+         covered by it when both shared the 100 tier.
+     110 toasts + tooltips (must clear open dialogs)
+     1000 skip link (a11y — above everything interactive)
+     9999 editor body-anchored menus (slash/language/color panels) */
+  --z-toc: 5;
+  --z-topbar: 40;
+  --z-rail: 50;
+  --z-rail-tooltip: 60;
+  --z-scrim: 65;
+  --z-page-modal: 70;
+  --z-drawer: 81;
+  --z-popover: 90;
+  --z-modal: 95;
+  --z-bottom-bar: 100;
+  --z-dialog: 106;
+  --z-toast: 110;
+  --z-tooltip: 110;
+  --z-skip-link: 1000;
+  --z-editor-menu: 9999;
+}
+
+/* Actual rendered rail width — tracks the responsive rules in chrome.css /
+   styles.css (≤1024px forces the compact rail; ≤640px hides it entirely and
+   the bottom-bar takes over). data-rail can live on <html> or on the .app
+   shell div, so declare both carriers. The offers drawer sizes itself
+   against this (half the content box = (100vw - rail) / 2). */
+:root,
+.app {
+  --rail-current: var(--rail-w);
+}
+:root[data-rail="full"],
+.app[data-rail="full"] {
+  --rail-current: var(--rail-w-full);
+}
+@media (max-width: 1024px) {
+  :root,
+  .app,
+  :root[data-rail="full"],
+  .app[data-rail="full"] {
+    --rail-current: var(--rail-w);
+  }
+}
+@media (max-width: 640px) {
+  :root,
+  .app,
+  :root[data-rail="full"],
+  .app[data-rail="full"] {
+    --rail-current: 0px;
+  }
+}
+
+[data-theme="dark"] {
+  /* ─── Surface (warm-black canvas, lifted charcoal cards) ─── */
+  --bg: #0a0a0b;
+  --surface: #1c1c1f;
+  --surface-2: #131315;
+  --surface-warm: var(--surface-2);
+  --bg-paper: #131315;
+
+  /* ─── Foreground ─── */
+  --text: #f4f4f5;
+  --text-2: #c9c9d0;
+  --text-3: #8a8a92;
+  --text-muted: #858590;
+  --text-3-strong: #9a9aa6; /* WCAG one-off: --text-3 #8a8a92 ≈ 4.96:1 on --surface #1c1c1f sat at the AA floor at 13px — lifted to ≈6.1:1 */
+  --meta: #7a7a84; /* Captions, metadata — #7a7a84 ≈ 4.6:1 on dark --bg #0a0a0b */
+
+  /* ─── Border ─── */
+  --border: #2a2a2e;
+  --border-strong: #3a3a3f;
+  --border-form: #56565b; /* Form-control border dark — ≈3.1:1 on dark --bg #0a0a0b */
+  --rule: #2a2a2e;
+
+  /* ─── Accent (base unchanged; hover/soft/text re-derived for dark canvas) ─── */
+  --accent: #ff5600;
+  --accent-hover: color-mix(in oklab, var(--accent), white 8%); /* lift toward white on dark */
+  --accent-active: color-mix(in oklab, var(--accent), white 14%);
+  --accent-soft: color-mix(in oklab, var(--accent), black 80%); /* dark tint, not light wash */
+  --accent-text: color-mix(in oklab, var(--accent), white 8%);
+  --accent-text-strong: var(
+    --accent-text
+  ); /* dark --accent-text already clears AA (#ff672e ≈ 6.8:1 on dark --bg) — no extra darkening */
+  /* CTA preserved orange in dark mode too — explicit override (not inherited). */
+  --accent-cta: #c9430f;
+  --accent-cta-hover: #a83609;
+  --accent-text-dark: #e86030; /* Dark-mode safe accent text — ≈4.6:1 on dark --bg #0a0a0b */
+
+  /* ─── Status (every hue lifted ~30% toward white in oklab) ─── */
+  --s-screened: color-mix(in oklab, #5580a8, white 30%);
+  --s-evaluated: color-mix(in oklab, #24378e, white 30%);
+  --s-applied: color-mix(in oklab, #9aa55a, white 30%);
+  --s-responded: color-mix(in oklab, #4a8896, white 30%);
+  --s-interview: color-mix(in oklab, #6f56a0, white 30%);
+  --s-offer: color-mix(in oklab, #389448, white 30%);
+  --s-rejected: color-mix(in oklab, #a23838, white 30%);
+  --s-discarded: color-mix(in oklab, #7c7f84, white 30%);
+
+  /* ─── State (semantic UI) — soft variants flip to transparent-tint pattern for dark ─── */
+  --st-success: var(--s-offer);
+  --st-success-soft: color-mix(in oklab, var(--st-success), transparent 86%);
+  --st-warn: color-mix(in oklab, #b07628, white 30%);
+  --st-warn-soft: color-mix(in oklab, var(--st-warn), transparent 86%);
+  --st-danger: var(--s-rejected);
+  --st-danger-soft: color-mix(in oklab, var(--st-danger), transparent 86%);
+  --st-danger-strong: color-mix(in oklab, var(--st-danger), black 8%);
+  --st-info: var(--s-screened);
+  --st-info-soft: color-mix(in oklab, var(--st-info), transparent 86%);
+  --st-neutral: var(--text-3);
+  --st-neutral-soft: color-mix(in oklab, var(--st-neutral), transparent 86%);
+
+  /* ─── Score ─── Old muted values lifted ~30% for dark visibility.
+     Same decoupling logic as light: score numeral + chips stay on the
+     editorial muted palette, distinct from status pills. */
+  --score-high: #8eba89;
+  --score-mid: #d8b97a;
+  --score-low: #d68a7e;
+
+  /* ─── Shadows — higher alpha so they're visible against dark canvas ─── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 50px rgba(0, 0, 0, 0.6);
+  --shadow-popover: 0 12px 28px -8px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 24px 48px -16px rgba(0, 0, 0, 0.55);
+  --shadow-drawer: -16px 0 32px -16px rgba(0, 0, 0, 0.55); /* dark side-peek panel shadow */
+  --shadow-sheet: 0 -16px 32px -16px rgba(0, 0, 0, 0.55); /* dark mobile bottom-sheet shadow */
+  --shadow-dialog: 0 24px 48px -16px rgba(0, 0, 0, 0.55); /* dark add-offer dialog shadow */
+
+  /* ─── Scrim — heavier dim so overlay separation reads on the dark canvas
+     (matches the 0.55-alpha lift of the dark shadow set). ─── */
+  --scrim: rgba(0, 0, 0, 0.5);
+
+  /* ─── Derived surfaces / borders — higher mix percentages for dark visibility ─── */
+  --surface-danger: color-mix(in srgb, var(--st-danger) 14%, var(--bg));
+  --surface-danger-hover: color-mix(in srgb, var(--st-danger) 22%, var(--bg));
+  --border-danger: color-mix(in srgb, var(--st-danger) 32%, var(--bg));
+  --border-danger-strong: color-mix(in srgb, var(--st-danger) 50%, var(--bg));
+  --surface-good: color-mix(in srgb, var(--st-success) 14%, var(--bg));
+  --surface-good-hover: color-mix(in srgb, var(--st-success) 22%, var(--bg));
+  --border-good: color-mix(in srgb, var(--st-success) 32%, var(--bg));
+  --border-good-strong: color-mix(in srgb, var(--st-success) 50%, var(--bg));
+}

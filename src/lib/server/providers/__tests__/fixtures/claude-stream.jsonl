@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","tools":["WebFetch","Bash"],"model":"claude-sonnet-4-6"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Let me check the URL."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://example.com/jobs/42"}}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Done — see artifacts/reports/042-example-2026-05-24.md"}]}}
+{"type":"result","subtype":"success","cost_usd":0.0173,"usage":{"input_tokens":4231,"output_tokens":582},"model":"claude-sonnet-4-6"}

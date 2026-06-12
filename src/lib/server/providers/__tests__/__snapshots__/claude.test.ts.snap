@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`claude provider > buildHeadlessArgs > produces the same command shape as today 1`] = `
+[
+  "-c",
+  "claude -p --dangerously-skip-permissions --model claude-sonnet-4-6 --output-format stream-json --verbose 'Evaluate offer #42' | node cli/stream-claude-parser.mjs",
+]
+`;

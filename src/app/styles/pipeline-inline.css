@@ -1,0 +1,877 @@
+/* Pipeline Board styles. Filter panel, .filter-bar, .active-pills,
+   .chip, page-head, .btn, .topbar etc. are inherited from chrome.css
+   + table-inline.css — only board-specific rules live here. */
+
+/* Page-local utility */
+.head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ================================================================
+   FUNNEL STRIP (V3) — calm hairline ribbon
+================================================================ */
+.funnel-strip {
+  margin: 0 var(--space-6);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+}
+.funnel-step {
+  padding: 0 var(--space-5);
+  border-right: 1px solid var(--border);
+}
+.funnel-step:first-child {
+  padding-left: 0;
+}
+.funnel-step:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+.funnel-step .label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.funnel-step .label .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.funnel-step .row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.funnel-step .val {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.funnel-step .conv {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.chip-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 34px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chip-slider .mini-range {
+  position: relative;
+  width: 78px;
+  height: 3px;
+  background: var(--border);
+  border-radius: var(--radius-2xs);
+}
+.chip-slider .mini-range .fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 25%;
+  right: 0;
+  background: var(--accent);
+  border-radius: var(--radius-2xs);
+}
+.chip-slider .mini-range .h {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+}
+.chip-slider .val {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent-text);
+  min-width: 28px;
+}
+
+/* ================================================================
+   BOARD — Trello-style horizontal scroll
+================================================================ */
+/* Kanban scroll model: the PAGE never scrolls vertically — the viewport
+   belongs to the board (horizontal scroll only) and each column's card
+   list scrolls on its own (.col-body overflow-y). Same .main flex
+   treatment as the virtualized table (table-inline.css); :has-scoped so
+   no other route is touched. chrome.css's ≤640px `.app .main
+   { padding-bottom: 64px }` still reserves the bottom tab bar inside
+   the 100dvh box. */
+.main:has(.board-wrap) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+.main:has(.board-wrap) .board-wrap {
+  min-height: 0; /* flex child may shrink below content height */
+}
+.board-wrap {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Canvas tier — kanban columns are logical groups on the page canvas,
+     not lifted cards. The CARDS inside columns (and the empty-state
+     placeholders) are what lift to --surface for contrast. */
+  background: var(--bg);
+  /* Mask the left/right edges with a fade so users see "there's more
+     scrollable content this way" without always-visible chevron buttons. */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) 32px,
+    rgba(0, 0, 0, 1) calc(100% - 32px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) 32px,
+    rgba(0, 0, 0, 1) calc(100% - 32px),
+    transparent 100%
+  );
+}
+.board-wrap::-webkit-scrollbar {
+  height: 12px;
+}
+.board-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.board-wrap::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius);
+  border: 3px solid var(--bg);
+}
+.board-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.board {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  /* stretch (not flex-start): every column fills the board height so its
+     .col-body scroll area is the full viewport remainder — the column list
+     scrolls, the page doesn't. */
+  align-items: stretch;
+  height: 100%;
+  width: max-content;
+}
+.column {
+  flex: 0 0 340px;
+  background: transparent;
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  /* Height comes from the stretched .board (viewport-bound via the .main
+     flex column) — no more 100vh arithmetic that let the page grow. */
+  max-height: 100%;
+  min-height: 0;
+  transition: background var(--dur-quick) var(--ease-firm);
+}
+/* No mobile max-height override needed: chrome.css's ≤640px
+   `.app .main { padding-bottom: 64px }` already reserves the bottom
+   tab bar inside the 100dvh flex box, so max-height: 100% adapts. */
+.column.drag-over {
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+/* Column head */
+.col-head {
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.col-head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.col-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.col-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.col-dot.screened {
+  background: var(--s-screened);
+}
+.col-dot.evaluated {
+  background: var(--s-evaluated);
+}
+.col-dot.applied {
+  background: var(--s-applied);
+}
+.col-dot.responded {
+  background: var(--s-responded);
+}
+.col-dot.interview {
+  background: var(--s-interview);
+}
+.col-dot.offer {
+  background: var(--s-offer);
+}
+.col-dot.rejected {
+  background: var(--s-rejected);
+}
+.col-dot.discarded {
+  background: var(--s-discarded);
+}
+
+.col-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--dur-quick) var(--ease-calm);
+}
+.col-title:hover {
+  color: var(--accent);
+}
+.col-title[data-all-selected="true"] {
+  color: var(--accent);
+}
+.col-count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+/* Density strip (Dense) — soft, hairline-thin */
+.col-density {
+  display: flex;
+  gap: 2px;
+  height: 2px;
+  margin-top: 2px;
+}
+.col-density .bar {
+  flex: 1;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* Body */
+.col-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+}
+.col-body::-webkit-scrollbar {
+  width: 6px;
+}
+.col-body::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-xs);
+}
+.col-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.col-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  padding: var(--space-4);
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  /* Lifted-card surface above the canvas — same logic as offer cards
+     in this column. Contrasts the placeholder against the warm canvas. */
+  background: var(--surface);
+}
+
+/* Defensive empty-state — surfaces when data is loaded but every row is
+   hidden by the current filters. Keeps the user from staring at zeros and
+   thinking the offers were lost. */
+.board-empty-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+.board-empty-overlay p {
+  margin: 0;
+}
+
+/* Loading skeleton placeholders shown while /api/applications is fetching
+   for the first time. Distinguishes "data not loaded yet" from "no offers
+   in this status" — without these the user sees eight identical "No offers
+   in X yet." messages during a normal fetch and assumes data was wiped.
+   Bar elements now use the global .sk primitive (defined in styles/chrome.css)
+   with inline display + explicit dimensions. Card layout shell retained. */
+.board-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  min-height: 56px;
+}
+
+/* Selected-card outline (accent ring inside the card border) */
+.card[data-selected="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Keyboard focus ring — mirrors the table-row focus-visible pattern. */
+.card:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: -2px;
+}
+
+/* ================================================================
+   CARD
+================================================================ */
+.card {
+  position: relative;
+  /* Paper tier — matches table rows. Same as --surface in light (#ffffff)
+     and one tier below --surface in dark (#131315 vs #1c1c1f). */
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  /* Spacing between rows is set per-row (card-chips / card-meta margins)
+     to match the Option-C balance. */
+  gap: 0;
+  transition:
+    border-color var(--dur-quick) var(--ease-firm),
+    box-shadow var(--dur-quick) var(--ease-firm),
+    transform var(--dur-quick) var(--ease-firm);
+}
+/* .card-actions deleted — the kanban card
+   kebab now renders <IconButton> with .board-card-kebab supplying only
+   the absolute-position decoration. Visual treatment comes from the
+   .icon-btn primitive class (chrome.css). */
+.board-card-kebab {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  /* Hidden by default; revealed only when hovering the card. Same legacy
+     reveal pattern as the old .card-actions (the opacity rule was
+     inadvertently dropped when the icon-trigger CSS was consolidated). */
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.card:hover .board-card-kebab,
+.board-card-kebab[aria-expanded="true"],
+.board-card-kebab:focus-visible {
+  opacity: 1;
+}
+/* Touch surfaces have no hover — keep the card-actions kebab always visible
+   so phone/tablet users get the same affordance desktop users get on hover
+   (mirrors the coarse-pointer drag-disable in pipeline-page.tsx). */
+@media (hover: none) {
+  .board-card-kebab {
+    opacity: 1;
+  }
+}
+/* Dark mode override removed — .card now uses var(--surface) which
+   resolves correctly in both themes (light: #ffffff, dark: #1c1c1f).
+   The previous override was setting --bg-paper which is a different tier
+   in dark and caused the kanban-vs-table color mismatch. */
+.card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.card:active {
+  cursor: grabbing;
+}
+.card.dragging {
+  opacity: 0.4;
+  transform: rotate(-0.6deg);
+}
+/* Option-C identity row: avatar centered against the company+role block. */
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.card-id {
+  flex: 1;
+  min-width: 0;
+}
+/* Company name + score share the top line; score baseline-aligned right. */
+.card-id-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.card-company {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-role {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  /* Match the table/report/drawer meta: Inter, 15px. */
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-3);
+  margin-top: 9px;
+}
+.card-meta .dot-sep {
+  opacity: 0.55;
+}
+/* Secondary added date on a card — muted so 'Posted' stays primary. */
+.card-meta__added {
+  color: var(--meta);
+}
+.card-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.tag {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-3);
+}
+.tag.remote {
+  background: color-mix(in srgb, var(--s-offer) 14%, transparent);
+  color: var(--s-offer);
+}
+.tag.hybrid {
+  background: color-mix(in srgb, var(--s-applied) 14%, transparent);
+  color: var(--s-applied);
+}
+.tag.onsite {
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+/* .score chip rules — DEFINITION MOVED to chrome.css `.score-chip`
+   (canonical single source). Consumed via <ScoreChip> domain composite.
+   Orphaned after the board-card migration. */
+
+/* ── K-B: avatar, score numeral, chips row ── */
+.cmk.company-mark {
+  width: 38px;
+  height: 38px;
+  font-size: 17px;
+  border-radius: var(--radius-lg);
+}
+.cmk.company-mark img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  /* Mass-surface logo fade — keyframes + reduced-motion opt-out live next
+     to the .tmk twin in table-inline.css. */
+  animation: companyLogoIn var(--dur-base) var(--ease-calm);
+}
+.cmk.company-mark::after {
+  width: 10px;
+  height: 10px;
+  border-top-left-radius: var(--radius);
+}
+.card .score-num {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+}
+.card .score-num.high {
+  color: var(--score-high);
+}
+.card .score-num.mid {
+  color: var(--score-mid);
+}
+.card .score-num.low {
+  color: var(--score-low);
+}
+.card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+}
+/* Card chips run a touch smaller than the status-size pills elsewhere so
+   they stay proportional to the compact card + meta line (Option-C balance). */
+.card .pill-enum {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 9px;
+}
+.card .pill-enum.drawer-status-trigger {
+  padding-right: 19px;
+}
+.card .pill-enum::after {
+  right: 7px;
+}
+
+/* Dense — drop tag chips, fold loc + comp into the meta line */
+.variant-dense .card {
+  padding: 11px 14px;
+  gap: 3px;
+}
+.variant-dense .card-tags {
+  display: none;
+}
+.variant-dense .card-meta {
+  font-size: 11.5px;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  column-gap: 6px;
+}
+.variant-dense .card-meta .meta-loc {
+  color: var(--text-2);
+  text-transform: lowercase;
+}
+.variant-dense .card-meta .meta-loc.loc-remote {
+  color: var(--s-offer);
+}
+.variant-dense .card-meta .meta-loc.loc-hybrid {
+  color: var(--s-applied);
+}
+.variant-dense .card-meta .meta-comp {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* meta-dense-only items hidden in non-dense variants */
+.meta-dense-only {
+  display: none;
+}
+.variant-dense .meta-dense-only {
+  display: inline;
+}
+
+/* ================================================================
+   MOTION — reduce-motion guard, skeleton, count-up entrance
+================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .board *,
+  .board *::before,
+  .board *::after,
+  .funnel-strip *,
+  .funnel-strip *::before,
+  .funnel-strip *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skeleton — .board .skeleton, .sk-card, .sk-line, and their
+   @keyframes skelSweep removed: all skeleton bars now use the global
+   .sk primitive (defined in styles/chrome.css). */
+
+/* Card entrance — only when [data-anim="enter"] on board */
+.board[data-anim="enter"] .card {
+  animation: cardIn var(--dur-considered) var(--ease-calm) both;
+}
+.board[data-anim="enter"] .card:nth-child(1) {
+  animation-delay: 0ms;
+}
+.board[data-anim="enter"] .card:nth-child(2) {
+  animation-delay: 30ms;
+}
+.board[data-anim="enter"] .card:nth-child(3) {
+  animation-delay: 60ms;
+}
+.board[data-anim="enter"] .card:nth-child(4) {
+  animation-delay: 90ms;
+}
+.board[data-anim="enter"] .card:nth-child(5) {
+  animation-delay: var(--dur-fast);
+}
+.board[data-anim="enter"] .card:nth-child(n + 6) {
+  animation-delay: 150ms;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Funnel value count-up: subtle settle */
+.funnel-strip[data-anim="enter"] .funnel-step .val {
+  animation: settle var(--dur-considered) var(--ease-calm) both;
+}
+.funnel-strip[data-anim="enter"] .funnel-step .conv {
+  animation: settle var(--dur-considered) var(--ease-calm) both;
+  animation-delay: var(--dur-smooth);
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ================================================================
+   RESPONSIVE — board-specific overrides (rail/topbar overrides live in
+   chrome.css; we only port the board + funnel + filter-bar bits here)
+================================================================ */
+@media (max-width: 1024px) {
+  .funnel-strip {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .funnel-step {
+    border-right: none;
+    padding: 0;
+  }
+}
+@media (max-width: 640px) {
+  .funnel-strip {
+    grid-template-columns: 1fr;
+  }
+
+  /* Kanban responsive: snap-scroll one column at a time, each ~88vw wide so
+     the next column peeks in to indicate scrollability. Horizontal scroll
+     already works via .board-wrap { overflow-x: auto }. */
+  .board-wrap {
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: var(--space-3);
+    -webkit-overflow-scrolling: touch;
+  }
+  .column {
+    flex: 0 0 88vw;
+    max-width: 320px;
+    scroll-snap-align: start;
+  }
+  .board {
+    padding: var(--space-3) var(--space-3);
+    gap: var(--space-3);
+  }
+}
+
+/* ===== Add-offer URL modal =====
+   Single source for the add-offer modal chrome (consumer:
+   src/components/modals/screen-modal.tsx, mounted app-wide). table-inline.css
+   used to carry a verbatim duplicate of this whole block — deleted there so
+   responsive fixes only need to land once. ===== */
+.add-offer-modal[hidden] {
+  display: none;
+}
+.add-offer-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-page-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.add-offer-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+.add-offer-modal__dialog {
+  position: relative;
+  width: min(440px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px; /* modal dialog — intentionally above --radius-lg per design */
+  box-shadow: var(--shadow-dialog);
+  display: flex;
+  flex-direction: column;
+}
+/* Dark dialog shadow now flows from --shadow-dialog (tokens.css). */
+.add-offer-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.add-offer-modal__head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.add-offer-modal__close {
+  background: transparent;
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.add-offer-modal__close:hover {
+  color: var(--text);
+}
+/* Touch hit-area floor — the visible close glyph is ~38×30 (4px 8px padding
+   + 22px glyph), under the 44px HIG/AAA floor. Invisible overlay grows the
+   tap box without changing the visual; coarse pointers only so mouse users
+   keep the dense layout's exact target. */
+@media (pointer: coarse) {
+  .add-offer-modal__close {
+    position: relative;
+  }
+  .add-offer-modal__close::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+.add-offer-modal__body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.add-offer-modal__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.add-offer-modal__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--score-low);
+}
+/* Depth choice — two radio cards under the URL field. */
+.add-offer-modal__depth {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 8px;
+}
+.add-offer-depth {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.add-offer-depth input[type="radio"] {
+  grid-row: 1 / span 2;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.add-offer-depth__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.add-offer-depth__sub {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.add-offer-depth.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.add-offer-depth:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Top spacing for the generate-PDF checkbox when shown inside the Add-offer modal. */
+.add-offer-modal__pdf-opt {
+  margin-top: 12px;
+}
+.add-offer-modal__foot {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ===== Per-column card window (large-offer-sets design, 2026-06-10) ===== */
+/* "Show 25 more" / "Hide N cards" expander inside .col-body. .col-body is a
+   flex column of full-width cards; keep the action compact and centered so
+   it reads as a control, not a card. */
+.col-window-btn {
+  align-self: center;
+  font-style: normal;
+  margin: 2px 0;
+}

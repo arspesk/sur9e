@@ -1,0 +1,614 @@
+/* ================================================================
+   PIPELINE BOARD — Card detail drawer (V1 only)
+   Right-side non-modal side-peek drawer. Spacious type. Accent highlights.
+================================================================ */
+
+/* Drawer shell */
+.cd-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  /* Half the WHOLE viewport (not just the content box — so it's wider than the
+     old (viewport − rail) / 2). Floored at 480px so the panel never gets
+     unusably narrow, capped at 92vw so phones keep the near-full-width sheet
+     (at 375px the cap, not the floor, wins). */
+  width: min(max(50vw, 480px), 92vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-drawer);
+  z-index: var(--z-drawer); /* 81 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(100%, 0, 0);
+  /* Delay visibility:hidden until AFTER the slide finishes so the exit
+     transform is actually visible (base is hidden); transform itself eases
+     over 280ms. The drawer collapses to the right instead of vanishing. */
+  transition:
+    transform var(--dur-sheet) var(--ease-calm),
+    visibility 0s linear var(--dur-sheet);
+}
+.cd-drawer.on {
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0);
+  /* Visible immediately on enter (no delay) so the slide-in is seen too. */
+  transition:
+    transform var(--dur-sheet) var(--ease-calm),
+    visibility 0s;
+}
+/* Dark side-peek shadow now flows from --shadow-drawer (tokens.css). */
+
+/* Drawer header (universal) */
+.cd-head {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+/* .cd-head-label deleted — no TSX consumer. */
+/* .cd-icon-btn / .cd-kebab-btn / .cd-nav-group
+   .cd-icon-btn / .cd-head .cd-nav-btn deleted — all consumers in
+   header.tsx now render <IconButton>, which applies .icon-btn (chrome.css)
+   with size="sm" for prev/next + default for kebab. .cd-nav-group still
+   provides the paired-pill wrapper; the legacy hover-bg override is
+   intentionally dropped to converge on the primitive treatment. */
+.cd-nav-counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  /* text-2 to match the surrounding IconButton arrows so the "157 / 287"
+     counter reads at the same weight as the chevrons. */
+  color: var(--text-2);
+  padding: 0 4px;
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prev/Next arrow group — paired pill that reads as one navigation control. */
+.cd-nav-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px;
+  gap: 0;
+}
+.cd-nav-group .cd-nav-counter {
+  padding: 0 6px;
+  min-width: 28px;
+}
+
+/* Body (scroll area) */
+.cd-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-drawer {
+    transition: none !important;
+  }
+}
+
+/* ================================================================
+   V1 — QRO Mirror (hi-res of wireframes/quick-report-overlay.html)
+   When v1 is active, the universal head is hidden and V1 renders its
+   own self-contained shell (head/body) inside the body slot — exactly
+   matching the wireframe structure. There is no drawer footer in any
+   variant: actions live in the header kebab menu.
+================================================================ */
+
+body[data-drawer-variant="v1"] .cd-drawer > .cd-head {
+  display: none;
+}
+body[data-drawer-variant="v1"] .cd-drawer > .cd-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Self-contained shell — fills the drawer */
+.cd-v1 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+}
+
+/* Head — replaces .cd-head for v1 only */
+.cd-v1-head {
+  flex-shrink: 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.cd-v1-head-text {
+  flex: 1;
+  min-width: 0;
+}
+/* Brand book: v1 eyebrow → display sentence-case */
+.cd-v1-eyebrow {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.cd-v1-company {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
+  color: var(--text);
+}
+.cd-v1-role {
+  font-size: 14.5px;
+  color: var(--text-2);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.cd-v1-head-meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cd-v1-meta-sentence {
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text-3);
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+.cd-v1-head-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+/* .cd-expand-btn deleted — no TSX consumer. */
+
+/* Body — vertical stack of cards */
+.cd-v1-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+}
+
+.cd-v1 .cd-card {
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+/* Brand book: drawer card heading → display sentence-case */
+.cd-v1 .cd-card h4 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin: 0 0 14px 0;
+}
+
+/* Score row */
+.cd-v1 .cd-score-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+/* Score numerals are color-coded by tier so the headline number signals
+   offer quality at a glance. Mirrors the rule in styles.css. */
+.score-numeral.score-high {
+  color: var(--score-high);
+}
+.score-numeral.score-mid {
+  color: var(--score-mid);
+}
+.score-numeral.score-low {
+  color: var(--score-low);
+}
+
+/* Drawer reuses the report's .score-numeral class — override size only. */
+.cd-v1 .cd-score-num.score-numeral {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cd-v1 .cd-score-meta {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+}
+.cd-v1 .cd-score-meta .stars {
+  letter-spacing: 1px;
+  color: var(--score-mid);
+  font-size: 15px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Radar — these primitives are reused outside the drawer (full report).
+   Selectors intentionally NOT scoped to .cd-v1 so the same look applies
+   wherever the markup is rendered. */
+.cd-radar svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+}
+.cd-radar-list {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 10px;
+}
+.cd-radar-list .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--border);
+  align-items: baseline;
+}
+.cd-radar-list .row:last-child {
+  border-bottom: none;
+}
+/* Brand book: radar axis key label → display sentence-case */
+.cd-radar-list .k {
+  color: var(--text-3);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.cd-radar-list .v {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+/* Fit summary prose */
+.cd-v1 .cd-fit {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+.cd-v1 .cd-fit p {
+  margin: 0 0 12px 0;
+}
+.cd-v1 .cd-fit p:last-child {
+  margin: 0;
+}
+.cd-v1 .cd-fit strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.cd-v1 .cd-fit .pos {
+  color: var(--score-high);
+}
+.cd-v1 .cd-fit .neg {
+  color: var(--score-low);
+}
+.cd-v1 .cd-fit ul {
+  margin: 6px 0 0 0;
+  padding-left: 20px;
+}
+.cd-v1 .cd-fit li {
+  margin-bottom: 5px;
+}
+.cd-v1 .cd-fit li::marker {
+  color: var(--text-3);
+}
+
+/* (V1 footer removed — expand button in header replaces it) */
+
+/* ================================================================
+   Cat 1 C1.3: Dead drawer-variant CSS removed.
+   Deleted (never wired in any TSX consumer):
+     - the removed Stacked Card variant (~250 lines)
+     - .cd-v3 and all descendants (Two-column compact variant, ~175 lines)
+     - .cd-status-pill (drawer-specific; V1 head uses <StatusPill> primitive)
+     - .cd-score-pill (drawer-specific score pill, never rendered)
+   Only body[data-drawer-variant="v1"] is set by offers-drawer.tsx.
+================================================================ */
+
+/* Card cursor — pointer everywhere except during drag */
+.card {
+  cursor: pointer;
+}
+.card:active {
+  cursor: grabbing;
+}
+
+/* The mobile bottom-bar (chrome.css, --z-bottom-bar) floats above the
+   drawer (--z-drawer), so while the drawer is open it covers the drawer's foot.
+   Hide it for the drawer's lifetime. The drawer is a NON-MODAL side peek:
+   no scrim, no body scroll lock — the page behind stays interactive. */
+body.cd-open .bottom-bar {
+  display: none;
+}
+
+/* ================================================================
+   ANIMATIONS — drawer slide-in + card content fade-in
+================================================================ */
+.cd-drawer.on {
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Cards inside body fade+lift in with stagger */
+.cd-anim-item {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: cdCardIn 320ms var(--ease-calm) forwards;
+}
+.cd-anim-item:nth-child(1) {
+  animation-delay: 80ms;
+}
+.cd-anim-item:nth-child(2) {
+  animation-delay: var(--dur-snappy);
+}
+.cd-anim-item:nth-child(3) {
+  animation-delay: 240ms;
+}
+.cd-anim-item:nth-child(4) {
+  animation-delay: 320ms;
+}
+@keyframes cdCardIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Score number subtle scale-in */
+.cd-v1 .cd-score-num {
+  animation: cdScoreIn var(--dur-deliberate) var(--ease-calm) var(--dur-fast) both;
+}
+@keyframes cdScoreIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Radar polygon draw-in (reusable wherever .cd-radar is rendered). */
+.cd-radar svg polygon[fill*="accent"] {
+  animation: cdRadarIn var(--dur-deliberate) var(--ease-calm) var(--dur-smooth) both;
+}
+@keyframes cdRadarIn {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+    transform-origin: center;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    transform-origin: center;
+  }
+}
+
+/* V1 head slide down */
+.cd-v1-head {
+  animation: cdHeadIn var(--dur-sheet) var(--ease-calm) both;
+}
+@keyframes cdHeadIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-anim-item,
+  .cd-v1 .cd-score-num,
+  .cd-radar svg polygon[fill*="accent"],
+  .cd-v1-head {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Make the canonical .pill clickable as a button without changing its look.
+   - Don't use `font: inherit` (that resets .pill's font-family/size/weight).
+   - Force transparent background so report.html's tinted .pill-* fill from
+     styles.css doesn't double-up against chrome.css's outlined .pill.
+   - Keep .pill's own border (1px solid currentColor) and padding (3px 11px). */
+.drawer-status-trigger {
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.drawer-status-trigger:hover {
+  filter: brightness(0.95);
+}
+/* While an evaluate job is running for this offer, lock the pill so the
+   user can't kick off a second one or change status mid-flight. */
+.drawer-status-trigger[data-eval-locked] {
+  cursor: wait;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.report-next-primary[data-eval-locked][data-action="evaluate"] {
+  cursor: wait;
+  opacity: 0.6;
+}
+/* Restore the canonical pill dot (6×6 currentColor) on report.html, where
+   `.hero-eyebrow .dot` shrinks any descendant .dot to 3×3 muted. */
+.drawer-status-trigger .dot {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+/* =====================================================================
+   Moved from editor-novel-like.css (consolidated — that file is gone).
+   Drawer v1 nav-row chrome + the hero override for the drawer surface.
+   Lives here (after the base .cd-nav-* rules above) so these overrides
+   still win on source order.
+====================================================================== */
+
+/* Drawer chrome: a natural top header bar with sticky positioning,
+ * surface background, and a bottom border. Sits above .cd-v1-body
+ * and stays put while the body scrolls. Nav arrows + counter + kebab
+ * cluster on the right; left side is empty (room for a back-affordance
+ * later if needed). */
+.cd-v1-navrow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  /* Left cluster (close · prev/next) and right cluster (open-full · ⋯) sit at
+     opposite ends of the header. */
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 14px;
+  height: 50px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+/* The drawer is ALWAYS a narrow surface (half the content box on desktop,
+   ≥480px; full-width on mobile), so its nav controls are sized to the drawer,
+   not the viewport — a viewport @media never fires on desktop where the panel
+   is still narrow. These compact sizes apply unconditionally so the close ·
+   expand · prev/next · ⋯ cluster reads proportional to the slim header at
+   every width. */
+.cd-v1-navrow .icon-btn {
+  width: 26px;
+  height: 28px;
+  /* Escape the ≤1024px 44×44 WCAG tap-target floor (chrome.css §Mobile tap
+     target floor). Without this, `min-width/min-height: 44px` clamps these
+     buttons back up to 44px on tablet/mobile — which is exactly why the nav
+     looked oversized on mobile while the desktop (>1024px) size was correct.
+     The drawer nav is a dense, compact control cluster, so we opt it out. */
+  min-width: 0;
+  min-height: 0;
+}
+.cd-v1-navrow .icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.cd-v1-navrow .cd-nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Right-hand drawer actions: open-full-report · ⋯ meatball · close.
+   Plain icon cluster — no paired-pill chrome (that's reserved for the
+   prev/next .cd-nav-group). */
+.cd-v1-navrow .cd-nav-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Subtle vertical rule separating the close/expand actions from the prev/next
+   nav pill. */
+.cd-v1-navrow .cd-nav-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+/* The drawer is always narrow, so the «1 / 9» counter is tight at EVERY width
+   (not just ≤640px). The 3-class selector beats board's `.cd-nav-group
+   .cd-nav-counter` (min-width 28px) — that wide min-width is what made the
+   pager pill read oversized. */
+.cd-v1-navrow .cd-nav-counter,
+.cd-v1-navrow .cd-nav-group .cd-nav-counter {
+  font-size: 12px;
+  color: var(--text-3);
+  min-width: 24px;
+  padding: 0 3px;
+  text-align: center;
+}
+/* Mobile: tighten the whole navigation cluster further — shorter row, smaller
+   icon buttons, and a more compact «prev · counter · next» pager pill so it
+   stops reading oversized on the full-width mobile sheet. Dropdown/eyebrow
+   pills are intentionally NOT touched here. */
+@media (max-width: 640px) {
+  .cd-v1-navrow {
+    height: 46px;
+    padding: 5px 12px;
+  }
+  .cd-v1-navrow .icon-btn {
+    width: 24px;
+    height: 26px;
+  }
+  .cd-v1-navrow .icon-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+  /* The pager pill (.cd-nav-group) carries a border + padding; trim both so the
+     «6 / 9» control is a snug pill rather than a chunky bar. */
+  .cd-v1-navrow .cd-nav-group {
+    padding: 1px;
+    gap: 0;
+  }
+  /* 3-class selector so it beats `.cd-nav-group .cd-nav-counter` (2-class,
+     min-width 28px) — the wide min-width is what makes the «1 / 9» pager read
+     oversized on the mobile sheet. */
+  .cd-v1-navrow .cd-nav-group .cd-nav-counter,
+  .cd-v1-navrow .cd-nav-counter {
+    font-size: 11px;
+    min-width: 20px;
+    padding: 0 3px;
+  }
+  .cd-v1-navrow .cd-nav-divider {
+    height: 16px;
+    margin: 0 3px;
+  }
+}
+.cd-v1-body .hero {
+  padding-top: 8px;
+  /* The hero's global 56px bottom margin (great for the wide /report page)
+     leaves a big empty band above the body in the narrow drawer. Drop it — the
+     flex gap (16px) + the editor's top padding already give enough separation
+     below the hero's divider. Applies to the live drawer + the skeleton (both
+     use .hero inside .cd-v1-body). */
+  margin-bottom: 0;
+}

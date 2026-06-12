@@ -1,0 +1,190 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!node_modules/**",
+      "!.next/**",
+      "!artifacts/output/**",
+      "!data/**",
+      "!artifacts/reports/**",
+      "!batch/**",
+      "!public/fonts/**",
+      "!inputs/jds/**",
+      "!.claude/worktrees/**",
+      "!.antigravitycli/**",
+      "!artifacts/interview-prep/**",
+      "!public/Brand Book v2.html",
+      "!public/_build-helpers.js",
+      "!public/vendor/**",
+      "!content/templates/**",
+      "!**/*.bak",
+      "!**/*.tmp",
+      "!next-env.d.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": { "recommended": false }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "asNeeded"
+    }
+  },
+  "html": {
+    "formatter": { "enabled": false }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.mjs"],
+      "javascript": {
+        "globals": [
+          "setImmediate",
+          "console",
+          "TextEncoder",
+          "setInterval",
+          "__dirname",
+          "AbortController",
+          "fetch",
+          "globalThis",
+          "clearInterval",
+          "URLSearchParams",
+          "clearTimeout",
+          "__filename",
+          "setTimeout",
+          "process",
+          "Buffer",
+          "TextDecoder",
+          "URL",
+          "AbortSignal"
+        ]
+      },
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noConstantCondition": "error",
+            "noSelfAssign": "error",
+            "noUndeclaredVariables": "error",
+            "noUnreachable": "error",
+            "noUnusedVariables": "error"
+          },
+          "style": { "useConst": "error" },
+          "suspicious": {
+            "noConsole": "off",
+            "noDebugger": "error",
+            "noDoubleEquals": "error",
+            "noEmptyBlockStatements": "off",
+            "noFallthroughSwitchClause": "error",
+            "noVar": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["public/**/*.js"],
+      "javascript": {
+        "globals": [
+          "Element",
+          "localStorage",
+          "setInterval",
+          "AbortController",
+          "matchMedia",
+          "URLSearchParams",
+          "CustomEvent",
+          "clearInterval",
+          "setTimeout",
+          "alert",
+          "requestAnimationFrame",
+          "Event",
+          "Blob",
+          "location",
+          "milkdown",
+          "Node",
+          "prompt",
+          "document",
+          "window",
+          "console",
+          "sessionStorage",
+          "HTMLElement",
+          "performance",
+          "MutationObserver",
+          "FileReader",
+          "ResizeObserver",
+          "confirm",
+          "FormData",
+          "fetch",
+          "clearTimeout",
+          "setTheme",
+          "navigator",
+          "cancelAnimationFrame",
+          "URL",
+          "IntersectionObserver",
+          "getComputedStyle"
+        ]
+      },
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noConstantCondition": "error",
+            "noSelfAssign": "error",
+            "noUndeclaredVariables": "error",
+            "noUnreachable": "error",
+            "noUnusedVariables": "error"
+          },
+          "style": { "useConst": "error" },
+          "suspicious": {
+            "noConsole": "off",
+            "noDebugger": "error",
+            "noDoubleEquals": "error",
+            "noEmptyBlockStatements": "off",
+            "noFallthroughSwitchClause": "error",
+            "noVar": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["cli/check-liveness.mjs", "cli/generate-pdf.mjs"],
+      "javascript": {
+        "globals": [
+          "setImmediate",
+          "console",
+          "TextEncoder",
+          "window",
+          "AbortSignal",
+          "setInterval",
+          "__dirname",
+          "AbortController",
+          "fetch",
+          "URLSearchParams",
+          "setTimeout",
+          "clearInterval",
+          "clearTimeout",
+          "__filename",
+          "globalThis",
+          "process",
+          "Buffer",
+          "TextDecoder",
+          "URL",
+          "document"
+        ]
+      }
+    }
+  ],
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  }
+}

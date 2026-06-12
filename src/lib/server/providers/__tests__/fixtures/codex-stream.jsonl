@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"thr_abc123"}
+{"type":"item.completed","item":{"type":"reasoning","summary":"Loading the URL"}}
+{"type":"item.completed","item":{"type":"tool_use","name":"shell","input":{"command":"curl https://example.com"}}}
+{"type":"item.completed","item":{"type":"message","content":"Saved artifact to artifacts/reports/."}}
+{"type":"turn.completed","usage":{"input_tokens":3120,"output_tokens":540},"model":"gpt-5.5"}

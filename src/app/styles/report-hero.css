@@ -1,0 +1,571 @@
+/* ================================================================
+   HERO — extracted from styles.css for reuse by /report + drawer
+   ================================================================ */
+
+.hero {
+  /* padding-bottom matches .hero-meta-strip padding-top so the meta sentence
+     sits with even space between the top + bottom hairlines. */
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+  /* The editor adds its own top padding (~16px) + the first block's margin, so
+     keep this modest — 56px here stacked into a ~84px dead band before the body. */
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 48px;
+  align-items: end;
+}
+.hero > div:first-child {
+  min-width: 0;
+}
+.hero-meta-strip {
+  max-width: 100%;
+}
+
+/* Brand book: hero eyebrow → display sentence-case; .id keeps mono for numeric ID feel */
+.hero-eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin-bottom: 18px;
+}
+.hero-eyebrow .id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+/* Direct-child only: the grey separator dot between eyebrow items. Must NOT
+   target the status pill's inner .dot (that should stay the status color via
+   .pill .dot) — otherwise the report/drawer status chip gets a grey dot while
+   the table's stays lime. */
+.hero-eyebrow > .dot {
+  width: 3px;
+  height: 3px;
+  background: var(--text-muted);
+  border-radius: 50%;
+}
+
+/* Editable enum pills in the eyebrow (archetype / seniority / work-mode).
+   All share ONE neutral outlined chip — work-mode is no longer tinted by
+   value, so Remote / Hybrid / On-site read the same as the other facets. */
+/* Enum pills inherit the status .pill box metrics (mono, 11.5px, 3px 11px)
+   so every chip is the same size as the status chip. */
+.hero-eyebrow .pill-enum {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+/* Inline-editable text (location / comp) in the meta sentence. */
+.inline-edit {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+}
+.inline-edit:hover {
+  border-bottom-color: var(--border-strong);
+}
+.inline-edit__empty {
+  color: var(--text-3);
+}
+.inline-edit__input {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border-form);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+/* Match the branded focus treatment of .form-input (chrome.css) so inline
+   edits ring the same way as every other input field. */
+.inline-edit__input:focus,
+.inline-edit__input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.hero-id-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.company-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.company-mark::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-top-left-radius: var(--radius-lg);
+}
+.company-mark img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+/* Link variant — the tile opens the job posting. Inherit text color (for the
+   fallback initial), add a pointer + subtle hover lift so it reads clickable. */
+a.company-mark--link {
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+a.company-mark--link:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+a.company-mark--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.hero-id-row h1 {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  margin: 0;
+}
+.hero-role {
+  font-size: 19px;
+  color: var(--text-2);
+  margin: 6px 0 0;
+  font-weight: 400;
+}
+
+/* Hero meta — single sentence in display font, becomes a wrapping
+   list of nowrap chips on narrow viewports. Each segment ("$200K-$300K",
+   "Apr 14, 2026") stays whole; only the dot separators between them
+   collapse onto the next line. */
+.hero-meta-strip {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  /* Match the table meta cells: Inter, 15px, regular — consistent across
+     report / drawer / table / kanban. */
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 4px;
+}
+.hero-meta-strip__item {
+  white-space: nowrap;
+}
+.hero-meta-strip__sep {
+  color: var(--text-3);
+  user-select: none;
+}
+.hero-meta-strip svg {
+  display: none;
+}
+@media (max-width: 640px) {
+  .hero-meta-strip {
+    font-size: 15px;
+  }
+}
+
+/* Score block — right side */
+.hero-score {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  padding-bottom: 4px;
+}
+/* score numeral relies on size, no orange tint */
+.score-numeral {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(80px, 16vw, 140px);
+  line-height: 0.85;
+  letter-spacing: -0.055em;
+  color: var(--text);
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+/* Score numerals are color-coded by tier so the headline number signals
+   "how good is this offer?" at a glance — green for high, gold for mid,
+   red for low. Mirrored in board-drawer.css for the drawer surface. */
+.score-numeral.score-high {
+  color: var(--score-high);
+}
+.score-numeral.score-mid {
+  color: var(--score-mid);
+}
+.score-numeral.score-low {
+  color: var(--score-low);
+}
+.score-numeral .denom {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  margin-top: 18px;
+  align-self: flex-start;
+}
+.score-bar {
+  display: flex;
+  gap: 3px;
+  width: 200px;
+}
+.score-bar .seg {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-2xs);
+  background: var(--surface-2);
+}
+.score-bar .seg.on {
+  background: var(--score-high);
+}
+.score-bar.mid .seg.on {
+  background: var(--score-mid);
+}
+.score-bar.low .seg.on {
+  background: var(--score-low);
+}
+
+.legit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  background: color-mix(in srgb, var(--score-high) 10%, transparent);
+  color: var(--score-high);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+/* Tier-based confidence colors (legitTierBand): green = high confidence,
+   amber = medium/unknown, red = low confidence / scam. */
+.legit-pill.warn {
+  background: color-mix(in srgb, var(--score-mid) 12%, transparent);
+  color: var(--score-mid);
+}
+.legit-pill.bad {
+  background: color-mix(in srgb, var(--score-low) 12%, transparent);
+  color: var(--score-low);
+}
+.legit-pill svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.archetype-tag {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+/* ---- Hero action row (hairline) ---- */
+.hero-actions {
+  margin-top: 32px;
+  margin-bottom: 96px;
+  padding: 20px 0 2px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---- Hero enter animations (kept here so they ship with hero CSS) ---- */
+.hero[data-anim="enter"] .score-numeral {
+  animation: scoreSettle var(--dur-arrival) var(--ease-calm) both;
+}
+.hero[data-anim="enter"] .score-of {
+  animation: fadeIn var(--dur-considered) var(--ease-calm) 600ms both;
+}
+.hero[data-anim="enter"] .score-rationale,
+.hero[data-anim="enter"] .score-cta {
+  animation: fadeIn var(--dur-considered) var(--ease-calm) 700ms both;
+}
+
+/* Reduce-motion guard: the global universal block (chrome.css) zeroes
+   animation-duration but NOT animation-delay, so the 600/700ms-delayed
+   `both` keyframes would otherwise leave these elements at their opacity:0
+   `from` state for most of a second. Snap straight to the final state. */
+@media (prefers-reduced-motion: reduce) {
+  .hero[data-anim="enter"] .score-numeral,
+  .hero[data-anim="enter"] .score-of,
+  .hero[data-anim="enter"] .score-rationale,
+  .hero[data-anim="enter"] .score-cta {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ----------------------------------------------------------------
+   Container-query collapse — applied inside any inline-size
+   container ancestor (#reportHost or .cd-drawer-body). The viewport
+   media-query equivalents stay in styles.css for surfaces without
+   container ancestry.
+---------------------------------------------------------------- */
+#reportHost {
+  container-type: inline-size;
+}
+/* Drawer body — both the legacy v1 body and the rebuilt v2 body. The
+ * container-type lets the Snapshot's @container queries collapse the
+ * 2-column grid when the drawer is narrower than 720px. */
+.cd-drawer-body,
+.cd-v1-body {
+  container-type: inline-size;
+}
+.hero {
+  container-type: inline-size;
+}
+
+/* Mid-compact — the drawer's normal range (480px floor up to 720px) and a
+ * narrowed /report window. Keeps the full report hero STRUCTURE 1:1 —
+ * eyebrow, avatar + h1 + role, divider, meta all in the left column with
+ * the score block (numeral / bar / confidence pill) in its own right
+ * column — and only scales the chrome to the panel. The pill row may wrap
+ * to two lines in the left column; that's the accepted trade-off for
+ * structural parity with the report page. Below 480px the re-flow compact
+ * mode (next block) takes over. */
+@container (max-width: 720px) {
+  .hero {
+    gap: 28px;
+  }
+  .hero-eyebrow {
+    font-size: 13px;
+  }
+  .company-mark {
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+  }
+  .company-mark img {
+    width: 32px;
+    height: 32px;
+  }
+  .hero-id-row h1 {
+    font-size: 34px;
+  }
+  .hero-role {
+    font-size: 15px;
+  }
+  .score-numeral {
+    font-size: 76px;
+  }
+  .score-numeral .denom {
+    font-size: 16px;
+    margin-top: 8px;
+  }
+  .score-bar {
+    width: 140px;
+  }
+}
+
+/* Phone-compact collapse — true narrow widths (mobile sheet, phone-sized
+ * /report). Not just a layout swap — we also shrink the typography +
+ * chrome so the elements look proportional to the narrow surface (the old
+ * bespoke drawer had its own purpose-built sizes; we're hitting parity
+ * with scaled-down rules instead of duplicate components). */
+@container (max-width: 480px) {
+  /* Compact-mode = scaled-down /report hero. Same 2-column structure
+   * (text left, score block right) with the SAME element ordering:
+   *   pill eyebrow
+   *   avatar + h1 + role          |  big score / 5
+   *   meta sentence               |  score bar
+   *                               |  High confidence pill
+   *                               |  Scored by Evaluation AI
+   * Everything scaled ~65-70% vs the report page so it fits the
+   * narrow drawer surface proportionally. */
+  /* Flatten the wrapping div so eyebrow / id-row / meta-strip become
+   * direct grid children — then meta-strip can span both columns and
+   * "Posted May 23, 2026" sits inline as the 4th chip. */
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: flex-start;
+    /* 12px (was 20px): at 375px viewports the title column + fixed-width
+       score column overflowed the surface by ~5px, clipping '/5' and the
+       confidence pill and giving /report a horizontal scrollbar. */
+    column-gap: 12px;
+    row-gap: 12px;
+  }
+  .hero > div:first-child {
+    display: contents;
+  }
+  .hero-eyebrow {
+    /* Span the full width (the right half of row 1 is empty — the score
+       block sits in row 2) so the brow pills get the whole drawer width
+       and stay on ONE row, wrapping only when the window is genuinely
+       narrow. */
+    grid-column: 1 / -1;
+    grid-row: 1;
+    font-size: 13px;
+  }
+  .hero-id-row {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    /* Top-align with the score block so "3.8" and the company name share an
+       anchor line (centering left the title floating against the taller
+       score column). The 2px nudge optically matches the numeral's cap. */
+    align-self: start;
+    margin-top: 2px;
+    gap: 14px;
+    align-items: center;
+    /* Grid items default to min-width:auto — a long unbreakable company
+       name (52px avatar + e.g. "RemoteHunter" at 32px) made this 1fr track
+       refuse to shrink, pushing the whole score column off-screen behind an
+       undiscoverable inner horizontal scroll in the 345px drawer. Let the
+       track shrink and wrap the name instead. */
+    min-width: 0;
+  }
+  .hero-id-row > div,
+  .hero-eyebrow,
+  .hero-meta-strip {
+    min-width: 0;
+  }
+  .hero-id-row h1 {
+    overflow-wrap: anywhere;
+  }
+  /* Lock the title wrapper to the avatar's exact height + flex-center
+   * the h1 + role inside it. Without this, the wrapper sizes to its
+   * content (h1 + role + gap) which is taller than the avatar — flex's
+   * align-items: center on the row then centers the avatar against the
+   * wrapper instead of vice-versa, so the title sits above the avatar
+   * mid-line. Forcing the wrapper to match avatar height with
+   * justify-content: center inside it centers the visible text block
+   * against the avatar pixel-for-pixel. */
+  .hero-id-row > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* min-height (not height): the lock matches the avatar in the normal
+       one-line case, but a long company name that wraps (see min-width: 0
+       above) needs the wrapper to grow instead of spilling out of it. */
+    min-height: 52px;
+  }
+  .company-mark {
+    width: 52px;
+    height: 52px;
+    font-size: 26px;
+  }
+  /* Restore the base logo size inside the 52px tile (the mid-compact tier
+     above shrinks it to 32px for its 48px tile). */
+  .company-mark img {
+    width: 38px;
+    height: 38px;
+  }
+  .hero h1 {
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .hero-role {
+    font-size: 15px;
+    line-height: 1.2;
+    margin: 3px 0 0;
+  }
+  .hero-meta-strip {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    flex-wrap: wrap;
+    font-size: 15px;
+    line-height: 1.4;
+    row-gap: 6px;
+    margin-top: 2px;
+  }
+  /* Right column: score block sits in the SAME row as the id-row, both
+   * top-aligned (align-self: start) so the numeral and the company name
+   * share an anchor line. The numeral is sized to keep mild hierarchy
+   * over the 32px h1 without dwarfing it — at 52px the score block grew
+   * tall enough that the centered title read as floating beside it. */
+  .hero-score {
+    grid-column: 2 / 3;
+    grid-row: 2;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 7px;
+    width: auto;
+    text-align: right;
+  }
+  .score-numeral {
+    font-size: 44px;
+    line-height: 0.85;
+    letter-spacing: -0.04em;
+  }
+  /* score-bar: keep base flex:1 segments, narrow the container so
+   * total width stays proportional to the smaller numeral. */
+  .score-bar {
+    width: 100px;
+    gap: 3px;
+  }
+  .score-bar .seg {
+    height: 3px;
+    width: auto;
+  }
+  .legit-pill {
+    font-size: 10px;
+    padding: 3px 9px;
+    gap: 5px;
+  }
+  .legit-pill svg {
+    width: 11px;
+    height: 11px;
+  }
+  .archetype-tag {
+    font-size: 10px;
+  }
+}

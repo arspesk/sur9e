@@ -1,0 +1,10 @@
+#!/bin/sh
+# pre-commit gate — runs the same checks CI runs, in the same order.
+# Matches .github/workflows/test.yml step-for-step so a green local
+# commit means a green CI run.
+#
+# To bypass for genuine emergencies: git commit --no-verify (sparingly).
+set -e
+npm run lint
+npm run typecheck
+exec node test-all.mjs --quick

@@ -1,0 +1,25 @@
+/* sur9e global CSS — imports processed by Tailwind v4 / Turbopack. */
+@import "tailwindcss";
+@import "./styles/tokens.css";
+@import "./styles/chrome.css";
+@import "./styles/styles.css";
+@import "./styles/board-drawer.css";
+@import "./styles/loading-modal.css";
+@import "./styles/table-inline.css";
+@import "./styles/settings-inline.css";
+@import "./styles/toc-rail.css";
+@import "./styles/report-inline.css";
+@import "./styles/analytics-inline.css";
+@import "./styles/profile-inline.css";
+@import "./styles/tiptap-editor.css";
+@import "./styles/pipeline-inline.css";
+@import "./styles/toast.css";
+
+/* Wire next/font/google CSS variables into the design-token layer.
+   These declarations come after chrome.css so they win in the cascade
+   and prepend var(--font-*) self-hosted hashes as the first choice. */
+:root {
+  --font-display: var(--font-general-sans), "General Sans", "Inter", system-ui, sans-serif;
+  --font-body: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+}

@@ -1,0 +1,187 @@
+/* Profile-page-specific styles + .md-section / .md-host editor mount
+   styling. Shared toc-rail rules live in toc-rail.css. */
+
+/* TOC rail anchor inherits the toc-rail.css default (200px) so the rail sits
+   at the same y on profile, settings, and report — keeps visual continuity
+   when navigating between them. */
+/* Match settings.html — same max-width so both pages center the same way
+   under the topbar/page-head and the form columns line up vertically when
+   navigating between them. 880px keeps 2-col form rows readable at desktop
+   without the markdown editors going edge-to-edge. */
+.profile-content {
+  padding: var(--space-6);
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0 auto;
+  width: 100%;
+}
+/* At desktop, leave a right gutter so the fixed .toc-indicator-host
+   (anchored to right:24px) doesn't overlap the form column or the
+   page-head. Rail is hidden ≤1024px so we restore default padding
+   there. */
+@media (min-width: 1025px) {
+  .profile-content {
+    padding-right: 88px;
+    padding-left: var(--space-6);
+  }
+  body[data-screen-label="Profile"] .page-head {
+    padding-right: 88px;
+  }
+}
+/* On desktop the shared TOC rail (.toc-indicator-host, see toc-rail.css)
+   handles section navigation, so we collapse the layout grid back to a
+   single column. The in-flow .profile-nav is hidden at desktop (below)
+   and only renders as a horizontal scroller at ≤1024px.
+   minmax(0, 1fr) so the nowrap nav scroller's intrinsic width can't
+   force the grid column wider than its parent — without it the column
+   sized to the nav's content and pushed every form input past the
+   viewport on mobile. */
+.profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+}
+.profile-nav {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--border);
+}
+.profile-nav__item {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-3);
+  text-decoration: none;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    background var(--dur-quick) var(--ease-firm);
+}
+.profile-nav__item:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.profile-nav__item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.profile-nav__sep {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border);
+}
+/* profile-nav__sep migrated from <span> to
+   <hr className="separator profile-nav__sep" />. At mobile (≤1024px) the
+   nav switches to a horizontal scroller and the separator must render as
+   a 1px vertical bar between groups — same as the legacy <span> did. The
+   .separator base rule (chrome.css) loads after the @media override in
+   chrome.css and would otherwise force width:100%, so we re-state the
+   vertical orientation here (this file loads after chrome.css). */
+@media (max-width: 1024px) {
+  .profile-nav__sep {
+    width: 1px;
+    height: auto;
+    margin: 0 var(--space-2);
+    align-self: stretch;
+  }
+}
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.profile-head__meta {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.form-required {
+  color: var(--st-danger);
+  font-weight: 600;
+  margin-left: 2px;
+}
+.profile-required-banner {
+  display: none;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--st-danger);
+  border-radius: var(--radius);
+  background: var(--st-danger-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.profile-required-banner.is-visible {
+  display: block;
+}
+.profile-required-banner ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.profile-form .form-section[id] {
+  scroll-margin-top: 80px;
+}
+@media (max-width: 1024px) {
+  .profile-form .form-section[id] {
+    scroll-margin-top: 120px;
+  }
+}
+.profile-required-banner ul a {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+.md-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.md-host {
+  min-height: 520px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-paper);
+  overflow: hidden;
+}
+.md-host:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 1024px) {
+  .profile-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+  /* In-flow horizontal scroller retired — at ≤1024px section nav now flows
+     through the shared .section-pill burger + #tocSheet bottom-sheet, same
+     pattern as Settings + the Offer Report. Keep the markup in the DOM
+     (the desktop sticky-side variant still uses these classes ≥1025px) but
+     hide it on tablet/mobile so we don't end up with two ways to navigate. */
+  .profile-nav {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  /* Pr-M1: respect iPhone notch / device safe-area on the inline padding
+     so form-input right borders never clip past the viewport edge. */
+  .profile-content {
+    padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-4)
+      max(var(--space-4), env(safe-area-inset-left));
+  }
+  .md-host {
+    min-height: 360px;
+  }
+}

@@ -1,0 +1,200 @@
+/* ===========================================================
+   Shared TOC rail — Notion-style line-stack indicator + popover
+   Used by: report.html (sections of one report), profile.html
+   (form sections), settings.html (settings groups). Loaded as a
+   separate file so report-only stylesheets don't have to.
+   =========================================================== */
+
+.toc-indicator-host {
+  /* Fixed + vertically centered so the indicator follows the user as they
+     scroll and sits at the same y across all pages (profile, settings,
+     report). The hover popover expands symmetrically from this center (see
+     .toc-popover) so a long section list fills the available vertical space
+     in both directions rather than overflowing downward. Anchored to the
+     viewport's right edge (24px gutter); pages reserve a matching
+     padding-right at desktop widths. Pages may override --toc-rail-top. */
+  position: fixed;
+  /* Sits at ~33% of the viewport height (upper third, around the page-title
+     level) to match where Notion anchors its minimap. translateY(-50%) centers
+     the rail on that anchor so the hover popover still expands symmetrically.
+     Pages may override --toc-rail-top. (Tuned by eye from the user's reference
+     screenshot — Notion's web page blocks a clean DOM measurement via its
+     desktop-app deep-link redirect.) */
+  top: var(--toc-rail-top, 33%);
+  right: 24px;
+  transform: translateY(-50%);
+  z-index: var(--z-toc);
+}
+
+.toc-indicator {
+  display: flex;
+  flex-direction: column;
+  /* Right-align the bars so every level shares the same right edge (toward
+     the page content); only the bar length varies by heading level (H2
+     longest, H3/H4 shorter), each extending leftward from that shared
+     edge. */
+  align-items: flex-end;
+  /* Tighter than default Notion-style — bars are ornamental, popover
+     gives the labelled hit target on hover. Trade target-size axe rule
+     for visual density per design preference. */
+  gap: 5px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+/* On hover the popover takes the indicator's slot — fade the bars out so
+   the menu *replaces* the rail rather than sitting next to it. */
+.toc-indicator-host:hover .toc-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+.toc-indicator--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Compact Notion-style indicator. Each bar is a button; the small hit
+   area sacrifices axe `target-size` to preserve the dense aesthetic.
+   The hover popover above provides a generous labelled fallback target
+   for keyboard / pointer-precision users. */
+.toc-line {
+  width: 24px;
+  height: 2px;
+  border: none;
+  padding: 0;
+  background: var(--text-3);
+  /* Faint at rest (Notion-style — their inactive bars sit near ~11% opacity),
+     brightening on host hover (rule below) and going solid accent when active.
+     Keeps the rail quiet/unobtrusive until the user reaches for it. */
+  opacity: 0.4;
+  border-radius: 1px;
+  cursor: pointer;
+  position: relative;
+  transition:
+    background var(--dur-fast) ease,
+    opacity var(--dur-fast) ease,
+    width var(--dur-fast) ease;
+}
+/* WCAG 2.5.8 target size: extend the hit area to 24×24 via an invisible
+   ::before overlay so the visual 2px stripe (dense indicator aesthetic
+   intentional per design book) is preserved while the clickable region
+   reaches the 24×24 minimum. The ::before has no background, so it does
+   not affect the rail's appearance. */
+.toc-line::before {
+  content: "";
+  position: absolute;
+  /* 24px tall (2px bar + 11px above/below). Width is anchored to the bar's
+     right edge and forced to ≥24px so the shorter level-3/4 bars (16px/12px)
+     still clear the WCAG 2.5.8 target-size minimum. No background, so the
+     dense stripe aesthetic is unchanged. */
+  top: -11px;
+  bottom: -11px;
+  right: 0;
+  left: auto;
+  min-width: 24px;
+}
+.toc-line:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+.toc-indicator-host:hover .toc-line {
+  background: var(--text);
+  opacity: 1;
+}
+/* `[data-level]` is present on every bar (toc-rail.tsx defaults it to 2), so
+   the active rule must out-specify the per-level width rules below — otherwise
+   an active H3/H4 keeps its 16/12px width and never animates the grow that H2
+   gets. `.toc-line[data-level].active` (0,3,0) beats `.toc-line[data-level="3"]`
+   (0,2,0), so the highlight + width grow now fires for ALL heading levels. */
+.toc-line[data-level].active {
+  background: var(--accent);
+  opacity: 1;
+  width: 30px;
+}
+/* Notion-style heading-hierarchy indent — H2 stays full-width, H3 and H4
+ * are shorter. All bars share the same right edge (.toc-indicator uses
+ * align-items: flex-end), so a shorter bar reads as inset on the left
+ * while ending at the same point as the rest — mirroring the document's
+ * structure without needing labels. */
+.toc-line[data-level="3"] {
+  width: 16px;
+}
+.toc-line[data-level="4"] {
+  width: 12px;
+}
+/* Popover entries get a matching inset so the labels visually echo
+ * the rail's hierarchy. */
+.toc-popover__item[data-level="3"] {
+  padding-left: 20px;
+}
+.toc-popover__item[data-level="4"] {
+  padding-left: 28px;
+}
+
+.toc-popover {
+  /* Replaces the indicator in-place on hover. Anchored to the TOP of the rail
+     and grows DOWNWARD (not symmetrically from the center). It starts where the
+     bars start and expands down; max-height caps it to the space below the rail
+     anchor (top: ~33vh) so a long section list scrolls instead of overflowing
+     the viewport bottom. The bars fade out underneath
+     (.toc-indicator-host:hover .toc-indicator), so the menu takes the rail's
+     slot rather than sitting beside it. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-height: calc(100vh - 33vh - 16px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  min-width: 180px;
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  transition: opacity var(--dur-fast) ease;
+}
+.toc-popover[hidden] {
+  display: none;
+}
+.toc-popover__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  /* Denser rows (Notion-style) so more sections fit before scrolling. */
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.toc-popover__item:hover {
+  /* Was var(--surface) — same as the popover bg in light → invisible
+     hover. color-mix gives a subtle darker tint in light and a subtle
+     lighter tint in dark (since --text flips with the theme). */
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+}
+.toc-popover__item.active {
+  color: var(--accent-cta); /* was --accent; --accent-cta #c9430f hits 4.65:1 on --surface white */
+  font-weight: 500;
+}
+
+/* Hide the indicator on tablet AND mobile (≤1024px) — pages already have
+   in-flow alternatives at narrow widths (Profile's horizontal scroller,
+   the report pill's ≡ icon). The Notion-style line-stack indicator only
+   fits comfortably at desktop widths where there's enough horizontal
+   space for the labeled popover to live next to the content. */
+@media (max-width: 1024px) {
+  .toc-indicator-host {
+    display: none;
+  }
+}

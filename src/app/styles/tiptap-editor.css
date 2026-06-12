@@ -1,0 +1,1366 @@
+/* tiptap-editor.css — app typography on top of ProseMirror.
+   Inherits page tokens from chrome.css. Body/headings use
+   --font-display; only inline code + code blocks use --font-mono. */
+
+/* Kill scroll-anchoring on the document scroll-root whenever an editor is
+   mounted. As you type, the ProseMirror content reflows (its height changes
+   every keystroke); the browser's scroll-anchoring then re-adjusts scrollTop
+   to keep an anchor node stable, which fights ProseMirror's own
+   caret-into-view scroll and makes the whole page jitter ~28px up/down.
+   Scoped via :has() so non-editor routes keep default anchoring. */
+html:has(.be-prose) {
+  overflow-anchor: none;
+}
+
+[data-md-host] {
+  position: relative;
+}
+
+.be-prose {
+  outline: none;
+  min-height: 240px;
+  font-family: var(--font-display);
+  color: var(--text);
+  padding: var(--space-4) 48px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.be-prose > * {
+  margin: 0 0 var(--space-2);
+}
+.be-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.be-prose h1 {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-top: 24px;
+  margin-bottom: 4px;
+}
+.be-prose h2 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  margin-top: 20px;
+  margin-bottom: 4px;
+}
+.be-prose h3 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 16px;
+  margin-bottom: 2px;
+}
+.be-prose h4 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 12px;
+  margin-bottom: 2px;
+}
+.be-prose > h1:first-child,
+.be-prose > h2:first-child,
+.be-prose > h3:first-child,
+.be-prose > h4:first-child {
+  margin-top: 0;
+}
+.be-prose p {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.be-prose blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding: var(--space-1) var(--space-4);
+  color: var(--text-2);
+  font-style: italic;
+  margin-left: 0;
+}
+
+.be-prose ul,
+.be-prose ol {
+  padding-left: 24px;
+  margin-left: 0;
+}
+.be-prose li {
+  margin-bottom: var(--space-1);
+  font-size: 16px;
+  line-height: 1.7;
+}
+.be-prose li > p {
+  margin: 0;
+}
+
+/* Task list (TipTap TaskList + TaskItem) */
+.be-prose ul[data-type="taskList"],
+.be-prose .be-todo {
+  list-style: none;
+  padding-left: 0;
+}
+.be-prose ul[data-type="taskList"] li,
+.be-prose .be-todo li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: start;
+}
+.be-prose ul[data-type="taskList"] li > label,
+.be-prose .be-todo li > label {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+}
+.be-prose ul[data-type="taskList"] input[type="checkbox"],
+.be-prose .be-todo input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.be-prose ul[data-type="taskList"] li[data-checked="true"] > div,
+.be-prose .be-todo li[data-checked="true"] > div {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.be-prose pre,
+.be-prose pre.be-codeblock {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Reserve a top strip on code blocks so the floating language picker + copy
+   toolbar (absolutely positioned top-right, revealed on hover) never overlaps
+   the first line of code — and mirror it on the bottom so the block reads
+   evenly padded top and bottom. */
+.be-prose pre.be-codeblock {
+  padding-top: 30px;
+  padding-bottom: 30px;
+}
+
+/* Collapsible block (official @tiptap/extension-details). The extension renders
+   a wrapper (.be-details, gets .is-open when expanded) containing a toggle
+   button, the summary node, and the content node. Editing/Enter/Backspace and
+   the drag handle all work natively because it's a real node, not a decoration. */
+.be-prose .be-details {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+/* Toggle button holds a real SVG chevron (set in renderToggleButton). The svg
+   points right when collapsed and rotates to point down when open. */
+.be-prose .be-details > button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 1.6em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-3);
+}
+.be-prose .be-details > button:hover {
+  color: var(--text);
+}
+.be-prose .be-details > button > svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.15s ease;
+}
+.be-prose .be-details.is-open > button > svg {
+  transform: rotate(90deg);
+}
+.be-prose .be-details > div:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Summary renders as a native <summary>; strip the default disclosure marker. */
+.be-prose .be-details summary {
+  margin: 0;
+  font-weight: 600;
+  list-style: none;
+}
+.be-prose .be-details summary::-webkit-details-marker {
+  display: none;
+}
+.be-prose .be-details [data-type="detailsContent"] > * {
+  margin: 6px 0 0;
+}
+/* Collapsed: the extension hides the content node when not open. */
+.be-prose .be-details:not(.is-open) [data-type="detailsContent"] {
+  display: none;
+}
+
+/* Toggle heading / toggle list (Notion-style): drop the box, style the summary
+   as a heading or list item, indent the folded content. The chevron button +
+   collapse mechanics are inherited from .be-details above. */
+.be-prose .be-details[data-kind="heading"],
+.be-prose .be-details[data-kind="list"] {
+  margin: 12px 0 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.be-prose .be-details[data-kind="heading"] summary {
+  letter-spacing: -0.01em;
+}
+.be-prose .be-details[data-kind="heading"][data-level="1"] summary {
+  font-size: 28px;
+  line-height: 1.25;
+}
+.be-prose .be-details[data-kind="heading"][data-level="2"] summary {
+  font-size: 22px;
+  line-height: 1.3;
+}
+.be-prose .be-details[data-kind="heading"][data-level="3"] summary {
+  font-size: 18px;
+  line-height: 1.35;
+}
+/* Toggle list: a list-row summary (the chevron stands in for the bullet). */
+.be-prose .be-details[data-kind="list"] summary {
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.be-prose .be-details[data-kind="heading"] [data-type="detailsContent"],
+.be-prose .be-details[data-kind="list"] [data-type="detailsContent"] {
+  padding-left: 2px;
+}
+
+/* Code block with chrome (language selector + copy). The wrapper owns the
+   border/radius; the bar sits flush on top and the <pre> loses its top
+   rounding so they read as one unit. */
+.be-prose .be-codeblock-wrap {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* Top/bottom breathing room so the block separates cleanly from
+     surrounding paragraphs. */
+  margin: 20px 0;
+}
+/* Floating toolbar (Novel-style): sits over the top-right corner of the code
+   and only reveals on hover/focus, so it never pushes the code down or collides
+   with the editor placeholder the way the old full-width header bar did. */
+.be-prose .be-codeblock-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+  user-select: none;
+}
+.be-prose .be-codeblock-wrap:hover .be-codeblock-tools,
+.be-prose .be-codeblock-wrap:focus-within .be-codeblock-tools,
+/* Keep the toolbar visible while the language dropdown is open — opening it
+   moves focus off the code block, which would otherwise fade the trigger out
+   and leave the dropdown anchored to nothing. */
+  .be-prose .be-codeblock-wrap.menu-open
+  .be-codeblock-tools {
+  opacity: 1;
+}
+/* Transparent triggers — no white button chrome; subtle tint on hover only. */
+.be-prose .be-codeblock-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.be-prose .be-codeblock-lang:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.be-prose .be-codeblock-lang__caret {
+  font-size: 9px;
+  color: var(--text-3);
+}
+.be-prose .be-codeblock-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.be-prose .be-codeblock-copy:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.be-prose .be-codeblock-copy.is-copied {
+  color: var(--accent-text);
+}
+
+/* Branded language dropdown (lives on <body>, matches the slash/block menus). */
+.be-codeblock-langmenu {
+  position: fixed;
+  z-index: var(--z-editor-menu);
+  width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Chrome comes from .form-input (the app's standard input); only layout here. */
+.be-codeblock-langmenu__search {
+  width: 100%;
+  box-sizing: border-box;
+}
+.be-codeblock-langmenu__list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.be-codeblock-langmenu__item {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.be-codeblock-langmenu__item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.be-codeblock-langmenu__item.is-active {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.be-codeblock-langmenu__empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* Inside the wrapper the <pre> is borderless and square; the wrapper frames it. */
+.be-prose .be-codeblock-wrap pre,
+.be-prose .be-codeblock-wrap pre.be-codeblock {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+.be-prose pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--text);
+}
+.be-prose :not(pre) > code {
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+  color: var(--accent-text);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.be-prose hr,
+.be-prose hr.be-hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--space-5) 0;
+}
+
+.be-prose a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  /* Links open on click (see handleClick in tiptap-editor.tsx), so show the
+     pointer cursor that signals they're clickable rather than the text caret. */
+  cursor: pointer;
+}
+
+/* Tables */
+.be-prose .be-table,
+.be-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: table;
+}
+.be-prose th,
+.be-prose td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  min-width: 80px;
+  /* prosemirror-tables needs position:relative on cells so the absolutely
+     positioned `.column-resize-handle` (added by the column-resizing plugin)
+     anchors to the cell's right edge. Without this the handle would attach
+     to the nearest positioned ancestor (usually the article) and the user
+     would never get a cursor on it. */
+  position: relative;
+}
+
+/* prosemirror-tables column-resizing plugin renders an empty
+   .column-resize-handle on the right edge of every cell. Out of the box
+   it has no styles, so the user gets no `col-resize` cursor and the
+   handle is impossible to find. Surface a 4px hit area with the right
+   cursor; tint on hover so the user knows it's draggable. */
+.be-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: transparent;
+  cursor: col-resize;
+  z-index: 20;
+  pointer-events: auto;
+}
+/* No background tint on hover — the col-resize cursor alone is the
+   discoverability cue the user asked for (less visual noise). */
+/* While prosemirror-tables is dragging it adds `.resize-cursor` on the
+   editor root so the col-resize cursor follows the drag past the handle. */
+.be-prose.resize-cursor,
+.be-prose .resize-cursor {
+  cursor: col-resize;
+}
+.be-prose th {
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+}
+.be-prose td {
+  color: var(--text-2);
+}
+.be-prose tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+}
+
+/* Placeholder (TipTap Placeholder ext writes data-placeholder + class) */
+.be-prose p.is-editor-empty:first-child::before,
+.be-prose .is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-3);
+  pointer-events: none;
+  height: 0;
+  float: left;
+}
+
+/* ── Slash menu (Suggestion-based) ── */
+.be-slash {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: var(--z-modal);
+  font-family: var(--font-display);
+}
+.be-slash__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.be-slash__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.be-slash__item.is-active,
+.be-slash__item:hover {
+  background: var(--surface);
+}
+.be-slash__icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.be-slash__label {
+  flex: 1;
+  font-weight: 500;
+}
+.be-slash__empty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* ── Link popover ── */
+.be-linkpop {
+  position: fixed;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px 4px 4px 8px;
+  z-index: var(--z-modal);
+}
+.be-linkpop__input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  width: 280px;
+  padding: 6px 4px;
+}
+.be-linkpop__input::placeholder {
+  color: var(--text-3);
+}
+.be-linkpop__btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-3);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.be-linkpop__btn:hover {
+  background: color-mix(in srgb, var(--st-danger) 8%, transparent);
+  color: var(--st-danger);
+}
+
+/* ── Attachments section (in-document downloads) ──
+   Renders below the editor body when the report has CV / cover-letter /
+   outreach artifacts on disk. Replaces the legacy topbar "Documents"
+   dropdown — putting downloads inside the document the user is reading. */
+.report-attachments {
+  margin: 48px 0 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.report-attachments__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+.report-attachments__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.report-attachments__tile {
+  display: grid;
+  grid-template-columns: 32px 1fr 20px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-decoration: none;
+  color: var(--text);
+  transition:
+    border-color var(--dur-fast) ease,
+    background var(--dur-fast) ease;
+}
+.report-attachments__tile:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.report-attachments__icon,
+.report-attachments__action {
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.report-attachments__icon svg {
+  width: 22px;
+  height: 22px;
+}
+.report-attachments__action svg {
+  width: 16px;
+  height: 16px;
+}
+.report-attachments__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.report-attachments__label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.report-attachments__meta {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-attachments__tile:hover .report-attachments__action {
+  color: var(--accent);
+}
+
+/* ── Callout block (Notion-style aside) ──
+   Variants: info (default) / warn / success / error. Each gets a tinted
+   border + faint background and the emoji column on the left. The body
+   is editable (content="block+") so users can nest paragraphs, lists,
+   etc. inside. */
+.be-prose div[data-callout] {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.be-prose div[data-callout][data-variant="info"] {
+  border-color: color-mix(in srgb, var(--st-info) 50%, var(--border));
+  background: color-mix(in srgb, var(--st-info) 6%, transparent);
+}
+.be-prose div[data-callout][data-variant="warn"] {
+  border-color: color-mix(in srgb, var(--st-warn) 50%, var(--border));
+  background: color-mix(in srgb, var(--st-warn) 6%, transparent);
+}
+.be-prose div[data-callout][data-variant="success"] {
+  border-color: color-mix(in srgb, var(--st-success) 50%, var(--border));
+  background: color-mix(in srgb, var(--st-success) 6%, transparent);
+}
+.be-prose div[data-callout][data-variant="error"] {
+  border-color: color-mix(in srgb, var(--st-danger) 50%, var(--border));
+  background: color-mix(in srgb, var(--st-danger) 6%, transparent);
+}
+.be-prose div[data-callout] .callout__emoji {
+  font-size: 20px;
+  line-height: 1;
+  user-select: none;
+  padding-top: 2px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) ease;
+}
+.be-prose div[data-callout] .callout__emoji:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+/* Emoji picker popover (.be-emoji-pop) — hosts emoji-mart's full searchable
+ * picker for callout icons. The picker ships its own surface + shadow, so the
+ * container is positioning-only. */
+.be-emoji-pop {
+  position: fixed;
+  z-index: var(--z-modal);
+}
+.be-emoji-pop[hidden] {
+  display: none;
+}
+.be-prose div[data-callout] .callout__body > :first-child {
+  margin-top: 0;
+}
+.be-prose div[data-callout] .callout__body > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── Block-options menu (.be-bm — drag-handle click) ──
+   Same visual language as the slash menu so the two affordances feel
+   like one design system. */
+.be-bm {
+  position: fixed;
+  display: none;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  min-width: 220px;
+  max-height: 420px;
+  overflow-y: auto;
+  z-index: var(--z-modal);
+  font-family: var(--font-display);
+}
+.be-bm__head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 10px 4px;
+}
+.be-bm__sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.be-bm__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.be-bm__item:hover,
+.be-bm__item.is-active {
+  /* Canonical dropdown hover — matches .actions-menu / .toc-popover /
+   * .be-cmdk. Works in both light and dark via color-mix on --surface. */
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+  color: var(--text);
+}
+.be-bm__item.is-danger {
+  color: var(--st-danger);
+}
+.be-bm__item.is-danger:hover {
+  /* Match the actions-menu destructive variant — uses the shared
+   * --surface-danger token so the red tint is identical to the kebab's
+   * Delete row in both themes. */
+  background: var(--surface-danger);
+  color: var(--st-danger);
+}
+.be-bm__item.is-danger:hover .be-bm__icon {
+  color: var(--st-danger);
+}
+.be-bm__icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+/* Color-swatch icon inside the Color submenu rows. Text rows show a tinted
+ * "A"; background rows show a filled chip. Both sit in the 18px icon slot. */
+.be-bm__coloricon {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+.be-bm__coloricon--bg {
+  background: var(--surface);
+}
+.be-bm__item.is-danger .be-bm__icon {
+  color: var(--st-danger);
+}
+.be-bm__label {
+  flex: 1;
+}
+.be-bm__arrow {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--text-3);
+}
+
+/* ── DragHandle (TipTap official) ──
+   Renders a [+] [⠿] pair next to every block on hover (Notion). The
+   plugin positions the wrapper via floating-ui; we control the layout
+   of the two child buttons. */
+.be-handle {
+  /* position: absolute is required for the TipTap DragHandle plugin's
+     floating-ui positioning to apply. Without this the plugin's transform/
+     top/left style writes get ignored and the [+]/[⠿] gutter never appears
+     next to blocks on hover. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  user-select: none;
+  z-index: 2;
+  /* Hidden until the DragHandle plugin attaches to a hovered block — at
+     which point it writes inline `top:` / `left:` styles. Without this
+     guard the [+] [⠿] gutter renders at viewport (0,0) on first paint
+     and visually leaks into the topbar/breadcrumb area, reported by the
+     user against /report/[num]. */
+  visibility: hidden;
+}
+.be-handle[style*="left:"] {
+  visibility: visible;
+}
+.be-handle__btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-3);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.be-handle__btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.be-handle__grip {
+  cursor: grab;
+}
+.be-handle__grip:active {
+  cursor: grabbing;
+}
+/* Only ONE gutter affordance per block. The "+" shows on an empty
+   block; the "⠿" grip shows on a block with content. data-block-mode is set
+   in tiptap-editor.tsx's onNodeChange ("empty" | "text"; default "text"). */
+.be-handle__plus {
+  display: none;
+}
+.be-handle[data-block-mode="empty"] .be-handle__plus {
+  display: inline-flex;
+}
+.be-handle[data-block-mode="empty"] .be-handle__grip {
+  display: none;
+}
+
+/* ── BubbleMenu (TipTap official extension) ──
+   The plugin toggles `display: none` on this element when no selection
+   is active; we set `display: flex` for the visible state. */
+.be-bubble {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  z-index: var(--z-modal);
+}
+.be-mb__btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-width: 26px;
+  /* Icon buttons need their <svg> kids centered vertically */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.be-mb__btn:hover {
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+}
+.be-mb__btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+/* Bubble-menu color popover (body-anchored, fixed). Mirrors the language
+   picker panel; swatch rows mirror the :: menu's Color submenu. */
+.be-colorpop {
+  position: fixed;
+  z-index: var(--z-editor-menu);
+  width: 200px;
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+}
+.be-colorpop__head {
+  padding: 4px 8px 2px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.be-colorpop__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.be-colorpop__item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.be-colorpop__ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+}
+.be-colorpop__ic--bg {
+  font-size: 0;
+}
+
+/* ── Table hover-grip handles (.be-th-grip — column + row affordances).
+   Replaces the prior .be-table-menu horizontal toolbar. The grips show
+   only when the user is hovering a table cell; clicking opens a vertical
+   .be-bm dropdown scoped to that axis (Notion pattern). */
+.be-th-grip {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  box-shadow: var(--shadow-popover);
+  cursor: pointer;
+  z-index: var(--z-modal);
+  visibility: hidden;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+.be-th-grip:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+  border-color: color-mix(in oklab, var(--border), var(--text) 12%);
+}
+.be-th-grip svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+/* FloatingMenu was removed — the "+" button now lives inside the
+   DragHandle gutter (.be-handle__plus) so it appears next to every
+   block on hover, matching the Tiptap notion-like template. */
+
+/* Mobile — tighten the type scale and rhythm at narrow widths.
+   The drag-handle is visible at mobile now (the display:none was
+   removed), so the left padding needs to reserve room
+   for the floating [+] [⠿] gutter (~50px). Right padding stays at 16px
+   to match the rest of the form-section's horizontal rhythm. */
+@media (max-width: 640px) {
+  .be-prose {
+    padding: var(--space-4) 16px var(--space-4) 44px;
+  }
+  .be-prose h1 {
+    font-size: 24px;
+  }
+  .be-prose h2 {
+    font-size: 20px;
+  }
+  .be-prose h3 {
+    font-size: 17px;
+  }
+  .be-prose p,
+  .be-prose li {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .be-prose ul,
+  .be-prose ol {
+    padding-left: 20px;
+  }
+  .be-prose .be-table,
+  .be-prose table {
+    font-size: 13px;
+  }
+  .be-prose th,
+  .be-prose td {
+    padding: 6px 8px;
+    min-width: 60px;
+  }
+  /* Keep the drag-handle visible on mobile — users still need the [+]
+     and [⠿] affordances even at narrow widths. The desktop hover-to-
+     reveal pattern (DragHandle plugin shows it on pointer-over a block)
+     works on touch too (tap-and-hold reveals). */
+  .be-slash {
+    min-width: 180px;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* =====================================================================
+   Moved from editor-novel-like.css (consolidated — that file is gone).
+   Slash menu (.be-cmdk) shares the visual language with the block-options
+   menu (.be-bm above) so the two editor affordances feel like one system.
+====================================================================== */
+.be-cmdk {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  min-width: 220px;
+  max-height: 420px;
+  overflow-y: auto;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--text);
+}
+.be-cmdk [cmdk-group-heading] {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 10px 4px;
+}
+.be-cmdk [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-display);
+  color: var(--text);
+}
+.be-cmdk [cmdk-item][data-selected="true"] {
+  /* Match the canonical menu hover used by .actions-menu / .toc-popover —
+   * subtle text-tint of the surface, works in both light and dark themes.
+   * The per-item icon tint still carries the accent (see selected-icon
+   * rule below), so selection remains visible without painting the row. */
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+  color: var(--text);
+}
+.be-cmdk__icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+/* Force the embedded SVG (from MODE_REGISTRY / tiptap-icons) to render
+ * as a stroked outline using the wrapper's color (which is the per-item
+ * tint when set, otherwise --text-3). Without these overrides the raw
+ * MODE_REGISTRY SVGs render as default-black filled paths and the tint
+ * never shows. */
+.be-cmdk__icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Toggle headings + toggle list compose a filled chevron `▸` next to the
+ * heading glyph. Scoped to the .toggle-chev class so lucide icons that
+ * also use <polygon> (e.g. Send's paper-plane body) keep their stroked
+ * outline — the previous broad `svg polygon { fill: currentColor }`
+ * rule filled the send arrow too. */
+.be-cmdk__icon svg polygon.toggle-chev {
+  fill: currentColor;
+  stroke: none;
+}
+/* Toggle-icon container grows a bit wider so the composite chevron +
+ * heading glyph (20px svg width) reads bigger than the 16px plain
+ * heading icons next to it — earns the "this is a toggle" affordance. */
+.be-cmdk__icon:has(svg[width="20"]) {
+  width: 22px;
+}
+/* Selected state: force --accent on the icon so the highlighted item
+ * always reads as the active selection regardless of group. */
+.be-cmdk [cmdk-item][data-selected="true"] .be-cmdk__icon {
+  color: var(--accent);
+}
+.be-cmdk__label {
+  flex: 1;
+}
+.be-cmdk__hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Running-mode card — NodeView surface for in-progress AI jobs.
+ * Three states via [data-status]: running (pulsing orange), done
+ * (calm green border), failed (red border, no animation). Tall enough
+ * to read like a real status card rather than a toast strip. */
+div[data-running-mode] {
+  display: grid;
+  grid-template-columns: 44px 1fr 28px;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 24px;
+  margin: 18px 0;
+  min-height: 96px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--accent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--accent) 8%, transparent) 0%,
+    color-mix(in oklab, var(--accent) 18%, transparent) 50%,
+    color-mix(in oklab, var(--accent) 8%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: be-running-pulse 1.8s ease-in-out infinite;
+  color: var(--text);
+  font-weight: 500;
+}
+div[data-running-mode][data-status="done"] {
+  animation: none;
+  background: color-mix(in srgb, var(--score-high) 8%, transparent);
+  border-color: var(--score-high);
+}
+div[data-running-mode][data-status="failed"] {
+  animation: none;
+  background: color-mix(in srgb, var(--st-danger) 8%, transparent);
+  border-color: var(--st-danger);
+}
+.running-mode-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+div[data-running-mode][data-status="running"] .running-mode-card__icon svg {
+  animation: be-spin 1.1s linear infinite;
+}
+div[data-running-mode][data-status="done"] .running-mode-card__icon {
+  background: color-mix(in srgb, var(--score-high) 18%, transparent);
+  color: var(--score-high);
+}
+div[data-running-mode][data-status="failed"] .running-mode-card__icon {
+  background: color-mix(in srgb, var(--st-danger) 18%, transparent);
+  color: var(--st-danger);
+}
+.running-mode-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.running-mode-card__label {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.running-mode-card__prompt {
+  font-size: 14px;
+  color: var(--text-2);
+  font-style: italic;
+  transition: opacity 0.3s ease;
+  line-height: 1.5;
+}
+.running-mode-card__dismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-3);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.running-mode-card__dismiss:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+@keyframes be-running-pulse {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+@keyframes be-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.be-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  margin: 8px 0;
+}
+
+/* A failed-load image has an indeterminate intrinsic size that the browser
+   flickers between 0×0 and a placeholder box during repaints, so the page
+   jumps on every keystroke while editing. tiptap-editor.tsx tags broken
+   images with this class; pin them to a fixed, stable placeholder box so the
+   layout never reflows. (Small inline box also reads better than a full-width
+   broken-image bar for the pasted icon links these usually come from.) */
+.be-image--broken {
+  display: inline-block;
+  width: 1.3em;
+  height: 1.3em;
+  min-height: 0;
+  margin: 0 2px;
+  vertical-align: -0.25em;
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  object-fit: contain;
+  overflow: hidden;
+}
+
+.be-codeblock {
+  /* Theme-aware code block — same recipe as .be-prose pre above, so the
+     block reads light-on-cream in light theme and dark in dark theme. */
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.be-codeblock .hljs-keyword,
+.be-codeblock .hljs-built_in {
+  color: var(--accent);
+}
+/* Syntax tints derive from the status hue families (which carry the
+   dark-theme lifts), nudged toward --text so they stay readable on
+   --surface-2 in both themes. */
+.be-codeblock .hljs-string,
+.be-codeblock .hljs-attr {
+  color: color-mix(in oklab, var(--st-success) 85%, var(--text));
+}
+.be-codeblock .hljs-number {
+  color: color-mix(in oklab, var(--st-danger) 70%, var(--text));
+}
+.be-codeblock .hljs-comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Editor body — give the gutter handle more breathing room from the
+ * text, and shift the article left inside #reportHost so the text
+ * column visually aligns with Hero/Snapshot's left edge (the article
+ * extends leftward to host the gutter; .be-prose's padding-left
+ * reclaims that space so text starts at #reportHost's content edge). */
+#reportHost .report-body {
+  margin-left: -56px;
+}
+#reportHost .report-body .be-prose {
+  padding-left: 56px;
+  padding-right: 0;
+}

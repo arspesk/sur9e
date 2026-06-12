@@ -1,0 +1,4 @@
+python-jobspy==1.1.82
+pandas==2.3.3
+requests==2.33.1
+PyYAML==6.0.3

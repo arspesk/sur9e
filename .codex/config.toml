@@ -1,0 +1,13 @@
+# sur9e — Codex project config. Ships tracked so Codex runs evaluate (and the
+# research/outreach modes) with the same web capabilities as Claude and
+# OpenCode. Merges with your personal ~/.codex/config.toml (global servers
+# like serena stay available); this file only adds what sur9e needs.
+
+# Fetch live web-search results (not the cached default) so comp / company
+# research is fresh.
+web_search = "live"
+
+# Browser automation for SPA job-description rendering + offer liveness.
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--headless", "--isolated"]

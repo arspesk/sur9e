@@ -1,0 +1,3009 @@
+/* =====================================================================
+   Sur9e — Hi-Fi · Offer Report
+   Tokens & global styles for the report surface.
+===================================================================== */
+
+/* Tokens defined in chrome.css :root (single source of truth, brand
+   book). This stylesheet only adds page-specific tokens that aren't
+   in the global system. */
+:root {
+  /* Page-specific layout tokens */
+  --report-toc-w: 220px;
+  --report-max: 920px;
+
+  /* Legacy aliases — old report code references these names.
+     --good/--warn/--bad removed: consumers now use --score-high/mid/low directly. */
+  --info: var(--st-info);
+  --purple: var(--s-interview);
+  --surface-3: var(--surface-2);
+  --accent-border: var(--accent-soft);
+
+  /* Shadow tokens (--shadow-sm / --shadow / --shadow-lg / --shadow-popover
+     / --shadow-modal) live in chrome.css — single source of truth for
+     elevation across pages. Dark-mode overrides ship with the same file. */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `html { color-scheme: light dark }` was here but it overrode the explicit
+   `html { color-scheme: light }` + `:root[data-theme="dark"] { color-scheme: dark }`
+   bind in chrome.css (styles.css imports later so it wins same-specificity).
+   Native form controls (number spinners, checkboxes) then followed the OS
+   preference instead of our explicit page theme. Removed so chrome.css's
+   bind wins. */
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.7;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background var(--dur-smooth) ease,
+    color var(--dur-smooth) ease;
+}
+
+a {
+  color: inherit;
+}
+button {
+  font-family: inherit;
+}
+
+/* APP CHROME (.app, .rail*, .topbar, .crumbs, .topbar-actions) — canonical
+   styles live in chrome.css. The duplicate that lived here drifted
+   (rail had padding 14px 10px / gap 4px instead of 14px 0 / gap 6px) and
+   broke the menu on report.html, the only page that links this file
+   together with chrome.css. Do not re-introduce. */
+
+.state-toggle {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+/* Brand book: state toggle button → display sentence-case */
+.state-toggle button {
+  background: transparent;
+  border: 0;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.state-toggle button:hover {
+  color: var(--text);
+}
+.state-toggle button.active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* .icon-btn — DEFINITION MOVED to chrome.css (canonical single source). */
+
+/* ================================================================
+   REPORT — outer layout
+================================================================ */
+
+.report-wrap {
+  display: block;
+  position: relative; /* required: anchors .toc-indicator-host fixed position */
+}
+
+/* ---- Content column ---- */
+.content {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--report-max);
+  margin: 0 auto;
+  /* Bottom padding clears the fixed .action-bar (~50px tall, bottom: 28px ≈ 78px occupied)
+     plus the mobile .bottom-bar (64px) when both stack. 160px lets the user scroll the
+     last piece of content well above both bars. */
+  padding: 36px clamp(20px, 8%, 80px) clamp(140px, 16vh, 200px);
+  box-sizing: border-box;
+}
+
+/* ================================================================
+   HERO — moved to src/app/styles/report-hero.css
+================================================================ */
+
+/* .hero-actions moved to src/app/styles/report-hero.css */
+
+/* .btn / .btn-primary / .btn-secondary / .btn-ghost / .btn-danger — canonical
+   styles live in chrome.css. The duplicates that lived here drifted
+   (orange box-shadow on .btn-primary, --bg fill on .btn-secondary, Tailwind
+   hex fallbacks on .btn-danger) and contradicted the canonical. Do not
+   re-introduce. .btn-locked* and .btn-download* remain below because they
+   need to override the `.btn { background: transparent }` rule defined
+   later in this file. */
+
+/* Locked (single-use button after its doc is generated) — synced to
+   chrome.css canonical. Opacity dimming intentionally removed: it
+   dropped the .check-mark green below the WCAG 3:1 contrast floor.
+   Brand-warm --surface fill replaces the previous --bg-paper override. */
+.btn-locked {
+  cursor: default;
+  color: var(--text-3);
+  background: var(--surface);
+  border-color: var(--border);
+}
+.btn-locked:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.btn-locked .check-mark {
+  color: var(--s-offer);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.btn-spacer {
+  flex: 1;
+}
+
+/* Download state — single-use button after its doc is generated AND the doc
+   is downloadable (Tailor CV → Download CV, Cover letter → Download cover
+   letter). Active button (not greyed), green-tinted to signal "ready". */
+.btn-download {
+  background: var(--surface-good);
+  border-color: var(--border-good);
+  color: var(--score-high);
+  font-weight: 500;
+}
+.btn-download:hover {
+  background: var(--surface-good-hover);
+  border-color: var(--border-good-strong);
+}
+.btn-download .download-icon {
+  margin-right: 4px;
+  display: inline-flex;
+}
+
+/* .lede moved to src/app/styles/report-snapshot.css */
+
+/* TLDR — lede paragraph treatment, no soft container, no accent border */
+.tldr {
+  margin: 32px 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 24px;
+  align-items: baseline;
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+}
+/* Brand book: TLDR label → display sentence-case */
+.tldr .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  padding-top: 6px;
+}
+.tldr .body {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-weight: 400;
+  text-wrap: pretty;
+}
+@media (max-width: 640px) {
+  .tldr {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .tldr .body {
+    font-size: 19px;
+  }
+}
+
+/* ================================================================
+   BLOCKS — report sections
+================================================================ */
+
+/* Brand book: hairline rule + relaxed 96px whitespace between blocks */
+.block {
+  margin-bottom: 64px;
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}
+.block + .block {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-6);
+  margin-top: 0;
+}
+/* Brand book wants 96-128px between sections, but in our compact report
+   layout that creates too much vertical scroll. 32px (--space-6) keeps the
+   relaxed feel without leaving acres of whitespace. */
+.block + details.mode-block,
+details.mode-block + details.mode-block {
+  margin-top: var(--space-3);
+}
+.block {
+  --letter-w: 96px;
+}
+.block-head {
+  display: grid;
+  grid-template-columns: var(--letter-w) 1fr auto;
+  gap: 24px;
+  align-items: baseline;
+  padding-bottom: 14px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+.block-letter {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 64px;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  line-height: 0.85;
+  align-self: end;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  position: relative;
+  display: inline-block;
+}
+.block-letter::after {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: var(--text);
+  margin-top: 14px;
+}
+.block-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+}
+.block-meta {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.block-body p {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  line-height: 1.7;
+  font-size: 16px;
+}
+.block-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Role Summary table */
+.role-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.role-table td {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.role-table tr:last-child td {
+  border-bottom: none;
+}
+.role-table td:first-child {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  width: 130px;
+  padding-right: 24px;
+}
+.role-table td:last-child {
+  color: var(--text);
+}
+
+/* CV Match table */
+.match-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+/* Brand book: table column headers → display sentence-case */
+.match-table thead th {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  text-align: left;
+  padding: 11px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.match-table thead th:nth-child(3) {
+  width: 92px;
+}
+.match-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.55;
+}
+.match-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.match-table tbody tr:hover {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.match-table .req-cell {
+  color: var(--text);
+  font-weight: 500;
+}
+.match-table .ev-cell {
+  color: var(--text-3);
+}
+
+/* Strength chips — 4 levels */
+.strength {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.strength::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.strength.direct {
+  color: var(--score-high);
+  background: color-mix(in srgb, var(--score-high) 10%, transparent);
+}
+.strength.strong {
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+}
+.strength.partial {
+  color: var(--score-mid);
+  background: color-mix(in srgb, var(--score-mid) 12%, transparent);
+}
+.strength.weak {
+  color: var(--score-low);
+  background: color-mix(in srgb, var(--score-low) 10%, transparent);
+}
+
+/* Gaps */
+.gaps-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* .gap-card + .gap-card.<severity> rules moved to report-snapshot.css.
+   .gap-sev-bar remains here — its base styling is consumed by other
+   gap-card surfaces (gaps grid). */
+.gap-sev-bar {
+  width: 4px;
+  align-self: stretch;
+  border-radius: var(--radius-2xs);
+  background: var(--score-high);
+}
+
+.gap-title {
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.gap-mit {
+  color: var(--text-3);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+/* Brand book: severity label → display sentence-case (label, not numeric data) */
+.sev {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: capitalize;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  height: fit-content;
+}
+.sev.low {
+  background: color-mix(in srgb, var(--score-high) 10%, transparent);
+  color: var(--score-high);
+}
+.sev.low-medium {
+  background: color-mix(in srgb, var(--score-mid) 12%, transparent);
+  color: var(--score-mid);
+}
+.sev.medium,
+.sev.high {
+  background: color-mix(in srgb, var(--score-low) 10%, transparent);
+  color: var(--score-low);
+}
+
+.verdict-box {
+  margin-top: 16px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--score-high) 6%, transparent);
+  border-left: 3px solid var(--score-high);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+/* Brand book: verdict box label → display sentence-case */
+.verdict-box .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--score-high);
+  margin-bottom: 6px;
+}
+.verdict-box .text {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* Level & Strategy */
+.level-detect {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.level-detect-card {
+  padding: 16px 18px;
+  background: var(--bg-paper);
+  border-radius: var(--radius-md);
+}
+/* Brand book: level-detect label → display sentence-case */
+.level-detect-card .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.level-detect-card .val {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.level-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.level-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+.level-card h4 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.level-card h4::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.level-card.alt h4::before {
+  background: var(--text-muted);
+}
+.level-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+.level-card li {
+  margin-bottom: 8px;
+}
+
+/* Compensation */
+.comp-headline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 22px 24px;
+  background: var(--bg-paper);
+  border-radius: var(--radius-md);
+  margin-bottom: 18px;
+}
+/* Brand book: comp headline label → display sentence-case */
+.comp-headline-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.comp-headline-range {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.comp-headline-verdict {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--score-high);
+  text-align: right;
+}
+.comp-headline-verdict .big {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: block;
+  margin-top: 2px;
+}
+
+.comp-bars {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 18px;
+  padding: 4px 0;
+}
+.comp-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr) minmax(0, 80px);
+  gap: 14px;
+  align-items: center;
+  font-size: 12.5px;
+}
+.comp-bar-row .label {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.comp-bar-row .label .src {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+.bar-track {
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  position: relative;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--text-3);
+  opacity: 0.5;
+  border-radius: var(--radius-xs);
+}
+.comp-bar-row.highlight .bar-fill {
+  background: var(--accent);
+  opacity: 1;
+}
+.comp-bar-row .val {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.demand-quote {
+  margin: 18px 0 0;
+  padding: 18px 22px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-2);
+  font-style: italic;
+}
+/* Brand book: demand-quote label → display sentence-case */
+.demand-quote .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  font-style: normal;
+  display: block;
+}
+
+/* Personalization (side-by-side diff) */
+.perso-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.perso-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border);
+}
+.perso-num {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+/* Brand book: perso section tag → display sentence-case */
+.perso-section-tag {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.perso-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.perso-side {
+  padding: 16px 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.perso-side.current {
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+}
+/* Brand book: perso side label → display sentence-case */
+.perso-side .side-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.perso-side.proposed .side-label {
+  color: var(--accent);
+}
+.perso-side.current .text {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+  text-decoration-thickness: 1px;
+}
+.perso-side.proposed .text {
+  color: var(--text);
+}
+
+.perso-why {
+  padding: 12px 18px;
+  border-top: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  line-height: 1.6;
+}
+.perso-why::before {
+  content: "Why → ";
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.linkedin-list {
+  margin-top: 24px;
+  padding: 20px 24px;
+  background: var(--bg-paper);
+  border-radius: var(--radius-md);
+}
+/* Brand book: linkedin list heading → display sentence-case */
+.linkedin-list h4 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin: 0 0 14px;
+}
+.linkedin-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.linkedin-list li {
+  display: flex;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.linkedin-list li::before {
+  content: "";
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: var(--radius-xs);
+  border: 1.5px solid var(--accent);
+  background: var(--accent-soft);
+  position: relative;
+}
+.linkedin-list li::after {
+  content: "✓";
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  position: absolute;
+  margin-left: 2px;
+  margin-top: 5px;
+}
+
+/* STAR cards (4-quadrant) */
+.star-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.star-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border);
+}
+.star-head .num {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.star-head .title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.star-head .req-pill {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.star-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  border-top: 1px solid var(--border);
+  margin-top: -1px;
+}
+.star-cell {
+  padding: 14px 18px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.star-cell:nth-child(2n) {
+  border-right: none;
+}
+.star-cell:nth-child(n + 3) {
+  border-bottom: none;
+}
+/* Brand book: STAR cell label (S/T/A/R) → display sentence-case */
+.star-cell .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.star-cell .text {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.star-reflect {
+  padding: 12px 18px;
+  /* Body — STAR reflection is editorial prose, not code. */
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-top: 1px dashed var(--border);
+  line-height: 1.55;
+}
+.star-reflect::before {
+  content: "↳ Reflection: ";
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.case-study-callout {
+  margin-top: 20px;
+  padding: 18px 22px;
+  background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+}
+[data-theme="dark"] .case-study-callout {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* Brand book: case study callout label → display sentence-case */
+.case-study-callout .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.case-study-callout .text {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Red flags */
+.subhead {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 28px 0 14px;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.subhead::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.rf-card {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+}
+.rf-q {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.rf-q .tag,
+.rf-a .tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rf-q .tag {
+  background: color-mix(in srgb, var(--score-low) 12%, transparent);
+  color: var(--score-low);
+}
+.rf-q .text {
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text);
+  line-height: 1.5;
+  padding-top: 2px;
+}
+.rf-a {
+  display: flex;
+  gap: 12px;
+}
+.rf-a .tag {
+  background: color-mix(in srgb, var(--score-high) 12%, transparent);
+  color: var(--score-high);
+}
+.rf-a .text {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+  padding-top: 2px;
+}
+
+/* Posting Legitimacy */
+.legit-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  background: color-mix(in srgb, var(--score-high) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--score-high) 30%, transparent);
+  border-radius: var(--radius-md);
+}
+.legit-banner .shield {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--score-high);
+  color: var(--accent-on);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.legit-banner .shield svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.legit-banner .text {
+  flex: 1;
+}
+.legit-banner .tier {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.legit-banner .summary {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.legit-checklist {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.legit-row {
+  display: grid;
+  grid-template-columns: auto 180px 1fr;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+.legit-row:last-child {
+  border-bottom: none;
+}
+.legit-glyph {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.legit-glyph.positive {
+  background: color-mix(in srgb, var(--score-high) 14%, transparent);
+  color: var(--score-high);
+}
+.legit-glyph.neutral {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.legit-glyph.negative {
+  background: color-mix(in srgb, var(--score-low) 14%, transparent);
+  color: var(--score-low);
+}
+.legit-row .signal {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.legit-row .finding {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.legit-notes {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-3);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* Keywords */
+.kw-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.kw {
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+  cursor: default;
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.kw:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+/* ================================================================
+   SCREENED state — banner + slim content
+================================================================ */
+
+.screened-banner {
+  margin-bottom: 36px;
+  padding: 20px 24px;
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--score-mid);
+  border-radius: var(--radius-md);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
+  align-items: center;
+}
+.screened-banner .icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--score-mid) 12%, transparent);
+  color: var(--score-mid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.screened-banner .icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.screened-banner .copy h4 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.screened-banner .copy p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.screened-section .block-body p {
+  font-size: 15px;
+  line-height: 1.7;
+}
+.screened-section .block-body ul {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--text-2);
+  line-height: 1.7;
+  font-size: 16px;
+}
+.screened-section .block-body ul li {
+  margin-bottom: 10px;
+}
+
+/* ================================================================
+   QRO drawer (preview · embedded)
+================================================================ */
+
+.qro-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  z-index: var(--z-scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-smooth) ease;
+}
+.qro-overlay.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+.qro {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 480px;
+  max-width: 92vw;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-drawer);
+  transform: translateX(100%);
+  transition: transform var(--dur-base) var(--ease-calm);
+  display: flex;
+  flex-direction: column;
+}
+.qro.on {
+  transform: translateX(0);
+}
+.qro-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.qro-head .qro-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+/* Brand book: qro head label → display sentence-case */
+.qro-head .label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  flex: 1;
+}
+.qro-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+.qro-id-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.qro-id-row .mark {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+}
+.qro-id-row .name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.qro-id-row .role {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.qro-score-row {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 16px;
+  align-items: center;
+  margin: 14px 0 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.qro-score {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 56px;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.qro-score .denom {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.qro-radar {
+  width: 180px;
+  height: 180px;
+}
+
+/* .cd-radar padding rule moved to src/app/styles/report-snapshot.css */
+
+/* Drawer scoring card — empty state when score_breakdown is missing
+   entirely (typically a prefilter-discarded row that never ran through
+   the LLM). Replaces the radar + per-axis list with an honest message
+   so synthesized fallback numbers don't masquerade as real data. */
+.cd-radar-empty {
+  padding: 16px 8px 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.cd-radar-empty code {
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.qro-section {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.qro-section:last-child {
+  border-bottom: none;
+}
+/* Brand book: qro section heading → display sentence-case */
+.qro-section .h {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.qro-section p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.qro-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+.qro-footer .btn {
+  flex: 1;
+}
+.qro-score--margin-top {
+  margin-top: 8px;
+}
+.verdict-box--margin-top {
+  margin-top: 18px;
+}
+.comp-bars--margin-top {
+  margin-top: 14px;
+}
+.report-prose-p {
+  font-size: 13.5px;
+  line-height: 1.65;
+  margin: 0;
+  color: var(--text);
+}
+.report-prose-list {
+  font-size: 13px;
+  line-height: 1.7;
+  padding-left: 20px;
+  margin: 0;
+  color: var(--text);
+}
+.report-mute-em {
+  color: var(--text-3);
+}
+
+/* Skeleton + section spacing helpers — replace inline styles in the legacy report renderer.
+   Note: `.skeleton-line--h-*` modifiers live further down (after the `.skeleton-line`
+   base rule at L~2192) so they actually win on `height` and `margin` — placing them
+   here would lose to the later base rule at equal specificity. */
+.skeleton-mark--transparent {
+  background: transparent;
+}
+.flex-row {
+  display: flex;
+}
+.flex-grow {
+  flex: 1;
+}
+.mt-10 {
+  margin-top: 10px;
+}
+.mt-18 {
+  margin-top: 18px;
+}
+.mt-24 {
+  margin-top: 24px;
+}
+.mt-60 {
+  margin-top: 60px;
+}
+.bar-fill[data-w] {
+  width: var(--w);
+}
+
+/* ================================================================
+   Responsive small tweaks
+================================================================ */
+@media (max-width: 1024px) {
+  .content {
+    /* Narrowed so margin: 0 auto creates whitespace on both sides and the
+       article reads as centered within the available column instead of filling
+       it edge-to-edge. */
+    padding: 36px clamp(16px, 4%, 32px) 96px;
+    max-width: 720px;
+  }
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  /* Center the score block on narrow viewports — gives the score a focal
+     "stat highlight" feel instead of being awkwardly left-aligned. */
+  .hero-score {
+    text-align: center;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .hero-score .score-bar {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .hero-score .legit-pill {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .score-bar {
+    width: 240px;
+  }
+  .perso-diff {
+    grid-template-columns: 1fr;
+  }
+  .perso-side.current {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .level-detect,
+  .level-split {
+    grid-template-columns: 1fr;
+  }
+  .star-grid {
+    grid-template-columns: 1fr;
+  }
+  .star-cell {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  /* (snapshot-merged responsive moved to after its base definition for
+     source-order priority — search for "Responsive: stack verdict-stack") */
+}
+@media (max-width: 640px) {
+  .content {
+    /* Floating .action-bar sits at bottom: ~84px; 160px ensures the score
+       hero is fully visible before the user scrolls (64 bar + 56 action + 40
+       breathing room). */
+    padding: 24px 16px 160px;
+    max-width: 560px;
+  }
+  .hero-id-row h1 {
+    font-size: 32px;
+  }
+  .score-numeral {
+    font-size: 88px;
+  }
+}
+
+/* ================================================================
+   MOTION — tokens + primitives
+   Quiet, deliberate, never decorative.
+================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* U1 — TOC sheet uses translateY(100%) on/off; bypass it so motion
+     -sensitive users don't see the bottom sheet slide up the screen. */
+  .toc-sheet,
+  .toc-sheet.open,
+  .toc-sheet-backdrop,
+  .toc-sheet-backdrop.open {
+    transform: none !important;
+    transition: opacity 1ms !important;
+  }
+}
+
+/* ----------------------------------------------------------------
+   1) Score count-up
+   The numeral is replaced character-by-character; we just need a
+   subtle entrance for the surrounding hero so it doesn't pop.
+---------------------------------------------------------------- */
+/* .hero[data-anim="enter"] enter animations moved to report-hero.css.
+   The @keyframes scoreSettle + fadeIn below stay here — they are
+   referenced by other surfaces too. */
+@keyframes scoreSettle {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ----------------------------------------------------------------
+   2) Active TOC rule lock-on
+   The ::before bar already exists; we transform-origin from top
+   so it grows into place when an item becomes active.
+---------------------------------------------------------------- */
+.toc-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform var(--dur-base) var(--ease-calm);
+}
+.toc-item.active::before {
+  transform: scaleY(1);
+}
+
+/* ----------------------------------------------------------------
+   3) Skeleton state
+   Replaces hero numerals + TOC items + first block headers with
+   shimmering placeholders. Toggled with [data-loading="1"] on
+   .report-wrap. Falls back to static gray on reduced-motion.
+---------------------------------------------------------------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2, var(--surface));
+  border-radius: var(--radius-xs);
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text) 6%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: skelSweep var(--dur-loop) var(--ease-firm) infinite;
+}
+@keyframes skelSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton-line {
+  display: block;
+  height: 12px;
+  background: var(--surface-2, var(--surface));
+  border-radius: var(--radius-xs);
+  margin: 10px 0;
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text) 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skelSweep var(--dur-loop) var(--ease-firm) infinite;
+}
+.skeleton-line.w-90 {
+  width: 90%;
+}
+.skeleton-line.w-75 {
+  width: 75%;
+}
+.skeleton-line.w-60 {
+  width: 60%;
+}
+.skeleton-line.w-40 {
+  width: 40%;
+}
+/* Height modifiers — placed AFTER the base `.skeleton-line` rule so they win on
+   `height`/`margin` at equal specificity. Used by the report skeleton hero so its
+   placeholder lines match the real numeral/title heights, preventing the layout
+   jump that produced the "freaky" hero animation. */
+.skeleton-line--h-10 {
+  height: 10px;
+  margin: 0;
+}
+.skeleton-line--h-11 {
+  height: 11px;
+}
+.skeleton-line--h-14 {
+  height: 14px;
+  margin: 0;
+}
+.skeleton-line--h-18 {
+  height: 18px;
+}
+.skeleton-line--h-30 {
+  height: 30px;
+  margin: 0 0 10px;
+}
+
+.skeleton-numeral {
+  display: inline-block;
+  width: 180px;
+  height: 120px;
+  vertical-align: top;
+}
+.skeleton-rule {
+  display: block;
+  height: 18px;
+  width: 220px;
+  margin-top: 8px;
+}
+.skeleton-pill {
+  display: inline-block;
+  height: 24px;
+  width: 100px;
+  border-radius: var(--radius-pill);
+}
+.skeleton-toc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  height: 30px;
+}
+.skeleton-toc-row .sk-letter {
+  width: 14px;
+  height: 12px;
+  background: var(--surface-2, var(--surface));
+  border-radius: var(--radius-2xs);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-toc-row .sk-letter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text) 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skelSweep var(--dur-loop) var(--ease-firm) infinite;
+}
+.skeleton-toc-row .sk-bar {
+  flex: 1;
+  height: 10px;
+  background: var(--surface-2, var(--surface));
+  border-radius: var(--radius-xs);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-toc-row .sk-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text) 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skelSweep var(--dur-loop) var(--ease-firm) infinite;
+}
+
+/* surface-2 fallback so skeletons read on both themes.
+   Use :root[data-theme="dark"] (not the bare attribute) — buttons in the
+   theme picker carry data-theme="light|dark|system" on themselves and the
+   unscoped selector would leak dark-mode tokens into the "Dark" button. */
+:root {
+  --surface-2: color-mix(in oklab, var(--text) 6%, var(--bg));
+}
+:root[data-theme="dark"] {
+  --surface-2: color-mix(in oklab, var(--text) 8%, var(--bg));
+}
+
+/* Snapshot block + score-breakdown matrix moved to
+   src/app/styles/report-snapshot.css */
+
+/* ===========================================================
+   Action bar — floating bottom-center utility surface
+   Replaces the old sticky .next-steps-bar.
+   =========================================================== */
+
+.action-bar {
+  /* Default: viewport-centered (left: 50% + translateX(-50%) → element center
+     at viewport center). Works for mobile + tablet where the rail is either
+     hidden or narrow enough that the visual skew is acceptable. The desktop
+     media-query below shifts the pill right by half the rail width so it
+     centers within the article column instead of the full viewport. */
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-rail);
+
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+
+  /* Frosted-glass overlay. The bar sits over scrollable content (radar
+     chart, score-breakdown card, etc.) and at certain scroll positions it
+     necessarily covers part of what's behind. Opaque-paper fill made the
+     overlap read as "broken layout"; the blurred translucent fill makes
+     it read as "scroll past me to read the rest" — same convention as
+     iOS sheet cards or macOS sidebars. */
+  background: color-mix(in srgb, var(--bg-paper) 96%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+/* Browsers without backdrop-filter (older Firefox, locked-down WebViews)
+   fall back to the opaque pill so text stays legible. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .action-bar {
+    background: var(--surface);
+  }
+}
+
+.action-bar .btn {
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 7px 10px;
+  height: auto;
+}
+.action-bar .btn-primary {
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: var(--radius);
+}
+
+.action-bar__divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+/* Desktop (≥1025px): center within the article column (right of the rail).
+   Offset by half the rail width — without this, the bar lands at viewport
+   center which reads left-shifted relative to the visible content area
+   because the rail occupies the leftmost ~64-220px. At narrower widths the
+   rail collapses (or hides on mobile), so the base `left: 50%;
+   translateX(-50%)` rule centers the bar correctly without any offset. */
+@media (min-width: 1025px) {
+  .action-bar {
+    left: calc(50% + var(--rail-w) / 2);
+  }
+  :root[data-rail="full"] .action-bar,
+  .app[data-rail="full"] .action-bar {
+    left: calc(50% + var(--rail-w-full) / 2);
+  }
+}
+
+/* Sections trigger (≡) shows up at tablet AND mobile — the Notion-style
+   indicator is desktop-only (≥1025px) so any narrower viewport falls back
+   to the pill's ≡ icon (opens the existing bottom-sheet TOC). */
+.action-bar__sections-mobile,
+.action-bar__divider--mobile {
+  display: none;
+}
+@media (max-width: 1024px) {
+  .action-bar__sections-mobile,
+  .action-bar__divider--mobile {
+    display: inline-flex;
+  }
+}
+
+/* On mobile (≤640px) the .bottom-bar is fixed at bottom: 0 with height ~64px.
+   Shift the action-bar above it so the two surfaces don't stack and clip
+   content sandwich-style. 20px gap (was 12px) gives enough visual separation
+   so the pill and the nav don't appear to merge. */
+@media (max-width: 640px) {
+  .action-bar {
+    bottom: calc(64px + 20px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* While a background job is ACTIVELY running, the loading-modal
+   (#loading-modal, fixed bottom-right with hairline progress) becomes the
+   visual focus. Dim + disable the action bar so it doesn't fight for
+   attention or accept stray clicks while the user should be watching
+   progress.
+   Only dim while running — once the modal hits 'done' or 'error' state
+   (progress-fill picks up .is-done / .is-error), the page must be
+   interactive again so the user can click Sections, Download, etc. */
+body:has(#loading-modal:not([hidden]) .loading-modal__progress-fill:not(.is-done):not(.is-error))
+.action-bar {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity var(--dur-quick) ease;
+}
+
+/* Legacy report-kebab CSS rules removed. The report kebab now
+   renders through the shared KebabActionsMenu primitive
+   (components/domain/kebab-actions-menu.tsx) and reuses the .actions-menu
+   chrome that the drawer kebab + Add menu already use. */
+
+/* The shared Notion-style TOC indicator + popover lived here; moved to
+   public/toc-rail.css so profile.html and settings.html can re-use the
+   same component without loading the full report stylesheet. */
+
+/* Mode-block (collapsed accordion) — Read full report, Tailor & apply, etc. */
+.mode-block {
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-top: 12px;
+  overflow: hidden;
+}
+details.mode-block summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+details.mode-block summary::-webkit-details-marker {
+  display: none;
+}
+details.mode-block summary .caret {
+  display: inline-block;
+  color: var(--text-2);
+  transition: transform var(--dur-snappy) var(--ease-calm);
+  font-size: 16px;
+  line-height: 1;
+  min-width: 14px;
+  font-weight: 500;
+}
+details.mode-block[open] summary .caret {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+/* Brand book: mode-block meta pill → display sentence-case */
+details.mode-block summary .meta-pill {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  background: var(--surface);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+}
+details.mode-block summary:hover {
+  background: var(--surface);
+}
+details.mode-block .mode-content {
+  padding: 18px 22px 22px;
+  border-top: 1px solid var(--border);
+}
+/* Brand book: mode section label → display sentence-case */
+.mode-section-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+.mode-section-label:not(:first-child) {
+  margin-top: 22px;
+}
+
+/* ── Shell rail responsive (mirrors chrome.css; needed because styles.css
+   redeclares .rail at line 70 and wins the cascade tiebreaker on report.html) ── */
+@media (max-width: 1024px) {
+  .app,
+  .app[data-rail="full"] {
+    grid-template-columns: var(--rail-w) 1fr;
+  }
+  .app[data-rail="full"] .rail {
+    align-items: center;
+    padding: 14px 0;
+  }
+  .app[data-rail="full"] .rail-label {
+    display: none;
+  }
+  .app[data-rail="full"] .rail-section-label {
+    display: none;
+  }
+  /* Hide both wordmark variants in both themes — dark-theme selector has
+     higher specificity (0,5,0), so match it explicitly */
+  .app[data-rail="full"] .rail-brand-wordmark.light,
+  .app[data-rail="full"] .rail-brand-wordmark.dark,
+  [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.light,
+  [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark {
+    display: none;
+  }
+  .app[data-rail="full"] .rail-brand-icon {
+    display: block;
+  }
+  .app[data-rail="full"] .rail-brand {
+    justify-content: center;
+  }
+  .rail-toggle {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .app,
+  .app[data-rail="full"] {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    display: none;
+  }
+  .main,
+  .content {
+    padding-bottom: 64px;
+  }
+}
+
+/* Tablet (≤1024px) — keep labels visible alongside icons. Earlier versions
+   collapsed everything to icon-only here, but the icons (globe, doc, link)
+   are not standard enough to read without a label; the audit explicitly
+   flagged this as mystery-meat. The pill scrolls horizontally if its
+   contents overflow. */
+@media (max-width: 1024px) {
+  .action-bar {
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  /* Right-edge fade only when content actually overflows — without the
+     `.is-overflowing` gate the fade rendered on every viewport, even ones
+     where the pill fit comfortably, and the trailing button looked clipped.
+     the legacy report renderer wireActionBarOverflow() toggles the class via a
+     ResizeObserver on the pill + its children. */
+  .action-bar.is-overflowing {
+    mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 1) 0,
+      rgba(0, 0, 0, 1) calc(100% - 24px),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 1) 0,
+      rgba(0, 0, 0, 1) calc(100% - 24px),
+      transparent 100%
+    );
+  }
+  .action-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .action-bar .report-mode-trigger,
+  .action-bar .btn-locked,
+  .action-bar .documents-trigger {
+    padding: 5px 10px;
+  }
+}
+
+/* Mobile (≤640px) — keep all labels visible (UX audit C2). Tighten the
+   pill to fit and lift it above the bottom-nav. The label-only fits if
+   the pill scrolls horizontally on narrow phones. */
+@media (max-width: 640px) {
+  .action-bar {
+    /* C1/X-C2: lift above the .bottom-bar (64px tall) instead of stacking. */
+    bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  /* Compact CTA per BB §04 — non-primary buttons keep desktop padding so
+     labels (kept per Option 2 / UX-audit C2) don't truncate. */
+  .action-bar .btn-primary {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+}
+
+/* .toc-sheet / .toc-sheet-backdrop / .toc-sheet-handle / .toc-item rules
+   moved to chrome.css so the bottom-sheet works on Profile + Settings
+   too — those pages don't load styles.css. The styles are chrome-level
+   shared UI (driven by section-sheet.js), not report-specific. See the
+   "SECTION SHEET (mobile/tablet bottom-sheet TOC)" block in chrome.css. */
+
+/* ====================================================================
+   POLISHED APPENDED SECTIONS — Company Research & Interview Process
+   All rules are scoped to #company-research .mode-content and
+   #interview-process .mode-content so they don't leak to other blocks.
+   These style the vanilla marked.parse() HTML output produced by the
+   server-side extractAppendedSections() parser.
+==================================================================== */
+
+/* ── Shared: metadata first-paragraph (Researched / Sources line) ── */
+#company-research .mode-content > p:first-of-type,
+#interview-process .mode-content > p:first-of-type {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+  margin: 0 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+
+/* ── Shared: blockquote (Intelligence scope callout) ── */
+#company-research .mode-content blockquote,
+#interview-process .mode-content blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  background: var(--bg-paper);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 0 0 var(--space-4);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+#company-research .mode-content blockquote p,
+#interview-process .mode-content blockquote p {
+  margin: 0;
+}
+#company-research .mode-content blockquote strong,
+#interview-process .mode-content blockquote strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Shared: inline citation links — small, italic, accent ── */
+#company-research .mode-content a,
+#interview-process .mode-content a {
+  color: var(--accent);
+  text-decoration: none;
+  font-style: italic;
+  font-size: 12.5px;
+  border-bottom: 1px dotted transparent;
+  transition: border-color var(--dur-fast);
+}
+#company-research .mode-content a:hover,
+#interview-process .mode-content a:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* ── Shared: list bullets ── */
+#company-research .mode-content ul,
+#interview-process .mode-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+}
+#company-research .mode-content ul li,
+#interview-process .mode-content ul li {
+  position: relative;
+  padding: 0 0 9px 16px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+#company-research .mode-content ul li:last-child,
+#interview-process .mode-content ul li:last-child {
+  padding-bottom: 0;
+}
+#company-research .mode-content ul li::before,
+#interview-process .mode-content ul li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+#company-research .mode-content ul li strong,
+#interview-process .mode-content ul li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+#company-research .mode-content ul li em,
+#interview-process .mode-content ul li em {
+  color: var(--text-2);
+}
+
+/* ── Checkbox lists (Technical Prep Checklist: <li> contains <input disabled>) ──
+   Don't use display: grid here — marked.parse emits the <li> with multiple
+   child nodes (input, text, <strong>, text, …), and grid would put each
+   into its own cell, wrapping awkwardly. Position the checkbox absolutely
+   instead so the rest of the inline content flows normally. */
+#interview-process .mode-content ul li:has(input[type="checkbox"]) {
+  position: relative;
+  padding: 8px 0 8px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+#interview-process .mode-content ul li:has(input[type="checkbox"]):last-child {
+  border-bottom: none;
+}
+#interview-process .mode-content ul li:has(input[type="checkbox"])::before {
+  display: none;
+}
+#interview-process .mode-content ul li:has(input[type="checkbox"]) strong {
+  color: var(--text);
+  font-weight: 600;
+}
+#interview-process .mode-content ul li input[type="checkbox"] {
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+/* Fit-column token coloring (T12). The FitColorizer ProseMirror plugin adds a
+   be-fit-* class to the <td> in a column headed "Fit", by its strength token
+   (direct / strong / adjacent / gap — the VALID_STRENGTH enum). Decoration, not
+   DOM mutation, so it survives editing in the report body. */
+td.be-fit-direct,
+td.be-fit-strong {
+  color: var(--score-high);
+  font-weight: 500;
+}
+td.be-fit-adjacent {
+  color: var(--score-mid);
+  font-weight: 500;
+}
+td.be-fit-gap {
+  color: var(--score-low);
+  font-weight: 500;
+}
+
+/* ── Shared: ordered lists ── */
+#company-research .mode-content ol,
+#interview-process .mode-content ol {
+  padding-left: 18px;
+  margin: 0 0 var(--space-3);
+}
+#company-research .mode-content ol li,
+#interview-process .mode-content ol li {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  padding: 2px 0;
+}
+#company-research .mode-content ol li strong,
+#interview-process .mode-content ol li strong {
+  color: var(--text);
+}
+
+/* ── Shared: tables (Behavioral, Technical, Role-Specific, Story Bank) ── */
+#company-research .mode-content table,
+#interview-process .mode-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-bottom: var(--space-4);
+  /* Use fixed layout so table respects container width on mobile.
+     Without this, long unbroken cell content (e.g. cited source links,
+     URLs, multi-clause questions) blows the table past viewport width
+     and forces the entire section into horizontal scroll. */
+  table-layout: fixed;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+/* Make the section itself scrollable as a last-resort safety net so any
+   embedded element wider than the viewport doesn't blow the whole report
+   layout out horizontally. Within the scope, the section can scroll its
+   own overflow without affecting the surrounding chrome. */
+#company-research .mode-content,
+#interview-process .mode-content {
+  overflow-x: auto;
+  max-width: 100%;
+}
+#company-research .mode-content table thead th,
+#interview-process .mode-content table thead th {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+#company-research .mode-content table td,
+#interview-process .mode-content table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+#company-research .mode-content table tr:last-child td,
+#interview-process .mode-content table tr:last-child td {
+  border-bottom: none;
+}
+#company-research .mode-content table tr:nth-child(even) td,
+#interview-process .mode-content table tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+#company-research .mode-content table td strong,
+#interview-process .mode-content table td strong {
+  color: var(--text);
+  font-weight: 600;
+}
+/* "Fit" column — only the Story Bank Mapping + Behavioral tables have one,
+   and it's a short token like "strong" / "partial". The previous rule used
+   td:last-child which scoped to ALL tables — including the Likely Questions
+   tables where the last column is long prose ("Strong angle for you")
+   that MUST wrap. Drop the broad td:last-child styling and instead pattern-
+   match the short fit values via CSS Custom Highlight is overkill — the
+   short tokens don't need any special styling and won't visibly differ from
+   the rest of the cell content; the bigger win is removing the nowrap. */
+
+/* ── COMPANY RESEARCH: H3 headings (axis titles) ── */
+#company-research .mode-content h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: var(--space-5) 0 var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+#company-research .mode-content h3:first-of-type {
+  margin-top: var(--space-2);
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ── INTERVIEW PROCESS: H3 headings (major section dividers) ── */
+#interview-process .mode-content h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: var(--space-6) 0 var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+#interview-process .mode-content h3:first-of-type {
+  margin-top: var(--space-2);
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ── INTERVIEW PROCESS: H4 headings (Round 1, Round 2, etc + Likely Q subcats) ── */
+#interview-process .mode-content h4 {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin: var(--space-4) 0 var(--space-2);
+  letter-spacing: -0.005em;
+}
+
+/* ── COMPANY RESEARCH: H4 headings (sub-axis headings if any) ── */
+#company-research .mode-content h4 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+/* ── Horizontal rules (section dividers inside the content) ── */
+#company-research .mode-content hr,
+#interview-process .mode-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-5) 0;
+}
+
+/* ── Code inline ── */
+#company-research .mode-content code,
+#interview-process .mode-content code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface);
+  padding: 2px 5px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Stat strip (injected by JS post-processor) ── */
+.ip-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+.ip-strip-cell {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  text-align: left;
+}
+.ip-strip-cell:last-child {
+  border-right: none;
+}
+.ip-strip-cell .ip-strip-num {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+.ip-strip-cell .ip-strip-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+.ip-strip-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.ip-strip-dot.on {
+  background: var(--accent);
+}
+@media (max-width: 640px) {
+  .ip-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ip-strip-cell {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .ip-strip-cell:nth-child(2n) {
+    border-right: none;
+  }
+  .ip-strip-cell:nth-last-child(-n + 2) {
+    border-bottom: none;
+  }
+}
+
+/* ── Timeline (injected by JS post-processor) ── */
+.ip-timeline {
+  position: relative;
+  padding: var(--space-2) 0 0 0;
+}
+.ip-timeline::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 22px;
+  bottom: 22px;
+  width: 1px;
+  background: var(--border);
+}
+
+.ip-station {
+  position: relative;
+  padding: 0 0 var(--space-5) 52px;
+}
+.ip-station:last-child {
+  padding-bottom: 0;
+}
+
+.ip-station-num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-paper);
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.04em;
+}
+
+.ip-station-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 2px;
+}
+.ip-station-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+.ip-station-duration {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 1px 7px;
+  margin-left: 4px;
+}
+
+/* Labeled sub-blocks inside each station (Conducted by, Evaluates, etc.) */
+.ip-station-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin-top: 8px;
+}
+.ip-station-block {
+  margin-bottom: 10px;
+}
+.ip-station-block:last-child {
+  margin-bottom: 0;
+}
+.ip-station-block-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: 3px;
+}
+.ip-station-block-body {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ip-station-block-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.ip-station-block-body em {
+  color: var(--text-3);
+}
+
+/* Reported questions list inside station */
+.ip-questions {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.ip-questions li {
+  margin: 0 0 5px 0;
+  padding: 6px 10px;
+  background: var(--bg-paper);
+  border-left: 2px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ip-questions li:last-child {
+  margin-bottom: 0;
+}
+/* Override the generic list bullet rules for station question items */
+.ip-questions li::before {
+  display: none;
+}
+
+/* ── Axis icon + counter (injected by JS post-processor) ── */
+.cr-axis-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.cr-axis-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.cr-axis-title-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cr-axis-counter {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-3);
+}
+/* When JS injects .cr-axis-head, it wraps the h3 text — hide the original h3 border/margin */
+#company-research .mode-content h3:has(+ .cr-axis-head),
+#company-research .mode-content h3.cr-axis-decorated {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+/* The h3 inside the axis wrapper should not repeat the display styles */
+#company-research .mode-content .cr-axis-wrapper h3 {
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: inherit;
+  margin: 0;
+  padding: 0;
+  border: none;
+  color: inherit;
+}
+
+/* ── Axis wrapper (injected by JS post-processor) ── */
+.cr-axis-wrapper {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+.cr-axis-wrapper:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ── Paragraph text in the sections ── */
+#company-research .mode-content p,
+#interview-process .mode-content p {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  margin: 0 0 var(--space-3);
+}
+#company-research .mode-content p:last-child,
+#interview-process .mode-content p:last-child {
+  margin-bottom: 0;
+}
+#company-research .mode-content p strong,
+#interview-process .mode-content p strong {
+  color: var(--text);
+}
+
+/* ── Nested lists (sub-bullets under Reported questions, etc.) ── */
+#interview-process .mode-content ul ul,
+#company-research .mode-content ul ul {
+  margin: 6px 0 0 0;
+}
+#interview-process .mode-content ul ul li,
+#company-research .mode-content ul ul li {
+  font-size: 13px;
+}
+#interview-process .mode-content ul ul li::before,
+#company-research .mode-content ul ul li::before {
+  width: 3px;
+  height: 3px;
+  background: var(--border);
+}
+/* end polished appended sections */
+
+/* ────────────────────────────────────────────────────────────
+   OUTREACH SECTION — master/detail layout (Mock C)
+   Scoped to #outreach .mode-content so styles don't leak into
+   other appended sections.
+   ──────────────────────────────────────────────────────────── */
+
+#outreach .mode-content .or-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+/* Persona chips reuse the same color-mix-over-status-token pattern as
+   .pill-screened / .pill-evaluated / etc. — anchored to the brand. */
+#outreach .mode-content .or-chip.is-recruiter {
+  background: color-mix(in srgb, var(--s-screened) 12%, transparent);
+  color: var(--s-screened);
+  border-color: color-mix(in srgb, var(--s-screened) 28%, transparent);
+}
+#outreach .mode-content .or-chip.is-hm {
+  background: color-mix(in srgb, var(--s-applied) 14%, transparent);
+  color: var(--s-applied);
+  border-color: color-mix(in srgb, var(--s-applied) 30%, transparent);
+}
+#outreach .mode-content .or-chip.is-peer {
+  background: color-mix(in srgb, var(--s-interview) 12%, transparent);
+  color: var(--s-interview);
+  border-color: color-mix(in srgb, var(--s-interview) 28%, transparent);
+}
+#outreach .mode-content .or-chip.is-interviewer {
+  background: color-mix(in srgb, var(--s-offer) 12%, transparent);
+  color: var(--s-offer);
+  border-color: color-mix(in srgb, var(--s-offer) 28%, transparent);
+}
+
+#outreach .mode-content .or-rec-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-cta);
+  color: var(--accent-on);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+#outreach .mode-content .or-contact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+#outreach .mode-content .or-contact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  text-decoration: none;
+}
+#outreach .mode-content .or-contact-pill:hover {
+  background: var(--bg-paper);
+  color: var(--text);
+}
+#outreach .mode-content .or-contact-pill .or-icon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+#outreach .mode-content .or-msg {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  position: relative;
+  word-break: break-word;
+}
+#outreach .mode-content .or-msg::after {
+  content: attr(data-charcount) " chars";
+  position: absolute;
+  bottom: 6px;
+  right: 12px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+#outreach .mode-content .or-msg-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+#outreach .mode-content .or-msg-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-paper);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+#outreach .mode-content .or-msg-btn.is-primary {
+  background: var(--accent-cta);
+  color: var(--accent-on);
+  border-color: var(--accent-cta);
+}
+#outreach .mode-content .or-msg-btn.is-primary:hover {
+  background: var(--accent-cta-hover);
+  border-color: var(--accent-cta-hover);
+}
+
+#outreach .mode-content .orc-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  #outreach .mode-content .orc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+#outreach .mode-content .orc-list {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  padding-right: 12px;
+}
+@media (max-width: 640px) {
+  #outreach .mode-content .orc-list {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 12px;
+  }
+}
+#outreach .mode-content .orc-row {
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+#outreach .mode-content .orc-row.is-active {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+#outreach .mode-content .orc-row .orc-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+#outreach .mode-content .orc-row .orc-row-role {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+#outreach .mode-content .orc-row .orc-row-icons {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+#outreach .mode-content .orc-row .orc-row-icons .has {
+  color: var(--accent-text);
+}
+#outreach .mode-content .orc-detail .orc-detail-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+#outreach .mode-content .orc-detail .orc-detail-role {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+#outreach .mode-content .or-pending-line {
+  margin-top: 16px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+#outreach .mode-content .or-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* Variant C — progressive disclosure: TL;DR card pinned at top of section,
+   strategic context (rationale + notes + alts) collapsed under one toggle
+   below each contact's message, sequencing table at bottom of section. */
+#outreach .mode-content .or-tldr {
+  padding: 14px 16px;
+  background: var(--bg-paper);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--accent);
+  margin-bottom: 16px;
+}
+#outreach .mode-content .or-tldr h4 {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+#outreach .mode-content .or-tldr ul {
+  padding-left: 16px;
+  margin: 0;
+}
+#outreach .mode-content .or-tldr li {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+#outreach .mode-content .or-framework {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+#outreach .mode-content .or-strategy {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+#outreach .mode-content .or-strategy > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+}
+#outreach .mode-content .or-strategy > summary::before {
+  content: "▸ ";
+  font-size: 9px;
+}
+#outreach .mode-content .or-strategy[open] > summary::before {
+  content: "▾ ";
+}
+#outreach .mode-content .or-strategy > summary::-webkit-details-marker {
+  display: none;
+}
+
+#outreach .mode-content .or-rationale {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+#outreach .mode-content .or-rationale .label,
+#outreach .mode-content .or-notes .label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+#outreach .mode-content .or-rationale .label {
+  color: var(--accent-text);
+}
+
+#outreach .mode-content .or-notes {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg-paper);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+#outreach .mode-content .or-alts {
+  margin-top: 10px;
+}
+#outreach .mode-content .or-alts > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-3);
+  list-style: none;
+  user-select: none;
+}
+#outreach .mode-content .or-alts > summary::before {
+  content: "▸ ";
+  font-size: 9px;
+}
+#outreach .mode-content .or-alts[open] > summary::before {
+  content: "▾ ";
+}
+#outreach .mode-content .or-alts > summary::-webkit-details-marker {
+  display: none;
+}
+#outreach .mode-content .or-alts ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+#outreach .mode-content .or-alts li {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  background: var(--bg-paper);
+  border-radius: var(--radius-xs);
+}
+
+#outreach .mode-content .or-sequencing {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--bg-paper);
+  border-radius: var(--radius);
+}
+#outreach .mode-content .or-sequencing h4 {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+#outreach .mode-content .or-sequencing table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+#outreach .mode-content .or-sequencing td {
+  padding: 4px 0;
+  vertical-align: top;
+}
+#outreach .mode-content .or-sequencing td:first-child {
+  width: 64px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ── F12: dark-mode accent text safety ──────────────────────────────────
+   --accent (#ff5600) is 3.2:1 on dark --bg (#0a0a0b) — fails WCAG AA.
+   Swap accent-colored text to --accent-text-dark (#e86030 ≈ 4.6:1) in
+   dark mode. Light-mode rules are left unchanged (--accent is fine on
+   light --bg #faf9f6 at 4.1:1 — acceptable for decorative/UI chrome;
+   any failing light-mode text uses are already addressed by F13/F10).
+   ─────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] .perso-why::before {
+  color: var(--accent-text-dark);
+}
+:root[data-theme="dark"] .star-head .num {
+  color: var(--accent-text-dark);
+}
+:root[data-theme="dark"] .star-cell .label {
+  color: var(--accent-text-dark);
+}

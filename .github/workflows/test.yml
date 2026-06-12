@@ -1,0 +1,31 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        # `npm install` (not `npm ci`) because package-lock.json is gitignored
+        # in this repo by deliberate choice. See .gitignore.
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check (JSDoc)
+        run: npm run typecheck
+
+      - name: Test suite (--quick)
+        run: node test-all.mjs --quick

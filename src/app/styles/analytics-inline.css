@@ -1,0 +1,610 @@
+/* app/styles/analytics-inline.css
+ *
+ * Verbatim extraction of the inline <style> block from
+ * public/analytics.html (lines 17-187 of legacy). Preserved character-for-
+ * character so dom diff vs legacy remains clean. The range-modal /
+ * actions-menu / range-trigger chrome lives in chrome.css (shared);
+ * this file is analytics-only.
+ */
+
+.analytics-content {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+/* KPI tiles sit on the page canvas — paper tier for content cards. */
+.stat-card {
+  padding: 22px 24px;
+  background: var(--bg-paper);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.stat-label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-delta {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 4px;
+  min-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-delta.up {
+  color: var(--score-high);
+}
+.stat-delta.dn {
+  color: var(--score-low);
+}
+.funnel-caption {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: -8px 0 var(--space-4);
+}
+.funnel-caption--discarded {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+}
+.funnel-caption--rejected {
+  /* Sits directly under --discarded: own breathing room, no second divider. */
+  margin: var(--space-2) 0 0;
+}
+.funnel-caption--discarded a.discarded-link,
+.funnel-caption--rejected a.discarded-link {
+  color: var(--text-3);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.funnel-caption--discarded a.discarded-link:hover,
+.funnel-caption--rejected a.discarded-link:hover {
+  color: var(--accent-text);
+}
+.funnel-card {
+  padding: var(--space-5);
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.funnel-card h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 var(--space-5);
+}
+.funnel-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 60px 60px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+a.funnel-row {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+a.funnel-row:hover .funnel-label {
+  color: var(--accent-text);
+}
+a.funnel-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.funnel-row:last-child {
+  border-bottom: none;
+}
+.funnel-label {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.funnel-bar {
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.funnel-fill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+}
+.funnel-count {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
+}
+.funnel-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: right;
+}
+.spend-card {
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.spend-card h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 var(--space-5);
+}
+.spend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+.spend-row:last-child {
+  border-bottom: none;
+}
+.spend-row .k {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+/* .v is a 2-column inline grid so dollars stack right-aligned in their own
+   column and token labels stack left-aligned in theirs — the breakdown rows
+   line up cleanly with the Total row beneath. */
+.spend-row .v {
+  display: inline-grid;
+  grid-template-columns: minmax(64px, max-content) minmax(110px, max-content);
+  align-items: baseline;
+  column-gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.spend-row .v__money {
+  text-align: right;
+}
+.spend-row .v .tok {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.spend-row--total {
+  font-weight: 600;
+}
+.spend-row--total .v {
+  color: var(--accent-text);
+}
+/* Visually separate Total from breakdown rows: hide the breakdown row's
+   hairline immediately above Total, then draw a softer divider on Total. */
+.spend-row:has(+ .spend-row--total) {
+  border-bottom: none;
+}
+.spend-row--total {
+  border-top: 1px solid var(--border-strong);
+  margin-top: var(--space-2);
+  padding-top: 14px;
+}
+.spend-row--empty .k {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+/* ── Multi-provider spend strip + tabs ─────────────────────────────────── */
+/* The strip + tabs only render when ≥2 providers have data this month, so
+   single-provider users see no visual change. */
+.spend-section__strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: baseline;
+  /* top gap from tabs above; bottom gap before the spend grid */
+  padding: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.spend-section__strip-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.spend-section__strip-name {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.spend-section__strip-cost {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.spend-section__strip-calls {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.spend-section__strip-sep {
+  color: var(--text-3);
+  margin: 0 4px;
+}
+.spend-section__tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: 0 0 0;
+  /* segmented control width follows content, not the grid cell */
+  width: max-content;
+  max-width: 100%;
+}
+.spend-section__tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  padding: 6px 12px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+  /* Mobile tap target floor — keep ≥36px tall without inflating desktop. */
+  min-height: 32px;
+}
+.spend-section__tab:hover {
+  color: var(--text);
+}
+.spend-section__tab:focus-visible {
+  /* --focus-ring is a box-shadow value, not a color — using it as an outline
+     color made the whole declaration invalid and dropped the ring entirely. */
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.spend-section__tab[data-active="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+/* Deliberate mid-step below the canonical 640px: the tab strip + value grid
+   only overflow on true phone widths (≤480px / 375px viewports) — at
+   481-640px the default layout still fits, so collapsing at 640 would
+   stack it earlier than needed. */
+@media (max-width: 480px) {
+  .spend-section__tabs {
+    width: 100%;
+  }
+  .spend-section__tab {
+    flex: 1 1 0;
+    padding: 8px 8px;
+  }
+  /* The .v value grid enforces a 64px + 110px minimum (182px) and the token
+     label ("· 5.81M tokens") is itself ~110px of non-wrapping text. Combined
+     with the row's left-hand .k label inside a space-between flex row that
+     intrinsic minimum overflows a 375px viewport (the grid track refuses to
+     shrink below min-content). On narrow screens: drop the fixed column
+     minimums and let the token text wrap so the value collapses to fit. */
+  .spend-row .v {
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    column-gap: 6px;
+  }
+  .spend-row .v .tok {
+    overflow-wrap: anywhere;
+  }
+  .spend-row .k {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.spend-section__estimated-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  vertical-align: baseline;
+  cursor: help;
+}
+
+.archetype-card {
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.archetype-card h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 var(--space-5);
+}
+.archetype-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.archetype-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 60px 60px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.archetype-row:last-child {
+  border-bottom: none;
+}
+.archetype-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.archetype-bar {
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.archetype-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  transition: width var(--dur-base) var(--ease-calm);
+}
+.archetype-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: right;
+}
+.archetype-count {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
+}
+.archetype-empty {
+  font-size: 13px;
+  color: var(--text-3);
+  padding: var(--space-3) 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .archetype-row {
+    grid-template-columns: 140px 1fr 56px 48px;
+    gap: var(--space-3);
+  }
+}
+@media (max-width: 640px) {
+  .stat-grid {
+    /* 2-col keeps KPI tiles above the fold on 375px phones so the funnel
+       section is reachable without scrolling past 4 full-width tiles. */
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stat-card {
+    /* Tighter padding so 2 cards fit comfortably in a 375px row. */
+    padding: 14px 16px;
+  }
+  .stat-val {
+    /* Scale down from 40px so the 2-col layout stays scannable. */
+    font-size: 28px;
+  }
+  /* Funnel + archetype rows: label on top, bar + count + pct below */
+  .funnel-row,
+  .archetype-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 12px 0;
+  }
+  .funnel-row .funnel-label,
+  .archetype-row .archetype-name {
+    font-size: 14px;
+  }
+  .funnel-row .funnel-bar,
+  .archetype-row .archetype-bar {
+    width: 100%;
+  }
+  .funnel-row .funnel-count,
+  .funnel-row .funnel-pct,
+  .archetype-row .archetype-count,
+  .archetype-row .archetype-pct {
+    text-align: left;
+    display: inline-block;
+    margin-right: var(--space-3);
+  }
+}
+
+/* ── Date-range picker ──────────────────────────────────────────── */
+.range-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-calm);
+}
+.range-trigger:hover {
+  background: var(--surface);
+}
+.range-trigger__chev {
+  width: 12px;
+  height: 12px;
+}
+
+/* actions-menu chrome and range-modal chrome both live in chrome.css
+   (shared with pipeline.html, table.html, and the evaluate/delete modals). */
+
+/* While the API is in flight, hide the literal "0"/"—" placeholders and
+   overlay a skeleton bar via ::before so the stat tiles read as
+   "loading" rather than "your real data is zero". Uses skPulse
+   (defined in styles/chrome.css) and --border for contrast on both
+   --bg and --bg-paper in light and dark themes. */
+[data-loading="true"] .stat-val,
+[data-loading="true"] .funnel-count,
+[data-loading="true"] .funnel-pct {
+  color: transparent;
+  position: relative;
+}
+[data-loading="true"] .stat-val::before,
+[data-loading="true"] .funnel-count::before,
+[data-loading="true"] .funnel-pct::before {
+  content: "";
+  position: absolute;
+  inset: 35% 20% 35% 0;
+  background: var(--border);
+  border-radius: var(--radius-xs);
+  animation: skPulse var(--dur-loop) var(--ease-soft) infinite;
+}
+[data-loading="true"] .stat-val::before {
+  inset: 25% 25% 25% 0;
+}
+[data-loading="true"] .funnel-fill {
+  width: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-loading="true"] .stat-val::before,
+  [data-loading="true"] .funnel-count::before,
+  [data-loading="true"] .funnel-pct::before {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ── Pipeline / Spend zone labels + consolidated spend card ── */
+.analytics-zone-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  /* --accent-text (#d14500 = 4.37:1) failed WCAG AA at this 11px size;
+     --accent-text-strong darkens to #be3e00 (≈5.1:1) in light and resolves
+     back to --accent-text in dark (#ff672e ≈ 6.8:1 on dark --bg), so the
+     widely-used --accent-text token is untouched. */
+  color: var(--accent-text-strong);
+}
+/* The Card base class already provides the same inset the sibling
+   .funnel-card / .archetype-card content sits at — head and grid must NOT
+   add their own side padding or the content double-insets and misaligns
+   with the other analytics cards. Head only adds breathing room before
+   the grid. */
+.spend-section-card__head {
+  padding: 0 0 var(--space-2);
+}
+/* Card-level title above the provider tabs + strip. Matches the 18px
+   .funnel-card h2 so sibling cards share one title scale. Uses --text
+   (full contrast) so it reads as a structural title, not a subdued
+   inner heading. */
+.spend-section-card__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 var(--space-3);
+}
+.spend-section-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  /* Top-align columns so the shorter one doesn't stretch and spread rows. */
+  align-items: start;
+  gap: 0;
+}
+/* Hairline divider between the two inner columns. */
+.spend-section-card__grid > .spend-card--inner + .spend-card--inner {
+  border-left: 1px solid var(--border) !important;
+  padding-left: var(--space-5);
+}
+.spend-section-card__grid > .spend-card--inner:first-child {
+  padding-right: var(--space-5);
+}
+@media (max-width: 1024px) {
+  .spend-section-card__grid {
+    grid-template-columns: 1fr;
+  }
+  .spend-section-card__grid > .spend-card--inner + .spend-card--inner {
+    border-left: none !important;
+    border-top: 1px solid var(--border) !important;
+    padding-left: 0;
+    padding-top: var(--space-4);
+    margin-top: var(--space-4);
+  }
+  .spend-section-card__grid > .spend-card--inner:first-child {
+    padding-right: 0;
+  }
+}
+/* .spend-card--inner: neutralize the chrome from both .card (background,
+   border, border-radius) and .spend-card (padding, border, border-radius)
+   so inner cards sit flush inside the SpendSection container card. */
+.spend-card--inner {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+/* Inner section titles — smaller than the standalone card h2 (18px → 14px)
+   and with a tighter bottom margin so rows sit close to the heading. */
+.spend-card--inner h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 0 0 var(--space-2);
+}
+/* Inner rows: tighter vertical padding so they read as a compact list. */
+.spend-card--inner .spend-row {
+  padding: 8px 0;
+}

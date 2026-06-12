@@ -1,0 +1,3927 @@
+/* sur9e component rules. Design tokens live in src/app/styles/tokens.css. */
+
+html {
+  /* 2.4.11: keep focused elements visible above sticky topbar + mobile
+     bottom-bar. scroll-padding-top clears the 56px topbar; scroll-padding-bottom
+     clears the 90px mobile bottom-bar so focused items are never obscured. */
+  scroll-padding-top: calc(var(--topbar-h, 56px) + 8px);
+  scroll-padding-bottom: 90px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Visually-hidden text — read by screen readers, invisible on screen.
+   Use for aria-only labels that also need to satisfy the
+   "th must contain visible text" axe rule (e.g. table-row action
+   columns, where the column purpose is obvious to sighted users from
+   the kebab icons in each row but axe wants the heading itself to
+   contain text). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link — first focusable element on every page; lets keyboard users
+   bypass the rail and topbar to reach <main id="main">. Hidden until
+   focused, then anchors to the top-left over the topbar. */
+.skip-link {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 8px 14px;
+  background: var(--accent-cta);
+  color: var(--accent-on);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius) 0;
+  z-index: var(--z-skip-link);
+  /* clip-path hides the element entirely when unfocused (translateY alone
+     leaves the chip parked above y=0, visible to AT and during any
+     scroll-position edge cases). Page-level rubber-band overscroll is
+     disabled on html/body, so pull-down can no longer drag it into view. */
+  clip-path: inset(50%);
+  transform: translateY(-100%);
+  transition: transform var(--dur-quick) var(--ease-firm);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  clip-path: none;
+  transform: translateY(0);
+  outline: 2px solid var(--accent-on);
+  outline-offset: -4px;
+}
+/* Kill macOS rubber-band overscroll at the page level so the app frame
+   (topbar / page bottom) reads as solid — pull-down/up can no longer reveal
+   the canvas behind the app. Inner scrollables (table body, drawers, modal
+   logs) keep their own behavior; several already use
+   overscroll-behavior: contain. The background bind keeps any residual
+   exposed canvas (print, pinch-zoom) theme-colored in light AND dark. */
+html,
+body {
+  overscroll-behavior: none;
+  background: var(--bg);
+}
+
+/* Bind native form-control colors to the page theme so OS dark-mode doesn't
+   override (e.g. macOS rendering checkboxes/radios with dark fills on a
+   light page). Scoped to :root for the same reason as the variable block above. */
+html {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Touch behaviour for all interactive primitives:
+   - touch-action: manipulation kills the 300ms double-tap zoom delay
+     on iOS Safari (matters more than it sounds — every tap feels slow
+     without it)
+   - -webkit-tap-highlight-color: transparent removes the default grey
+     flash on iOS; our :active + hover states already provide visual
+     feedback so the flash just looks noisy
+   Apply at the root so every interactive element inherits, with
+   targeted overrides where pinch-zoom is needed (drag handles). */
+button,
+a,
+[role="button"],
+[role="link"],
+[role="menuitem"],
+[role="tab"],
+input,
+select,
+textarea,
+summary,
+.btn,
+.chip,
+.pill,
+.icon-btn,
+.rail-item,
+.rail-toggle,
+.bottom-bar-tab,
+.view-switcher a,
+.toc-item,
+.profile-nav__item,
+.settings-nav__item {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile tap target floor — 44×44 per Apple HIG / WCAG 2.5.5 AAA, scoped
+   to standalone tap targets only.
+   Deliberately excluded:
+   - .btn / .pill / .chip / .view-switcher a — these are in-context
+     interactive elements (topbar buttons, status pills in table rows,
+     filter chips, view switcher). Flooring them at 44×44 inflated the
+     topbar Add button, made status pills overflow .col-status, and
+     caused the view-switcher pair to overflow the topbar at mobile.
+     WCAG 2.5.5 AAA permits exceptions for "inline" and dense-layout
+     targets; their visual sizes (28–36px) read as deliberate dense UI. */
+@media (max-width: 1024px) {
+  .icon-btn,
+  .bottom-bar-tab,
+  .toc-item,
+  .profile-nav__item,
+  .settings-nav__item,
+  .rail-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+/* Coarse-pointer companion to the width-gated floor above: touch devices
+   wider than 1024px (touch laptops, large tablets) keep the dense 32×32
+   icon-btn visual but get a ≥44px tap box via an invisible overlay. The
+   ≤1024px rule already floors the real box, so this only matters >1024px. */
+@media (pointer: coarse) and (min-width: 1025px) {
+  .icon-btn {
+    position: relative;
+  }
+  .icon-btn::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+}
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a {
+  color: inherit;
+}
+button {
+  font-family: inherit;
+}
+
+/* ── APP SHELL ── */
+/* Flex (was grid) so the rail collapse/expand animates by transitioning
+   width on .rail alone — single-element layout property — instead of
+   transitioning .app's grid-template-columns, which forced a FULL grid
+   relayout every animation frame and cascaded into every child.
+
+   The cost showed up worst on /offers because the percentage-width
+   fixed-layout table inside recomputed all columns per frame.
+
+   Main flex-fills the remaining width naturally; no transition needed
+   on .app itself because flex children resize without per-frame
+   layout work attributable to .app. */
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+.app > .main {
+  /* Flex grow to fill all space left by the rail.
+     min-width: 0 prevents flex children from overflowing on narrow
+     viewports (default flex min-width: auto would force horizontal
+     scroll when content is wider than the available track). */
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── RAIL ── */
+.rail {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: var(--z-rail);
+  width: var(--rail-w);
+  flex-shrink: 0;
+  /* NO transition on width. The 220ms transition cascaded into the
+     /offers table (559 rows × percentage columns) and froze the
+     renderer for 45+ seconds per toggle — measured in Chrome with
+     boot-ready=true. Snapping width instantly keeps the page
+     interactive. A smoother animation requires either transform-based
+     rail off-canvas (rail stays at fixed width, slides labels out) or
+     virtualizing the offers table — both are bigger refactors. */
+}
+.app[data-rail="full"] .rail {
+  width: var(--rail-w-full);
+  align-items: stretch;
+  padding: 14px 12px;
+}
+:root[data-rail="full"] .rail {
+  width: var(--rail-w-full);
+}
+:root[data-rail="compact"] .rail {
+  width: var(--rail-w);
+}
+/* Pre-paint guard no longer needed — .rail has no width transition. */
+
+.rail-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  margin-bottom: 14px;
+}
+.app[data-rail="full"] .rail-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px 0 6px;
+  height: 48px;
+  margin-bottom: 18px;
+  gap: 8px;
+}
+.rail-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  margin-bottom: 0;
+  text-decoration: none;
+  position: relative;
+}
+.rail-brand-icon {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+.rail-brand-wordmark {
+  height: 30px;
+  width: auto;
+  max-width: 100%;
+  display: none;
+  object-fit: contain;
+}
+.app[data-rail="full"] .rail-brand {
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+}
+.app[data-rail="full"] .rail-brand-icon {
+  display: none;
+}
+.app[data-rail="full"] .rail-brand-wordmark.light {
+  display: block;
+}
+.app[data-rail="full"] .rail-brand-wordmark.dark {
+  display: none;
+}
+[data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.light {
+  display: none;
+}
+[data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark {
+  display: block;
+}
+
+.rail-divider {
+  width: 28px;
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
+/* Brand book: rail section label → display sentence-case */
+.rail-section-label {
+  display: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  padding: 14px 10px 6px;
+}
+.app[data-rail="full"] .rail-section-label {
+  display: block;
+}
+
+.rail-item {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+.app[data-rail="full"] .rail-item {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 10px;
+  gap: 12px;
+}
+.rail-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.rail-item.active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 500;
+}
+.rail-item.active::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+.app[data-rail="full"] .rail-item.active::before {
+  left: -12px;
+}
+.rail-item.active .rail-icon {
+  color: var(--accent);
+}
+.rail-item svg.rail-icon,
+.rail-item > svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+/* Full-width rail pairs the icon with a text label, so a smaller icon
+   reads better alongside the label. Compact rail keeps the larger 22px
+   default — the icon is the entire affordance and needs visual weight. */
+.app[data-rail="full"] .rail-item svg.rail-icon,
+.app[data-rail="full"] .rail-item > svg {
+  width: 18px;
+  height: 18px;
+}
+.rail-label {
+  display: none;
+  flex: 1;
+}
+.app[data-rail="full"] .rail-label {
+  display: inline;
+}
+
+.rail-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  background: var(--accent-cta);
+  color: var(--accent-on);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.app[data-rail="full"] .rail-badge {
+  position: static;
+  margin-left: auto;
+  height: 18px;
+  min-width: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.app[data-rail="full"] .rail-badge.accent {
+  background: var(--accent-cta);
+  color: var(--accent-on);
+}
+
+.rail-tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-body);
+  white-space: nowrap;
+  /* 1.4.13: pointer-events must remain enabled so tooltip content is
+     hoverable — users must be able to move the pointer over the tooltip
+     without it dismissing (WCAG 1.4.13 Hover Content). */
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+  box-shadow: var(--shadow);
+  z-index: var(--z-rail-tooltip);
+}
+.rail-tooltip::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: var(--text);
+}
+.rail-item:hover .rail-tooltip,
+.rail-item:focus-visible .rail-tooltip {
+  /* V4 — reveal tooltip for keyboard users too, not just mouse-hover. */
+  opacity: 1;
+}
+.app[data-rail="full"] .rail-tooltip {
+  display: none;
+}
+
+.rail-spacer {
+  flex: 1;
+}
+
+.rail-toggle {
+  /* WIG: tap target ≥36px even though the visual stays compact. */
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.rail-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.rail-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.rail-toggle svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--dur-base) var(--ease-calm);
+}
+.app[data-rail="full"] .rail-toggle svg {
+  transform: rotate(0deg);
+}
+.app[data-rail="compact"] .rail-toggle svg {
+  transform: rotate(180deg);
+}
+.app[data-rail="compact"] .rail-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── THEME SWITCH (shell) — Sun/Moon/Monitor segmented radiogroup.
+   Lives in the rail (full: horizontal row under the Settings group;
+   compact + tablet: vertical icon column) and in the Settings page's
+   mobile-only theme row. Base styles assume the horizontal layout; the
+   rail orientation flips live in RailStyles (theme-script.tsx) because
+   they key off [data-rail], which Turbopack's CSS pipeline strips from
+   static stylesheets. */
+.rail-theme {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+}
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.theme-switch__btn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 3px);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.theme-switch__btn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+}
+.theme-switch__btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.theme-switch__btn.is-active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+/* Compact-rail tooltips reuse the .rail-tooltip flyout; reveal needs its
+   own hover/focus hook because the stock rule keys off .rail-item. */
+.theme-switch__btn:hover .rail-tooltip,
+.theme-switch__btn:focus-visible .rail-tooltip {
+  opacity: 1;
+}
+.theme-switch__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-topbar);
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  /* Match the rail's surface — the chrome (rail + topbar) reads as one
+     cohesive frame above the warm canvas. Backdrop blur preserves a
+     subtle glassy feel without depending on the canvas color. */
+  background: var(--surface);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Breadcrumbs were mono — read as cold/technical alongside the warm
+     editorial canvas. Body matches every other nav element in the chrome. */
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-3);
+  flex: 1;
+  min-width: 0;
+}
+.crumbs .sep {
+  color: var(--text-muted);
+}
+.crumbs .here {
+  color: var(--text);
+}
+.crumbs .crumb-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--dur-quick) var(--ease-firm);
+}
+.crumbs .crumb-link:hover {
+  color: var(--text);
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  /* C4 — bumped 34→36 to clear WCAG 2.5.5 AA on dense toolbars without
+     visually changing the chrome. .row-actions and .chip get separate
+     fixes below. */
+  height: 36px;
+  box-sizing: border-box;
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm);
+}
+.btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Bumped specificity (0,0,2,1 vs .icon-btn svg's 0,0,1,1) so the
+   filter button's 14px icon survives the IconButton migration — the
+   primitive applies .icon-btn which sizes the svg to 16px otherwise.
+   Visual parity decoration. */
+.icon-btn.filter-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.btn svg.actions-trigger__chev {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2;
+}
+.btn-primary {
+  background: var(--accent-cta);
+  border-color: var(--accent-cta);
+  color: var(--accent-on);
+}
+.btn-primary:hover {
+  background: var(--accent-cta-hover);
+  border-color: var(--accent-cta-hover);
+}
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.btn-secondary:hover {
+  background: color-mix(in oklab, var(--surface), var(--text) 5%);
+}
+.btn-ghost {
+  color: var(--text-2);
+}
+.btn-ghost:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* V1 — disabled state. Browser default leaves disabled <button>s looking
+   identical to active ones; users tap and get no feedback. */
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn:disabled:hover,
+.btn[aria-disabled="true"]:hover {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-primary:disabled:hover,
+.btn-primary[aria-disabled="true"]:hover {
+  background: var(--accent-cta);
+  border-color: var(--accent-cta);
+}
+.btn-secondary:disabled:hover,
+.btn-secondary[aria-disabled="true"]:hover {
+  /* Match the rest-state surface — no color flash on hover-over-disabled. */
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+/* — pressed state. Subtle press-in cue so users on slow devices don't
+   double-tap thinking the first click was missed. */
+.btn:not(:disabled):not([aria-disabled="true"]):active {
+  filter: brightness(0.96);
+}
+/* E2 — "already done" state. Distinct from :disabled (which is the
+   "can't activate yet" state). Use explicit color tokens so the styling
+   passes WCAG contrast at every text size; opacity dimming used to drop
+   the green check below the 3:1 floor. */
+.btn-locked {
+  cursor: default;
+  color: var(--text-3);
+  background: var(--surface);
+  border-color: var(--border);
+}
+.btn-locked:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.btn-locked .check-mark {
+  color: var(--s-offer);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.btn-danger {
+  background: var(--surface-danger);
+  border-color: var(--border-danger);
+  color: var(--score-low);
+  font-weight: 500;
+}
+.btn-danger:hover {
+  background: var(--surface-danger-hover);
+  border-color: var(--border-danger-strong);
+}
+.btn-danger:focus-visible {
+  /* Danger-tinted variant of the focus ring, same shape as --focus-ring. */
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--st-danger), transparent 70%);
+}
+
+/* ── FOCUS RINGS ── single source of truth for keyboard focus indicators.
+   :focus-visible only fires on keyboard nav, so click users never see them.
+   Placed centrally so individual component blocks below don't have to repeat. */
+.btn:focus-visible,
+.chip:focus-visible,
+.rail-item:focus-visible,
+.rail-toggle:focus-visible,
+.view-switcher a:focus-visible,
+.bottom-bar-tab:focus-visible,
+.batch-action-bar__btn:focus-visible,
+.profile-nav__item:focus-visible,
+.form-segmented__option:focus-visible,
+.form-row__remove:focus-visible,
+.form-row__add:focus-visible,
+.form-completeness:focus-visible,
+.form-chip__remove:focus-visible,
+.status-popover__item:focus-visible,
+.actions-menu__item:focus-visible,
+.filter-panel__close:focus-visible,
+.crumbs .crumb-link:focus-visible,
+.range-modal__close:focus-visible,
+.range-trigger:focus-visible,
+.range-modal__cancel:focus-visible,
+.range-modal__apply:focus-visible {
+  /* Same `--focus-ring` token as inputs — one soft 2px ring everywhere, and a
+     box-shadow follows each element's border-radius (a solid outline didn't). */
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+/* `.form-input` deliberately omitted here — it uses the single `--focus-ring`
+   box-shadow on `:focus` (above) for both mouse and keyboard, so it never gets
+   a second, competing outline ring. */
+.search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+/* ── VIEW SWITCHER ── icon-only segmented control across all widths */
+.view-switcher {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  height: 34px;
+  box-sizing: border-box; /* match .btn / .chip / .search baseline */
+}
+.view-switcher a {
+  font-size: 0;
+  letter-spacing: 0; /* hide the inline text label — SVG icon stays */
+  color: var(--text-3);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color var(--dur-quick) var(--ease-firm);
+}
+/* At desktop (≥1025px) restore the inline text label next to each icon
+   so the toggle isn't mystery-meat. Below that the title attribute on
+   the <a> remains as the tooltip fallback. */
+@media (min-width: 1025px) {
+  .view-switcher a {
+    font-size: 13px;
+    padding: 0 12px;
+  }
+}
+.view-switcher a:hover {
+  color: var(--text);
+}
+.view-switcher a.active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.view-switcher svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── SEARCH ── */
+.search {
+  background-color: var(--bg-paper);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.2' stroke-linecap='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>");
+  background-repeat: no-repeat;
+  background-position: 11px center;
+  border: 1px solid var(--border);
+  padding: 0 12px 0 32px;
+  height: 34px;
+  box-sizing: border-box;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  color: var(--text-2);
+  width: 200px;
+  font-family: var(--font-body);
+  outline: none;
+  transition:
+    width var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm);
+}
+.search:focus {
+  width: 280px;
+  border-color: var(--border-strong);
+}
+.search::placeholder {
+  color: var(--text-muted);
+}
+@media (max-width: 400px) {
+  /* 1.4.10 Reflow: search expands to full width at 320–400px so it
+     doesn't overflow the viewport at 320px / 400% zoom. */
+  .search,
+  .search:focus {
+    width: 100%;
+  }
+}
+
+/* ── PILLS ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill-screened {
+  color: var(--s-screened);
+}
+.pill-evaluated {
+  color: var(--s-evaluated);
+}
+.pill-applied {
+  color: var(--s-applied);
+}
+.pill-responded {
+  color: var(--s-responded);
+}
+.pill-interview {
+  color: var(--s-interview);
+}
+.pill-offer {
+  color: var(--s-offer);
+}
+.pill-rejected {
+  color: var(--s-rejected);
+}
+.pill-discarded {
+  color: var(--s-discarded);
+}
+
+/* V3 — interactive status pill (.drawer-status-trigger) used in table
+   rows, kanban cards, board drawer, and the report hero. The pill is a
+   <button aria-haspopup="menu"> that opens the stage picker; without a
+   chevron it read as decoration. Chevron is always visible at low
+   opacity, intensifies on hover/focus, and rotates when the menu is
+   open. Reserved padding up-front so the chevron doesn't reflow on
+   state change. */
+.drawer-status-trigger {
+  /* Reset native <button> chrome only — DO NOT set color or font here.
+     The pill-screened / pill-applied / pill-interview classes set the
+     stage-specific color via currentColor; overriding it neutralizes
+     the whole status-color system. */
+  cursor: pointer;
+  position: relative;
+  padding-right: 22px;
+  font-family: inherit;
+  transition:
+    background var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm);
+}
+.drawer-status-trigger::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.55;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--dur-quick) var(--ease-firm),
+    transform var(--dur-quick) var(--ease-firm);
+  pointer-events: none;
+}
+.drawer-status-trigger:hover,
+.drawer-status-trigger:focus-visible {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+/* WCAG 2.5.8 target-size: bump the interactive status pill to 32px tall on
+   touch viewports so the caret tap area clears the AA threshold. The static
+   informational .pill (no caret, non-interactive) keeps its compact form. */
+@media (max-width: 640px) {
+  .drawer-status-trigger {
+    min-height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+}
+.drawer-status-trigger:hover::after,
+.drawer-status-trigger:focus-visible::after {
+  opacity: 1;
+}
+.drawer-status-trigger[aria-expanded="true"]::after {
+  transform: translateY(-50%) rotate(180deg);
+  opacity: 1;
+}
+
+/* ── SCORE CHIP ── */
+.score-chip {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-variant-numeric: tabular-nums;
+}
+.score-chip.high {
+  background: color-mix(in srgb, var(--score-high) 14%, transparent);
+  color: var(--score-high);
+}
+.score-chip.mid {
+  background: color-mix(in srgb, var(--score-mid) 16%, transparent);
+  color: var(--score-mid);
+}
+.score-chip.low {
+  background: color-mix(in srgb, var(--score-low) 14%, transparent);
+  color: var(--score-low);
+}
+
+/* ── PAGE HEAD ── */
+.page-head {
+  padding: var(--space-7) var(--space-6) var(--space-5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+.page-head h1 {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  margin: 0;
+  color: var(--text);
+}
+.page-head .sub {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--text-3);
+  margin-top: 8px;
+  font-weight: 400;
+  text-wrap: pretty;
+}
+.page-head .sub .sub__save-state[data-state="saved"] {
+  color: var(--st-success);
+}
+.page-head .sub .sub__save-state[data-state="error"] {
+  color: var(--st-danger);
+}
+/* The .page-head is a flex container; a lone block-level child wouldn't
+   grow to fill the row by default and would shrink-wrap to the longest
+   word, breaking paragraphs into one word per line on narrow viewports.
+   Force the first child to grow + allow shrinking below content width. */
+.page-head > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+/* Search lives in the filter bar (alongside chips) — content-area filter,
+   not header navigation. Compact 220px width to share the row with chips. */
+.filter-bar .filter-search {
+  width: 220px;
+  flex: 0 1 220px;
+  min-width: 0;
+  margin-right: 4px;
+}
+@media (max-width: 640px) {
+  /* On narrow phones the 220px fixed basis leaves dead space to the right.
+     Expand to fill the row so the input is easier to tap and doesn't look
+     broken next to truncated chips. */
+  .filter-bar .filter-search {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0 12px;
+  /* C4 — bumped 34→36, matching .btn so segmented-control chips align
+     vertically with adjacent buttons. */
+  height: 36px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  transition:
+    border-color var(--dur-quick) var(--ease-firm),
+    color var(--dur-quick) var(--ease-firm);
+}
+.chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.chip .caret {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(
+    --accent-cta
+  ); /* was --accent-text; --accent-cta #c9430f hits 4.65:1 on --accent-soft */
+}
+/* Filter pill — chip with × button. Click pill = remove that filter. */
+.chip--filter {
+  padding-right: 4px;
+  gap: 6px;
+}
+.chip--filter .x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.chip--filter .x:hover {
+  opacity: 1;
+  background: var(--surface-2);
+}
+.filter-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.filter-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.filter-count .strong {
+  color: var(--text);
+}
+
+/* ── MAIN ── */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+}
+
+/* ── MOTION ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-enter {
+  animation: fadeUp var(--dur-considered) var(--ease-calm) both;
+}
+.anim-enter:nth-child(1) {
+  animation-delay: 0ms;
+}
+.anim-enter:nth-child(2) {
+  animation-delay: 60ms;
+}
+.anim-enter:nth-child(3) {
+  animation-delay: var(--dur-fast);
+}
+.anim-enter:nth-child(4) {
+  animation-delay: 180ms;
+}
+.anim-enter:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+/* ── BOTTOM TAB BAR (mobile) ── */
+/* Defined BEFORE the responsive @media blocks so the 640px rule overrides display:none. */
+.bottom-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: var(--bg-paper);
+  border-top: 1px solid var(--border);
+  z-index: var(--z-bottom-bar);
+}
+.bottom-bar-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-3);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  min-height: 48px;
+  transition: color var(--dur-quick) var(--ease-firm);
+}
+.bottom-bar-tab svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bottom-bar-tab:hover {
+  color: var(--text);
+}
+.bottom-bar-tab.active {
+  color: var(--accent);
+}
+/* The theme tab is a button, not a link — keep it visually identical */
+button.bottom-bar-tab {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-display);
+  padding: 0;
+}
+
+/* ── RESPONSIVE ── */
+/* Tablet — force rail to icon-only width regardless of data-rail toggle.
+   Goal: at this width the rail must look IDENTICAL to the desktop-compact
+   rail. Every data-rail="full" override below must be neutralized. */
+@media (max-width: 1024px) {
+  /* Force icon-only rail width at tablet, regardless of compact/full toggle.
+     The legacy grid-template-columns rule below was dead (the .app uses
+     display: flex, not grid), so the rail kept its full-mode 220px width
+     even though the items inside collapsed to icon-only 40×40 — leaving a
+     wide empty rail with tiny floating icons on tablet. Force the rail's
+     own width down to --rail-w (64px) here so the chrome and contents
+     match. */
+  .app[data-rail="full"] .rail,
+  :root[data-rail="full"] .rail {
+    width: var(--rail-w);
+  }
+  .app,
+  .app[data-rail="full"],
+  .app[data-rail="compact"],
+  :root[data-rail="full"] .app,
+  :root[data-rail="compact"] .app {
+    grid-template-columns: var(--rail-w) 1fr;
+  }
+  .app[data-rail="full"] .rail {
+    align-items: center;
+    padding: 14px 0;
+  }
+  .app[data-rail="full"] .rail-label {
+    display: none;
+  }
+  .app[data-rail="full"] .rail-section-label {
+    display: none;
+  }
+  /* Hide BOTH wordmark variants in BOTH light and dark themes. The dark-theme
+     selector path [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark
+     has higher specificity (0,5,0), so we must match it explicitly. */
+  .app[data-rail="full"] .rail-brand-wordmark.light,
+  .app[data-rail="full"] .rail-brand-wordmark.dark,
+  [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.light,
+  [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark {
+    display: none;
+  }
+  .app[data-rail="full"] .rail-brand-icon {
+    display: block;
+  }
+  /* Rail is forced to icon-only at this width — toggle has nowhere to go */
+  .rail-toggle {
+    display: none;
+  }
+  /* Brand: match compact (centered, square box). */
+  .app[data-rail="full"] .rail-brand {
+    justify-content: center;
+    flex: none;
+    height: auto;
+  }
+  /* Rail items: revert to compact layout (40×40 square, centered icon,
+     no padding/gap). Without this, full-rail's flex-start + padding +
+     gap leaks into the narrow column. */
+  .app[data-rail="full"] .rail-item {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
+    gap: 0;
+  }
+  /* Active-bar offset matches compact (-14px), not full's -12px. */
+  .app[data-rail="full"] .rail-item.active::before {
+    left: -14px;
+  }
+  /* Icons at compact size (22px), not full's 18px. */
+  .app[data-rail="full"] .rail-item svg.rail-icon,
+  .app[data-rail="full"] .rail-item > svg {
+    width: 22px;
+    height: 22px;
+  }
+  /* Badge: compact-style dot in corner, not full's inline pill. */
+  .app[data-rail="full"] .rail-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    margin-left: 0;
+    font-size: 10px;
+    background: var(--accent-cta);
+    color: var(--accent-on);
+  }
+  /* Tooltip on hover (compact behavior). */
+  .app[data-rail="full"] .rail-tooltip {
+    display: block;
+  }
+  /* Topbar: keep crumbs + actions on one row by default. Only force the
+     actions onto a row of their own when the actions are heavy (contain a
+     search bar OR a primary CTA like "+ New offer") — those won't fit
+     comfortably on the same row as the breadcrumb. Pages with only 1-2
+     icon-only buttons (e.g. report.html print/share) stay inline. */
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--topbar-h);
+    padding: 8px var(--space-6);
+    align-items: center;
+  }
+  /* CONSISTENT 1-ROW HEADER across all pages: logo + crumbs left,
+     topbar-actions right. Crumbs are content-sized (no grow) so the
+     toolbar gets to fit beside them on the same row. */
+  .topbar > .crumbs {
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-grow: 0;
+  }
+  .topbar > .topbar-actions {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-left: auto;
+    gap: 6px;
+  }
+  /* Keep the search the same compact 220px across breakpoints (matches
+     desktop) — wrapping happens at the .filter-bar level if needed. */
+  .topbar-actions .btn-ghost[title*="View"] {
+    padding: 0 10px;
+  }
+}
+/* On true phone widths, collapse "View" to icon-only (drop the label) so
+   the row fits search + Table/Kanban + View(icon) + +New offer. */
+@media (max-width: 640px) {
+  .topbar-actions .btn-ghost[title*="View"] {
+    font-size: 0;
+    padding: 0 10px;
+    gap: 0;
+  }
+  .topbar-actions .btn-ghost[title*="View"] svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+/* Phone — hide rail, show bottom tab bar, compact header with logo */
+@media (max-width: 640px) {
+  /* Override every variant of the rail-width pre-paint guard so phone
+     viewports always single-column regardless of compact/full toggle. */
+  .app,
+  .app[data-rail="full"],
+  .app[data-rail="compact"],
+  :root[data-rail="full"] .app,
+  :root[data-rail="compact"] .app {
+    grid-template-columns: 1fr;
+  }
+  /* Use .app descendant selectors to win against pipeline.html's higher
+     source-order base rules (it duplicates .rail / .main definitions). */
+  .app .rail {
+    display: none;
+  }
+  .app .main,
+  .app .content {
+    padding-bottom: 64px;
+  }
+  .bottom-bar {
+    display: flex;
+  }
+  /* Drawer height reserves room for the 64px bottom-bar so its scroll
+     content (and any internal footer) is fully reachable instead of
+     being painted behind .bottom-bar (--z-bottom-bar > --z-drawer).
+     Uses 100dvh (dynamic viewport height) so mobile-browser chrome
+     collapsing doesn't sneak content back under the bar. */
+  .cd-drawer {
+    height: calc(100dvh - 64px);
+  }
+  /* Extra scroll-padding so the last line of body content has breathing
+     room above the drawer's lower edge (otherwise it visually touches
+     the bottom-bar's top border). Targets both the universal body and
+     the V1 variant body. */
+  .cd-drawer .cd-body,
+  .cd-drawer .cd-v1-body {
+    padding-bottom: 32px;
+  }
+  .page-head h1 {
+    font-size: 28px;
+  }
+
+  /* Compact mobile topbar: small logo on left (replaces missing rail brand),
+     hide intermediate breadcrumb segments so only the current page name shows. */
+  .topbar {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .topbar::before {
+    content: "";
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background: url("/assets/icon-logo.svg") center / contain no-repeat;
+    flex-shrink: 0;
+  }
+  .crumbs {
+    font-size: 12px;
+    gap: 4px;
+  }
+  /* Show the parent link + separator + current page on mobile so the user
+     can navigate back. Hides only the deepest-ancestor "Workspace" link. */
+  .crumbs > *:not(:nth-last-child(-n + 3)) {
+    display: none;
+  }
+  .crumbs > .sep:not(:nth-last-child(2)) {
+    display: none;
+  }
+  /* Topbar actions: allow them to wrap if needed */
+  .topbar-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* Mobile alignment: page-head and filter-bar share the same horizontal
+     gutters so the title and the search input start at the same x. */
+  .page-head {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+  .filter-bar {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}
+
+/* Brand book: page stats row → display sentence-case */
+.page-stats {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+.page-stat-sep {
+  color: var(--text-muted);
+}
+
+/* ── BRAND FORM CONTROLS ──
+   Custom-styled radio / checkbox / range so we never rely on OS-default
+   chrome (macOS dark-fill checkboxes, solid-black unfilled range track,
+   etc.). One source of truth across every panel, modal, and form. */
+input[type="checkbox"],
+input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    background var(--dur-fast) ease;
+}
+input[type="radio"] {
+  border-radius: 50%;
+}
+input[type="checkbox"] {
+  border-radius: var(--radius-xs);
+}
+input[type="checkbox"]:hover,
+input[type="radio"]:hover {
+  border-color: var(--accent);
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Radio: animate a filled dot in via scale. */
+input[type="radio"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform var(--dur-fast) ease;
+}
+input[type="radio"]:checked {
+  border-color: var(--accent);
+}
+input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+/* Checkbox: filled accent + white SVG checkmark via background-image. */
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 8 7 12 13 4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* Range slider — custom track + thumb. The filled portion uses --fill-pct,
+   which the consumer's JS must set on every value change (and on init).
+   See setSliderFill() in pipeline.html / table.html. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill-pct, 0%),
+    var(--border) var(--fill-pct, 0%),
+    var(--border) 100%
+  );
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+input[type="range"]::-moz-range-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="radio"]::before {
+    transition: none;
+  }
+}
+
+/* ── STATUS POPOVER (markup injected by status-popover.js) ── */
+.status-popover {
+  position: absolute;
+  /* Floating-panel tier: above the drawer (--z-drawer), below dialogs
+     (--z-dialog) so clicks on the drawer's status pill aren't visually
+     swallowed by the drawer chrome. */
+  z-index: var(--z-modal);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+  /* Size close to the trigger: small floor, then grow to fit the longest
+     option. (Was 160px, which dwarfed short value-pickers like Seniority.) */
+  min-width: 124px;
+}
+.status-popover[hidden] {
+  display: none;
+}
+.status-popover__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.status-popover__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.status-popover__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.status-popover__item:disabled:hover,
+.status-popover__item:disabled:focus {
+  background: transparent;
+}
+.status-popover__item:hover,
+.status-popover__item:focus {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  outline: none;
+}
+/* No special treatment for the currently-selected option — the trigger
+   already shows the current value. Only hover/keyboard highlights. */
+
+/* ── PROVIDERS SECTION (Settings → Providers & Models) ──
+   Three stacked surfaces inside one form-section: CLI status panel,
+   global default row, and per-mode override table. Tokens reuse the
+   existing surface / border / text scale; only the per-row color cues
+   (ok / warn / missing) introduce new accent variables, falling back
+   to st-success / st-warn / st-danger when defined and to plain
+   text/border otherwise. */
+.providers-section .providers-cli-status,
+.providers-section .providers-defaults,
+.providers-section .providers-modes {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.providers-section .providers-cli-status:first-of-type {
+  margin-top: 16px;
+}
+
+.providers-cli-status__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.providers-cli-status__title,
+.providers-defaults__title,
+.providers-modes__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.providers-defaults__desc,
+.providers-modes__desc {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--text-2, var(--text));
+}
+.providers-cli-status__loading,
+.providers-modes__loading,
+.providers-modes__empty {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-3, var(--text));
+}
+
+/* "Add override…" — quiet select under the table; picking a mode adds an
+   editable Use-default row. Capped width so it reads as a control, not a
+   form field. */
+.providers-modes__add {
+  margin-top: 10px;
+  max-width: 240px;
+}
+
+/* Per-row Reset — the one affordance that removes an override row. */
+.providers-mode-row__actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.providers-cli-status__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.providers-cli-row {
+  display: grid;
+  grid-template-columns: 18px minmax(120px, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, var(--surface));
+  font-size: 13px;
+}
+.providers-cli-row__mark {
+  font-weight: 700;
+  text-align: center;
+}
+.providers-cli-row--ok .providers-cli-row__mark {
+  color: var(--st-success, var(--text));
+}
+.providers-cli-row--missing .providers-cli-row__mark {
+  color: var(--st-danger, var(--text));
+}
+.providers-cli-row--warning .providers-cli-row__mark {
+  color: var(--st-warn, var(--text));
+}
+.providers-cli-row__name {
+  font-weight: 600;
+  color: var(--text);
+}
+.providers-cli-row__detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-2, var(--text));
+}
+.providers-cli-row__version {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface, transparent);
+  border: 1px solid var(--border);
+}
+.providers-cli-row__auth--ok {
+  color: var(--st-success, var(--text));
+}
+.providers-cli-row__auth--warn {
+  color: var(--st-warn, var(--text));
+}
+.providers-cli-row__hint code {
+  font-size: 12px;
+}
+
+/* Per-mode override table — semantic <table>; cell controls are full-
+   width <Select> primitives. Rows shrink-wrap on narrow screens by
+   stacking the inherit hint under the mode name. */
+.providers-modes__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.providers-modes__table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-2, var(--text));
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.providers-modes__table tbody td,
+.providers-modes__table tbody th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.providers-modes__table tbody tr:last-child td,
+.providers-modes__table tbody tr:last-child th {
+  border-bottom: none;
+}
+.providers-mode-row__name {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.providers-mode-row--overridden .providers-mode-row__name code {
+  color: var(--accent, var(--text));
+}
+
+/* Per-mode fallback column — a quiet pill trigger that opens a Radix
+   Popover with Platform + Model selects. The trigger truncates with an
+   ellipsis so a long "provider · model" label never widens the column. */
+.providers-mode-row__fallback {
+  width: 1%;
+  white-space: nowrap;
+}
+.providers-fallback-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 17ch;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text-2, var(--text));
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, var(--radius-md));
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-calm);
+}
+.providers-fallback-trigger:hover {
+  border-color: var(--border-strong, var(--text-3, var(--border)));
+}
+.providers-fallback-trigger[data-state="open"] {
+  border-color: var(--accent, var(--border));
+}
+.providers-fallback-trigger--set {
+  color: var(--text);
+}
+.providers-fallback-trigger--none {
+  color: var(--text-3, var(--text));
+}
+.providers-fallback-trigger__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.providers-fallback-trigger__icon {
+  flex: 0 0 auto;
+  color: var(--text-3, var(--text));
+}
+.providers-fallback-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 240px;
+  max-width: min(92vw, 320px);
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-popover);
+  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
+}
+
+/* Mobile: stack the three columns vertically — the table grid breaks
+   down on narrow viewports, so we promote each cell to a block. */
+@media (max-width: 640px) {
+  .providers-modes__table,
+  .providers-modes__table thead,
+  .providers-modes__table tbody,
+  .providers-modes__table tr,
+  .providers-modes__table th,
+  .providers-modes__table td {
+    display: block;
+    width: 100%;
+  }
+  .providers-modes__table thead {
+    display: none;
+  }
+  .providers-modes__table tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .providers-modes__table tbody tr:last-child {
+    border-bottom: none;
+  }
+  .providers-modes__table tbody td,
+  .providers-modes__table tbody th {
+    border-bottom: none;
+    padding: 4px 0;
+  }
+  .providers-mode-row__platform::before {
+    content: "Platform: ";
+    font-size: 11.5px;
+    color: var(--text-3, var(--text));
+    display: block;
+    margin-bottom: 2px;
+  }
+  .providers-mode-row__model::before {
+    content: "Model: ";
+    font-size: 11.5px;
+    color: var(--text-3, var(--text));
+    display: block;
+    margin-bottom: 2px;
+  }
+  .providers-mode-row__fallback {
+    width: 100%;
+  }
+  .providers-mode-row__fallback::before {
+    content: "Fallback: ";
+    font-size: 11.5px;
+    color: var(--text-3, var(--text));
+    display: block;
+    margin-bottom: 2px;
+  }
+  .providers-mode-row__actions {
+    width: 100%;
+    text-align: left;
+  }
+}
+
+/* ── ACTIONS MENU (popover) — shared chrome for the kebab/add menus on
+   Offers, Pipeline, and the date-range picker on Analytics. JS toggles
+   [hidden] and positions the element via inline style. The .is-current
+   modifier and .actions-menu__sep are used by the date-range picker but
+   harmless on other consumers. */
+.actions-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  min-width: 240px;
+}
+.actions-menu[hidden] {
+  display: none;
+}
+.actions-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.actions-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 10px var(--space-3);
+  border-radius: var(--radius);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.actions-menu__item:hover,
+.actions-menu__item:focus {
+  /* Was var(--surface) — same as the .actions-menu parent → invisible
+     hover. color-mix tint works in both themes. */
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+  outline: none;
+}
+.actions-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.actions-menu__item:disabled:hover {
+  background: transparent;
+}
+.actions-menu__item.is-current {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+/* R1 — destructive variant. Shared by every consumer of the .actions-menu
+   chrome (drawer kebab, report kebab via KebabActionsMenu, Add menu). */
+.actions-menu__item--danger {
+  color: var(--score-low);
+}
+.actions-menu__item--danger:hover,
+.actions-menu__item--danger:focus {
+  background: var(--surface-danger);
+  color: var(--score-low);
+}
+.actions-menu__item--danger svg {
+  color: currentColor;
+}
+/* MODE_REGISTRY icons (SVG markup strings) rendered inside action menus —
+   match the 16px lucide icons used by sibling items. */
+.mode-icon,
+.mode-icon svg {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+.mode-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.actions-menu__icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Transparent so the icon shows no tile — a var(--surface) fill matched the
+     menu at rest but popped out as a lighter square once the row hover tint
+     darkened the background behind it. */
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.actions-menu__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.actions-menu__title {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.actions-menu__sub {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+.actions-menu__sep {
+  display: block;
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-1) 0;
+}
+
+/* ── Compact density — opt-in modifier for the kebab / row "meatball"
+   menus (full-report kebab + drawer kebab via KebabActionsMenu; table + kanban
+   row actions via RowActionsMenu). Scoped to .actions-menu--compact so the
+   roomier default still applies to the Add menu (Offers/Pipeline) and the
+   Analytics date-range picker, which share the base .actions-menu chrome. */
+.actions-menu--compact {
+  min-width: 196px;
+  padding: 4px;
+}
+.actions-menu--compact .actions-menu__item {
+  padding: 6px 8px;
+  gap: var(--space-2);
+}
+.actions-menu--compact .actions-menu__icon {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+.actions-menu--compact .actions-menu__title {
+  font-size: 13px;
+}
+/* Keep the row menu's "~$0.50, ~10 min" sub-label legible after the shrink. */
+.actions-menu--compact .actions-menu__sub {
+  font-size: 11px;
+}
+.actions-menu--compact .actions-menu__sep {
+  margin: 2px 0;
+}
+
+/* ── CONFIRM MODALS — shared base for evaluate-modal + delete-confirm-modal +
+   range-modal (analytics date picker). All three share head / body / foot
+   structure; only body contents and primary-button colour vary. Styles use
+   brand tokens (no hardcoded radii / spacing / fonts). Markup is injected by
+   each modal's JS module (range-modal lives inline in analytics.html). */
+.evaluate-modal[hidden],
+.delete-confirm-modal[hidden],
+.range-modal[hidden] {
+  display: none;
+}
+.evaluate-modal,
+.delete-confirm-modal,
+.range-modal {
+  position: fixed;
+  inset: 0;
+  /* Above the drawer (--z-drawer) so the modal isn't hidden behind it
+     when the user triggers actions from inside the drawer. */
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.evaluate-modal__backdrop,
+.delete-confirm-modal__backdrop,
+.range-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+.evaluate-modal__dialog,
+.delete-confirm-modal__dialog,
+.range-modal__dialog {
+  position: relative;
+  width: min(440px, calc(100vw - var(--space-6)));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+}
+[data-theme="dark"] .evaluate-modal__dialog,
+[data-theme="dark"] .delete-confirm-modal__dialog,
+[data-theme="dark"] .range-modal__dialog {
+  background: var(--bg);
+}
+.evaluate-modal__head,
+.delete-confirm-modal__head,
+.range-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.evaluate-modal__head h2,
+.delete-confirm-modal__head h2,
+.range-modal__head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.evaluate-modal__close,
+.delete-confirm-modal__close,
+.range-modal__close {
+  background: transparent;
+  border: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--dur-quick) var(--ease-calm),
+    background var(--dur-quick) var(--ease-calm);
+}
+.evaluate-modal__close:hover,
+.delete-confirm-modal__close:hover,
+.range-modal__close:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.evaluate-modal__body,
+.delete-confirm-modal__body,
+.range-modal__body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* A DialogDescription inside a padded modal body must not stack its own
+   .modal-description padding on top — the intro paragraph rendered inset
+   ~20px further than the Cost/Time/Result lines below it. The body's
+   padding + gap own ALL spacing here. */
+.evaluate-modal__body .modal-description,
+.delete-confirm-modal__body .modal-description,
+.range-modal__body .modal-description {
+  padding: 0;
+}
+.evaluate-modal__body p,
+.delete-confirm-modal__body p {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.evaluate-modal__details {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  color: var(--text);
+}
+.evaluate-modal__details strong {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Opt-in checkbox for generating a tailored CV PDF alongside evaluation. */
+.evaluate-modal__pdf-opt {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: start;
+  margin-top: var(--space-4);
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.evaluate-modal__pdf-opt input[type="checkbox"] {
+  grid-row: 1 / 3;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.evaluate-modal__pdf-opt-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.evaluate-modal__pdf-opt-hint {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.delete-confirm-modal__target {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+.delete-confirm-modal__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--st-danger-soft);
+  color: var(--st-danger);
+  border-left: 3px solid var(--st-danger);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+}
+.delete-confirm-modal__warning svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+.evaluate-modal__foot,
+.delete-confirm-modal__foot,
+.range-modal__foot {
+  display: flex;
+  /* wrap: the evaluate modal grows a third "Set status only" button on the
+     bulk status-change path — three buttons overflow a 375px-wide dialog. */
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+/* range-modal-specific: form-field wrapper + native date input styling. */
+.range-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.range-modal__field input[type="date"] {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+
+/* .job-status* CSS removed — superseded by loading-modal.css. */
+@media (prefers-reduced-motion: reduce) {
+  /* U1 — modals + bottom sheets do full slide-up transforms by default;
+     for users with motion sensitivity that's vestibular-unfriendly. The
+     global * { transition-duration: 0.01ms } override handles most
+     cases, but transform animations need an explicit reset to avoid the
+     translate landing visible. */
+  .range-modal__dialog,
+  .delete-confirm-modal__dialog,
+  .evaluate-modal__dialog,
+  .filter-panel,
+  .batch-action-bar {
+    transform: none !important;
+    transition: opacity 1ms !important;
+  }
+  /* 2.3.3: suppress overlay/content animations for the shared modal
+     primitives (.modal-overlay / .modal-content used by Radix Dialog). */
+  .modal-overlay,
+  .modal-content {
+    transform: none !important;
+    transition: opacity 1ms !important;
+  }
+}
+
+/* ── SECTION PILL — floating burger trigger for the shared bottom-sheet TOC.
+   Used on Profile + Settings (the Offer Report puts its ≡ trigger inside
+   the existing .action-bar instead). Mirrors the action bar's frosted-
+   glass treatment so the visual language is consistent across pages. */
+.section-pill {
+  display: none;
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-rail);
+  align-items: center;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--bg-paper) 96%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-popover);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .section-pill {
+    background: var(--surface);
+  }
+}
+@media (max-width: 1024px) {
+  .section-pill {
+    display: inline-flex;
+  }
+}
+@media (max-width: 640px) {
+  /* Same lift as .action-bar so the burger doesn't sit behind .bottom-bar
+     on mobile (64px tall, fixed bottom: 0, --z-bottom-bar). */
+  .section-pill {
+    bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+.section-pill__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: background var(--dur-quick) var(--ease-firm);
+}
+.section-pill__btn:hover,
+.section-pill__btn:focus-visible {
+  background: var(--surface);
+}
+.section-pill__btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── SECTION SHEET (mobile/tablet bottom-sheet TOC) ──
+   Markup lives in each page's HTML (Profile, Settings, Offer Report) and is
+   populated + toggled by section-sheet.js. Moved here from styles.css so
+   profile.html and settings.html (which don't load styles.css) get the
+   sheet visible at ≤1024px. */
+.toc-sheet {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--z-scrim) + 1);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0; /* mobile bottom-sheet — top corners only, intentionally above token scale */
+  /* padding-bottom adds the device safe-area inset (home-indicator height
+     on iPhone X+ and similar) on top of the base 32px. Without this, the
+     last list item gets clipped behind the home bar. env() returns 0 on
+     devices that don't expose a safe area. */
+  padding: 16px 20px calc(32px + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-popover);
+  transform: translateY(100%);
+  /* visibility:hidden while closed removes the sheet's 7+ link anchors from
+     the tab order and the accessibility tree — translateY(100%) alone left
+     keyboard users tabbing through invisible links below the viewport and
+     screen readers announcing a phantom nav. The 0s visibility transition is
+     DELAYED by the slide duration on close (sheet stays visible while it
+     animates out) and undelayed on open (.open below resets the delay). */
+  visibility: hidden;
+  transition:
+    transform var(--dur-base) var(--ease-calm),
+    visibility 0s linear var(--dur-base);
+}
+.toc-sheet.open {
+  transform: translateY(0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+.toc-sheet-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-scrim);
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-firm);
+}
+.toc-sheet-backdrop.open {
+  display: block;
+  opacity: 1;
+}
+.toc-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: var(--radius-2xs);
+  margin: 0 auto 12px;
+}
+.toc-sheet .toc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toc-sheet .toc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  padding: 12px 10px;
+  min-height: 44px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+.toc-sheet .toc-item:hover,
+.toc-sheet .toc-item:active {
+  background: var(--surface);
+}
+.toc-sheet .toc-item.active {
+  color: var(--accent);
+  font-weight: 500;
+}
+.toc-sheet .toc-item .letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.toc-sheet .toc-item.active .letter {
+  color: var(--accent);
+}
+@media (max-width: 1024px) {
+  .toc-sheet {
+    display: block;
+  }
+}
+@media (max-width: 640px) {
+  /* While the sheet is open, slide the mobile bottom-bar (.bottom-bar,
+     --z-bottom-bar, 64px tall) off-screen so it doesn't sit above the sheet
+     and clip the last list item. */
+  body:has(.toc-sheet.open) .bottom-bar {
+    transform: translateY(100%);
+    transition: transform var(--dur-base) var(--ease-calm);
+  }
+}
+@media (min-width: 1025px) {
+  /* Desktop hides the bottom-sheet entirely — the line-stack TOC indicator
+     at .toc-indicator-host is the desktop equivalent. !important defeats
+     any inline display:block that toggling logic might leave behind. */
+  .toc-sheet,
+  .toc-sheet-backdrop {
+    display: none !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toc-sheet,
+  .toc-sheet.open,
+  .toc-sheet-backdrop,
+  .toc-sheet-backdrop.open {
+    transform: none !important;
+    transition: opacity 1ms !important;
+  }
+}
+
+/* ── BATCH ACTION BAR (markup injected by batch-action-bar.js) ── */
+.batch-action-bar[hidden] {
+  display: none;
+}
+.batch-action-bar {
+  position: fixed;
+  /* Center over the CANVAS (the content area right of the rail), not the whole
+     viewport: shift the midpoint right by half the live rail width. The mobile
+     @media block below overrides left/right, and there --rail-current is 0. */
+  left: calc(50% + var(--rail-current) / 2);
+  bottom: var(--space-5);
+  transform: translateX(-50%) translateY(8px);
+  z-index: var(--z-page-modal);
+  display: flex;
+  align-items: center;
+  /* Center the count + action buttons + Clear as one group inside the bar.
+     Without this the row was left-aligned with .batch-action-bar__clear
+     pushed to the right edge by margin-left: auto, leaving an unbalanced
+     gap between Delete and Clear. */
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  /* Stay inside the canvas, not the whole viewport — match the centered offset. */
+  max-width: calc(100vw - var(--rail-current) - 16px);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  opacity: 0;
+  transition:
+    opacity var(--dur-base) var(--ease-calm),
+    transform var(--dur-base) var(--ease-calm);
+  font-family: var(--font-body);
+}
+/* Desktop reveal — keep the centered translateX(-50%). The mobile @media
+   block below redefines both resting and revealed transforms so the bar
+   sits flush left:8px / right:8px without the centering offset. Order
+   matters: this global rule is BEFORE the @media so the mobile rule wins
+   when its query matches. */
+.batch-action-bar.on {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+@media (max-width: 640px) {
+  .batch-action-bar {
+    left: 8px;
+    right: 8px;
+    /* Lift above the .bottom-bar (64px tall, fixed bottom: 0, --z-bottom-bar).
+       Without this offset the bar rendered behind the bottom nav and the
+       Change status / Evaluate / Delete buttons were unreachable. */
+    bottom: calc(64px + 8px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(8px);
+    width: auto;
+    max-width: none;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: 13px;
+    /* Above .bottom-bar (--z-bottom-bar) so taps land on this bar, not the nav. */
+    z-index: calc(var(--z-bottom-bar) + 5);
+  }
+  .batch-action-bar.on {
+    transform: translateY(0);
+  }
+  .batch-action-bar__count {
+    padding-right: var(--space-1);
+  }
+  .batch-action-bar__btn {
+    padding: var(--space-2);
+    font-size: 13px;
+  }
+}
+/* Dark-mode shadow flows via var(--shadow-popover). */
+.batch-action-bar__count {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-2);
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border);
+}
+.batch-action-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-calm);
+}
+/* Menus opened FROM the batch bar must outrank the bar itself — on mobile
+   the bar sits at --z-bottom-bar + 5 (above the bottom nav), which beats
+   the default --z-popover (90) and clipped the open menu behind the bar. */
+.popover-above-bottom-bar {
+  z-index: calc(var(--z-bottom-bar) + 6);
+}
+.batch-action-bar__chev {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--dur-fast) ease;
+}
+.batch-action-bar__btn[aria-expanded="true"] .batch-action-bar__chev {
+  transform: rotate(180deg);
+}
+.batch-action-bar__btn:hover:not(:disabled) {
+  background: var(--surface);
+}
+.batch-action-bar__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.batch-action-bar__btn--danger {
+  color: var(--st-danger);
+}
+.batch-action-bar__btn--danger:hover:not(:disabled) {
+  background: var(--st-danger-soft);
+}
+.batch-action-bar__clear {
+  /* Sits in the centered group alongside the other action buttons rather
+     than being pushed to the far right — keeps the bar visually balanced. */
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ── TOAST HOST ── Fixed column above the job deck. --corner-deck-clearance
+   is published by LoadingModalHost (0px when no jobs) so toasts stack above
+   the deck instead of overlapping it. z stays at --z-toast (110, clears
+   dialogs); the deck keeps --z-modal (95, below dialogs) — see spec §2. */
+.toast-host {
+  position: fixed;
+  right: 24px;
+  bottom: calc(24px + var(--corner-deck-clearance, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+/* Lift above the batch-action bar together with the deck (the deck's own
+   rule lives in loading-modal.css). */
+body:has(.action-bar) .toast-host {
+  bottom: calc(90px + var(--corner-deck-clearance, 0px));
+}
+/* 640px (canonical), not 768px — the bottom-bar/action-bar offsets below
+   reference bars that only render ≤640px (see loading-modal.css). */
+@media (max-width: 640px) {
+  .toast-host {
+    left: 12px;
+    right: 12px;
+    /* Mobile base matches loading-modal.css ≤640px: deck sits at
+       calc(24px + env(safe-area-inset-bottom, 0px)).
+       Toasts use the same base so the stack stays glued. */
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+  }
+  body:has(.action-bar) .toast-host {
+    bottom: calc(138px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+  }
+  body:has(.bottom-bar):not(:has(.action-bar)) .toast-host {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+  }
+  /* Batch-action bar open (rows selected): lift toasts above the bar
+     (bottom 64+8px, ~50px tall) so they stop covering its Change-status /
+     Evaluate / Delete buttons. Mirrors the deck rule in loading-modal.css. */
+  body:has(.batch-action-bar.on) .toast-host {
+    bottom: calc(
+      64px +
+      8px +
+      50px +
+      8px +
+      env(safe-area-inset-bottom, 0px) +
+      var(--corner-deck-clearance, 0px)
+    );
+  }
+}
+
+/* ── PROFILE LAYOUT — sticky side-nav + markdown editor sections ── */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.profile-nav {
+  position: sticky;
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-right: 1px solid var(--border);
+}
+.profile-nav__item {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition:
+    background var(--dur-quick) var(--ease-firm),
+    color var(--dur-quick) var(--ease-firm);
+}
+.profile-nav__item:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.profile-nav__item.is-active {
+  background: var(--accent-soft);
+  color: var(
+    --accent-cta
+  ); /* was --accent-text; --accent-cta #c9430f hits 4.65:1 on --accent-soft */
+  font-weight: 600;
+}
+.profile-nav__sep {
+  display: block;
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-2) var(--space-3);
+}
+.md-editor {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-form); /* was --border; form control uses --border-form for WCAG 3:1 */
+  border-radius: var(--radius);
+  background: var(--bg-paper);
+  color: var(--text);
+  resize: vertical;
+  line-height: 1.55;
+  transition: border-color var(--dur-fast);
+}
+.md-editor:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+@media (max-width: 1024px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .profile-nav {
+    position: sticky;
+    top: 56px;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-2);
+    white-space: nowrap;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .profile-nav__sep {
+    width: 1px;
+    height: auto;
+    margin: 0 var(--space-2);
+  }
+}
+
+/* ======================================================================
+   FORM-* — Shared form vocabulary used by Profile + Settings pages.
+   Replaces the old .profile-section/.field-* and .settings-section/.scan-*
+   class trees. New surfaces should use these classes.
+   ====================================================================== */
+/* Each form section is its own elevated card — same styling as the
+   analytics .funnel-card / .stat-card pattern (paper-tier --bg-paper
+   over the page canvas, --border outline, --radius rounded). Sections
+   read as discrete groups instead of a long form divided by hairlines.
+   :focus-within lifts the active section's border to --accent so the
+   user always knows which section they're editing (compound-control
+   group focus per Web Interface Guidelines). */
+.form-section {
+  padding: var(--space-5);
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--dur-quick) var(--ease-firm);
+}
+.form-section:focus-within {
+  border-color: var(--border-strong);
+}
+.form-section__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+.form-section__desc {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin: 0 0 var(--space-3);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+.form-grid--cols-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.form-grid--cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+/* Canonical 640px (was a rogue 720px — settings/profile forms collapsed to
+   one column 80px earlier than the rest of the app for no documented reason). */
+@media (max-width: 640px) {
+  .form-grid--cols-2,
+  .form-grid--cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-field--full {
+  grid-column: 1 / -1;
+}
+.form-field__label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.form-field__hint {
+  display: block;
+  /* Body font — helper text is prose, not code. Inline code tokens (config.yml,
+     env vars) inside hints should be wrapped in <code> for the mono treatment
+     locally rather than dragging the whole block to mono. */
+  font-family: var(--font-body);
+  font-size: 12px;
+  /* --text-2 (dark body-secondary tier) — chosen for legibility at 12px;
+     contrast ~12.7:1 vs the muted #626260 (~5.7:1) muted-tier alternative. */
+  color: var(--text-2);
+  line-height: 1.45;
+  margin-top: 4px;
+  /* break-anywhere kept so embedded code tokens (like "config.yml") still
+     wrap nicely on narrow columns. */
+  overflow-wrap: anywhere;
+}
+.form-field__hint code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  /* --surface-2 is the same warm cream as --bg in light mode, so the chip
+     was invisible. Use a darker chip + slightly darker text so inline code
+     reads as a distinct token rather than blending into the prose. */
+  background: color-mix(in oklab, var(--text), transparent 92%);
+  color: var(--text-2);
+  border-radius: var(--radius-xs);
+}
+.form-field__error {
+  font-size: 12px;
+  color: var(--st-danger);
+}
+
+.form-input,
+select.form-input,
+textarea.form-input {
+  background: var(--bg-paper);
+  border: 1px solid var(--border-form); /* was --border-strong; --border-form meets WCAG 3:1 UI component threshold */
+  border-radius: var(--radius);
+  padding: 10px 13px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--dur-quick) var(--ease-firm);
+  width: 100%;
+  box-sizing: border-box;
+}
+.form-input:focus {
+  border-color: var(--accent);
+  /* The single canonical focus ring (tokens.css). One treatment for every
+     input, on both mouse and keyboard focus — no separate :focus-visible
+     outline (that produced a double ring). */
+  box-shadow: var(--focus-ring);
+}
+/* Icon-prefixed input (opt-in `icon` prop on the Input primitive).
+   Icon is decorative; pointer-events off so clicks land in the field. */
+.form-input-iconwrap {
+  position: relative;
+  display: block;
+}
+.form-input-iconwrap__icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--border-form);
+  pointer-events: none;
+}
+.form-input-iconwrap__icon svg {
+  width: 15px;
+  height: 15px;
+}
+.form-input--with-icon {
+  padding-left: 36px;
+}
+/* E1 — invalid styling now driven by semantics, not just JS class.
+   :user-invalid fires after first blur, so empty required fields aren't
+   flagged before the user has a chance to type. aria-invalid="true"
+   covers the legacy JS path. */
+.form-input.is-invalid,
+.form-input[aria-invalid="true"],
+.form-input:user-invalid {
+  border-color: var(--st-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--st-danger) 14%, transparent);
+}
+/* R2 — soft persistent indicator that a field is required. 1px left bar
+   in the same hue as the asterisk, low alpha so it doesn't compete with
+   real validation errors. */
+.form-input[aria-required="true"] {
+  border-left: 2px solid color-mix(in srgb, var(--st-danger) 35%, transparent);
+}
+/* When the same input becomes actually invalid, the full red border
+   takes precedence — the soft indicator merges into the error tone
+   rather than stacking. */
+.form-input[aria-required="true"].is-invalid,
+.form-input[aria-required="true"][aria-invalid="true"],
+.form-input[aria-required="true"]:user-invalid {
+  border-left-color: var(--st-danger);
+}
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+textarea.form-input {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.55;
+}
+select.form-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%2375716b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.form-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  align-self: flex-start; /* don't stretch when nested in column flex parent */
+}
+.form-segmented__option {
+  /* WIG: bumped 30→36 so theme picker / seniority bias / etc. clear AA
+     touch-target on mobile + match .btn / .chip vertical alignment. */
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition:
+    background var(--dur-quick) var(--ease-firm),
+    color var(--dur-quick) var(--ease-firm);
+  text-transform: capitalize;
+}
+.form-segmented__option:hover {
+  color: var(--text);
+}
+.form-segmented__option.is-active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+:root[data-theme="dark"] .form-segmented__option.is-active {
+  box-shadow: var(--shadow-sm);
+}
+/* Dark-mode contrast: the resting (inactive) option text used --text-3
+   (#8a8a92 ≈ 4.96:1 on --surface #1c1c1f) — too close to the AA floor and
+   flagged at this 13px size. --text-3-strong lifts to #9a9aa6 (≈6.1:1) in
+   dark (and stays --text-3 in light) so the global --text-3 token stays put. */
+:root[data-theme="dark"] .form-segmented__option {
+  color: var(--text-3-strong);
+}
+:root[data-theme="dark"] .form-segmented__option:hover,
+:root[data-theme="dark"] .form-segmented__option.is-active {
+  color: var(--text);
+}
+
+.form-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.form-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.form-chip__remove {
+  /* Button reset — element is a <button> for keyboard accessibility but should
+     visually match the bare-× span it replaced. */
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 2px;
+  /* F24: WCAG 2.5.8 minimum target size (24×24) */
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.form-chip__remove:hover {
+  color: var(--score-low);
+}
+.form-chip-add {
+  /* Inherits from .form-input — apply both classes. */
+}
+
+.form-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.form-row .form-input,
+.form-row .row-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+.form-row__remove {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm);
+}
+.form-row__remove:hover {
+  color: var(--score-low);
+  border-color: var(--score-low);
+}
+.form-row__add {
+  align-self: flex-start;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm),
+    background var(--dur-quick) var(--ease-firm);
+}
+.form-row__add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* proof_point row — 2-line grid layout.
+   Line 1: name (2fr) | url (1fr) | remove button (auto)
+   Line 2: hero_metric spanning full width */
+.form-row--proof-point {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 8px;
+  align-items: center;
+}
+.form-row--proof-point .row-cell--name {
+  grid-column: 1;
+  grid-row: 1;
+}
+.form-row--proof-point .row-cell--url {
+  grid-column: 2;
+  grid-row: 1;
+}
+.form-row--proof-point .form-row__remove {
+  grid-column: 3;
+  grid-row: 1;
+}
+.form-row--proof-point .row-cell--metric {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+@media (max-width: 640px) {
+  /* proof_point: stack to single column on narrow widths (canonical 640px) */
+  .form-row--proof-point {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto auto;
+  }
+  .form-row--proof-point .row-cell--name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .form-row--proof-point .row-cell--url {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .form-row--proof-point .form-row__remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .form-row--proof-point .row-cell--metric {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 640px) {
+  /* .form-row is display:flex (not grid). On narrow widths let each cell
+     drop onto its own line so the row no longer forces horizontal scroll.
+     The remove button stays full-width as the last item, which is the
+     least-confusing target on touch. */
+  .form-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 0;
+  }
+  .form-row .form-input,
+  .form-row .row-cell {
+    flex: 1 1 100%;
+  }
+  .form-row__remove {
+    margin-left: auto;
+  }
+}
+
+/* Top-of-page status indicator — replaces the sticky save bar. */
+.form-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm),
+    background var(--dur-quick) var(--ease-firm);
+  cursor: default;
+}
+.form-status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background var(--dur-quick) var(--ease-firm);
+}
+.form-status.is-saving::before {
+  background: var(--accent);
+  animation: form-pulse 1s infinite;
+}
+.form-status.is-saved::before {
+  background: var(--st-success);
+}
+.form-status.is-failed {
+  color: var(--st-danger);
+  cursor: pointer;
+}
+.form-status.is-failed::before {
+  background: var(--st-danger);
+}
+@keyframes form-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Profile completeness pill — soft validation summary */
+.form-completeness {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-firm);
+}
+.form-completeness:hover {
+  background: var(--surface-2);
+}
+.form-completeness__bar {
+  width: 60px;
+  height: 4px;
+  border-radius: var(--radius-2xs);
+  background: var(--border);
+  overflow: hidden;
+}
+.form-completeness__fill {
+  height: 100%;
+  background: var(--st-success);
+  transition: width var(--dur-smooth) ease;
+}
+.form-completeness.is-incomplete .form-completeness__fill {
+  background: var(--st-warn);
+}
+.form-completeness.is-empty .form-completeness__fill {
+  background: var(--st-danger);
+}
+
+/* ── Motion primitives ── */
+
+/* Global skeleton primitive — used by every route's loading.tsx and any
+   in-component loading branches. This (.sk + the skPulse keyframe below) is
+   the canonical skeleton-animation reference for the app. Background uses
+   --border (not --surface) because --surface = #ffffff in light theme,
+   invisible against the white --bg-paper canvas. --border (#dedbd6 light /
+   #2a2a2e dark) is visibly distinct from --bg, --bg-paper, and --surface in
+   both themes. */
+.sk {
+  display: block;
+  background: var(--border);
+  border-radius: var(--radius-sm, 4px);
+  animation: skPulse var(--dur-loop) var(--ease-soft) infinite;
+}
+@keyframes skPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.hairline-progress {
+  position: relative;
+  height: 2px;
+  width: 100%;
+  background: var(--rule);
+  overflow: hidden;
+}
+.hairline-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: var(--accent);
+  border-radius: var(--radius-2xs);
+  animation: hairlineSlide var(--dur-loop) var(--ease-entrance) infinite;
+}
+@keyframes hairlineSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(385%);
+  }
+}
+
+.streaming-text::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 1.05s step-end infinite;
+}
+@keyframes cursorBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.entrance-stage > * {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: quietEntrance var(--dur-base) var(--ease-entrance) forwards;
+}
+.entrance-stage > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.entrance-stage > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+.entrance-stage > *:nth-child(3) {
+  animation-delay: var(--dur-fast);
+}
+.entrance-stage > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+.entrance-stage > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+.entrance-stage > *:nth-child(6) {
+  animation-delay: 300ms;
+}
+.entrance-stage > *:nth-child(7) {
+  animation-delay: 360ms;
+}
+.entrance-stage > *:nth-child(8) {
+  animation-delay: 420ms;
+}
+@keyframes quietEntrance {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.phase-flicker {
+  animation: phaseFlicker var(--dur-loop) ease-in-out infinite;
+}
+@keyframes phaseFlicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ── RADIX BEHAVIOR PRIMITIVES — generic classes consumed by
+   src/components/behavior/. Each set is a thin semantic layer over the
+   brand tokens that existing modals/menus/tabs migrate onto.
+   Keep additions minimal — heavy variants stay in feature stylesheets. */
+
+/* -- Dialog (modal-*) ------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  background: var(--scrim);
+  animation: overlayShow var(--dur-base) var(--ease-calm);
+}
+.modal-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--z-dialog) + 1);
+  width: min(480px, calc(100vw - var(--space-6)));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  animation: contentShow var(--dur-base) var(--ease-calm);
+}
+[data-theme="dark"] .modal-content {
+  background: var(--bg);
+}
+.modal-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.modal-description {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.modal-close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-calm),
+    background var(--dur-quick) var(--ease-calm);
+}
+.modal-close:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+/* Touch hit-area floor — the visible close button is 28×28, under the 44px
+   HIG/AAA floor. .modal-close is already position:absolute, so the overlay
+   grows the tap box around it without any layout/visual change. Coarse
+   pointers only; mouse users keep the exact 28px target. */
+@media (pointer: coarse) {
+  .modal-close::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+@keyframes overlayShow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes contentShow {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* -- Popover (popover-*) ---------------------------------------------- */
+.popover-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  z-index: var(--z-popover);
+  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
+}
+.popover-arrow {
+  fill: var(--border);
+}
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* -- DropdownMenu (menu-*) -------------------------------------------- */
+.menu-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  min-width: 180px;
+  z-index: var(--z-popover);
+  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 9px var(--space-3);
+  border-radius: var(--radius);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+.menu-item:hover {
+  /* Mouse hover only — color-mix tint visible in both themes. */
+  background: color-mix(in oklab, var(--surface), var(--text) 6%);
+}
+.menu-item[data-highlighted]:not(:hover) {
+  /* Keyboard navigation indicator — Radix sets data-highlighted on the
+     focused item (including the first item on auto-focus when the menu
+     opens). Show a subtle accent outline instead of a bg tint so the
+     menu doesn't visually announce a "selected" item to mouse-only users
+     who just opened the menu. */
+  outline: 1.5px solid color-mix(in oklab, var(--accent), transparent 30%);
+  outline-offset: -3px;
+}
+.menu-item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.menu-separator {
+  display: block;
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-1) 0;
+}
+.menu-label {
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* -- Select (select-*) -----------------------------------------------
+   Radix-backed <Select> primitive. Trigger reuses .form-input chrome so
+   it visually matches <Input>; the chevron + popup are custom so the
+   dropdown follows the app theme (light/dark) — native <select> popups
+   are OS-rendered and ignore CSS variables, which is the bug this fixes. */
+.select-trigger {
+  /* Inherits from .form-input — apply both classes. The flex container
+     here positions the chevron icon on the right and lets long values
+     truncate gracefully via min-width:0 on the value slot. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+  /* Match native <select> appearance: no inherited button outline. */
+  appearance: none;
+  -webkit-appearance: none;
+}
+.select-trigger[data-placeholder] .select-trigger__value {
+  color: var(--text-muted);
+}
+.select-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.select-trigger__value {
+  display: inline-block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-trigger__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  transition: transform var(--dur-quick) var(--ease-firm);
+}
+.select-trigger[data-state="open"] .select-trigger__icon {
+  transform: rotate(180deg);
+}
+
+.select-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  min-width: var(--radix-select-trigger-width, 180px);
+  max-height: var(--radix-select-content-available-height, 360px);
+  z-index: var(--z-popover);
+  overflow: hidden;
+  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
+}
+.select-viewport {
+  padding: 0;
+}
+.select-scroll-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: default;
+  user-select: none;
+}
+.select-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+/* Hover/keyboard-highlight: subtle orange highlight (matches the field
+   popovers — unified dropdown styling across the app). */
+.select-item:hover,
+.select-item[data-highlighted] {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  outline: none;
+}
+/* No selected-state styling — only hover/keyboard highlight (matches the
+   field popovers). The trigger shows the current value. */
+.select-item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Checkmark indicator removed in favor of the highlight. */
+.select-item__indicator {
+  display: none;
+}
+.select-label {
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.select-separator {
+  display: block;
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-1) 0;
+}
+
+/* -- Tabs (tabs-*) ---------------------------------------------------- */
+.tabs-list {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+.tabs-trigger {
+  flex: 1;
+  padding: var(--space-1) var(--space-3);
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-calm),
+    color var(--dur-quick) var(--ease-calm);
+  outline: none;
+}
+.tabs-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tabs-trigger:hover {
+  color: var(--text);
+}
+.tabs-trigger[data-state="active"] {
+  background: var(--bg-paper);
+  color: var(--text);
+  /* Same lifted-pill treatment as .form-segmented__option.is-active. */
+  box-shadow: var(--shadow-sm);
+}
+.tabs-content {
+  outline: none;
+}
+.tabs-content:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* -- Tooltip (tooltip-*) ---------------------------------------------- */
+.tooltip-content {
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
+  max-width: 260px;
+  z-index: var(--z-tooltip);
+  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
+}
+.tooltip-arrow {
+  fill: var(--text);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   PRIMITIVE COMPONENT CLASSES
+   Wraps generic chrome for primitives in src/components/primitives/.
+   Brand tokens only — no hardcoded colors.
+───────────────────────────────────────────────────────────────────── */
+
+/* Button size variants — base .btn defines md; sm/lg adjust height + padding */
+.btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+.btn-md {
+  /* default — matches base .btn at 36px */
+}
+.btn-lg {
+  height: 44px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+/* IconButton — square button optimized for icon-only triggers.
+   Canonical size 32x32 (sm=28, md=32, lg=40) — used by every ghost-icon
+   trigger across topbar, drawer, table row, kanban card, report header,
+   modal close, filter button.
+   Variants: default (transparent), subtle (surface bg), danger (warning tint).
+   Single source of truth: styles.css .icon-btn block deleted. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-firm),
+    color var(--dur-quick) var(--ease-firm),
+    border-color var(--dur-quick) var(--ease-firm);
+}
+.icon-btn:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.icon-btn:disabled,
+.icon-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.icon-btn svg {
+  /* 16x16 stroke matches drawer chevrons + report-header kebab so every
+     ghost-icon trigger renders at identical scale. */
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-btn--sm {
+  width: 28px;
+  height: 28px;
+}
+.icon-btn--lg {
+  width: 40px;
+  height: 40px;
+}
+.icon-btn--subtle {
+  background: var(--surface);
+}
+.icon-btn--danger {
+  color: var(--st-danger);
+}
+.icon-btn--danger:hover {
+  background: color-mix(in srgb, var(--st-danger) 8%, transparent);
+  color: var(--st-danger);
+}
+
+/* Ellipsis (⋯) glyph inside icon buttons — e.g. row-actions, board-card kebab. */
+.icon-ellipsis {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Card — generic surface container. Padding variants opt-in. */
+.card {
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.card--p-sm {
+  padding: var(--space-3);
+}
+.card--p-md {
+  padding: var(--space-4);
+}
+.card--p-lg {
+  padding: var(--space-5);
+}
+.card--interactive {
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-firm);
+}
+.card--interactive:hover {
+  border-color: var(--border-strong);
+}
+
+/* Separator — horizontal/vertical divider. */
+.separator {
+  border: 0;
+  background: var(--border);
+  height: 1px;
+  width: 100%;
+  margin: 0;
+}
+.separator--vertical {
+  width: 1px;
+  height: auto;
+  align-self: stretch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk,
+  .hairline-progress::after,
+  .streaming-text::after,
+  .entrance-stage > *,
+  .phase-flicker {
+    animation: none !important;
+  }
+  .entrance-stage > * {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── F12: dark-mode accent text safety ──────────────────────────────────
+   --accent (#ff5600) is 3.2:1 on dark --bg (#0a0a0b) — fails WCAG AA.
+   Swap accent-colored text to --accent-text-dark (#e86030 ≈ 4.6:1) in
+   dark mode only. Light-mode uses are left on --accent which passes
+   on the light canvas. F10 (.chip.active / .profile-nav__item.is-active)
+   is already handled above by the switch to --accent-cta.
+   ─────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] .form-row__add:hover {
+  color: var(--accent-text-dark);
+  border-color: var(--accent-text-dark);
+}
+:root[data-theme="dark"] .actions-menu__item.is-current {
+  color: var(--accent-text-dark);
+}

@@ -1,0 +1,976 @@
+/* ── Contained-scroll data-grid shell (Airtable/Linear/Notion) ──
+   The Offers route uses a CONTAINED scroll: the page chrome (Offers title,
+   count, search/filter bar — and the sticky topbar above the shell) stays
+   FIXED while the table scrolls horizontally AND vertically inside its own
+   viewport (.table-wrap). The shell fills the area below the sticky topbar
+   and clips overflow; the page-head + filter-bar are fixed-height flex
+   children and .table-wrap is the lone flex:1 scroller.
+
+   Scoped to `.offers-shell` so no other route's .page-head / .filter-bar /
+   .table-wrap layout is touched. */
+.offers-shell {
+  height: calc(100vh - var(--topbar-h));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* page-head + filter-bar are fixed-height chrome above the scroll viewport. */
+.offers-shell .page-head,
+.offers-shell .filter-bar {
+  flex: 0 0 auto;
+}
+
+/* Table View — spreadsheet-style density */
+.table-wrap {
+  /* Default (non-shell) context: no scroll container. Inside .offers-shell
+     this element becomes the contained scroll viewport (rule below). */
+  overflow: visible;
+  /* Horizontal-scroll "fog of war" (same affordance as the kanban .board-wrap):
+     fade whichever edge has table content scrolled out of view. use-scroll-edge-
+     fade toggles data-fade-left / data-fade-right; the fade widths default to 0
+     (no visible mask) until an edge actually has hidden content. */
+  --edge-l: 0px;
+  --edge-r: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) var(--edge-l),
+    rgba(0, 0, 0, 1) calc(100% - var(--edge-r)),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) var(--edge-l),
+    rgba(0, 0, 0, 1) calc(100% - var(--edge-r)),
+    transparent 100%
+  );
+}
+.table-wrap[data-fade-left="true"] {
+  --edge-l: 32px;
+}
+.table-wrap[data-fade-right="true"] {
+  --edge-r: 32px;
+}
+/* THE scroll viewport (both axes) inside the contained-scroll shell.
+   flex: 1 1 auto fills the height below page-head + filter-bar; min-height: 0
+   is REQUIRED so the flex child can shrink below its content and actually
+   scroll vertically (without it the wrap grows to fit all rows and the body
+   scrolls instead). The mask edge-fade above still applies. */
+.offers-shell .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+table.offers {
+  width: 100%;
+  /* Floor so every column stays readable; below this the .table-wrap scrolls
+     horizontally, above it the fixed layout fills 100% of the viewport. Sum of
+     the fixed columns (select 36 + # 76 + kebab 48 = 160) + the two date
+     columns' 132px floors + comfortable room for the 9 percentage columns. */
+  min-width: 1320px;
+  border-collapse: collapse;
+  font-size: 15px;
+  table-layout: fixed;
+  /* Paper tier — matches kanban .card. Same as --surface in light
+     (#fff), one tier below --surface in dark (#131315 vs #1c1c1f). */
+  background: var(--bg-paper);
+}
+table.offers thead th {
+  position: sticky;
+  /* Pin to the top of the .table-wrap scrollport — its top edge already sits
+     below the fixed page chrome (topbar + page-head + filter-bar), so the
+     header sticks at the scrollport's own origin as rows scroll under it. */
+  top: 0;
+  z-index: 5;
+  background: var(--surface);
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+/* Only sortable headers get the pointer/hover treatment */
+table.offers thead th[data-sort-key]:hover {
+  color: var(--text);
+}
+table.offers tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 90ms ease;
+  cursor: pointer;
+}
+table.offers tbody tr:hover {
+  /* Subtle darker tint vs the table's --surface rest state. Works in
+     both themes because --text flips. */
+  background: color-mix(in oklab, var(--surface), var(--text) 4%);
+}
+table.offers td {
+  padding: 14px 16px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  vertical-align: middle;
+}
+/* "Fog of war" truncation — clipped content fades its right edge instead of a
+   hard "…" ellipsis (mirrors the kanban .board-wrap mask). use-cell-clip-fade
+   toggles .is-clipped only on elements that actually overflow, so anything that
+   fits is untouched and card mode (which wraps, never clips) is unaffected
+   without needing a media gate. Two fade targets: the cell box itself, and the
+   company name — which clips inside its own flex item, not the td. */
+table.offers td.is-clipped,
+table.offers .cell-co__name.is-clipped {
+  mask-image: linear-gradient(to right, rgba(0, 0, 0, 1) calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) calc(100% - 24px),
+    transparent 100%
+  );
+}
+/* Skeleton row — placeholder shape during initial fetch. Mirrors td height
+   and column widths so the table doesn't reflow when real rows arrive.
+   Cell bars now use the global .sk primitive (defined in styles/chrome.css)
+   with display: inline-block and explicit widths via inline style. */
+.offers-skeleton-row td {
+  height: 52px;
+}
+/* Width budget assumes the rail eats ~56-200px so the article column is
+   ~1080-1224px on a 1280-1440px viewport. Total of these % must = 100 for
+   the visible columns at any breakpoint, and content has to fit at the
+   smallest breakpoint where the column is still shown. */
+.col-co {
+  width: 15%;
+  color: var(--text) !important;
+  font-weight: 500;
+  font-family: var(--font-display);
+}
+/* Company cell: small logo avatar + name. */
+.cell-co {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cell-co__name {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.tmk.company-mark {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+}
+.tmk.company-mark img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  /* Probed favicons mount after hydration (CompanyAvatar's /api/favicon
+     probe) — fade them in so hundreds of logos landing at once across the
+     table don't read as a hard pop. Deliberately scoped to the mass
+     surfaces (.tmk here, .cmk on the kanban): a single report-hero/drawer
+     avatar should appear instantly, not fade. */
+  animation: companyLogoIn var(--dur-base) var(--ease-calm);
+}
+@keyframes companyLogoIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tmk.company-mark img,
+  .cmk.company-mark img {
+    animation: none;
+  }
+}
+.tmk.company-mark::after {
+  width: 7px;
+  height: 7px;
+  border-top-left-radius: var(--radius-sm);
+}
+.col-role {
+  width: 18%;
+}
+.col-status {
+  width: 9%;
+}
+.col-score {
+  width: 7%;
+}
+.col-seniority {
+  width: 9%;
+}
+.col-mode {
+  width: 8%;
+}
+.col-comp {
+  width: 11%;
+  font-variant-numeric: tabular-nums;
+}
+.col-loc {
+  width: 9%;
+}
+.col-date,
+.col-posted {
+  width: 9%;
+  color: var(--text-3) !important;
+  font-variant-numeric: tabular-nums;
+  min-width: 132px;
+}
+/* Full ISO date (2026-06-06, tabular-nums) needs ~97px of content box. Under
+   table-layout: fixed the column width is driven by the .col-date percentage
+   (min-width on a td isn't reliably honored), and the inherited 16px+16px td
+   padding eats into the content box — so widen the column (width above) AND
+   trim the horizontal padding here so the date fits at the default (non-resized)
+   width instead of clipping to "2026-…". This selector matches the base
+   `table.offers td` specificity so the narrower padding actually wins. Columns
+   stay user-resizable for anyone who wants them tighter. */
+table.offers td.col-date,
+table.offers td.col-posted {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+/* The base `table.offers td` rule applies padding: 14px 16px — that 32px of
+   horizontal padding doesn't leave room for the kebab button inside a narrow
+   column, so override here. Width sized for the trigger + a comfortable gutter. */
+table.offers td.col-select,
+table.offers th.col-select {
+  width: 36px;
+  padding: 8px;
+  text-align: center;
+}
+.col-select input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+table.offers tbody tr[data-selected="true"] {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+table.offers td.col-kebab,
+table.offers th.col-kebab {
+  width: 48px;
+  padding: 8px 6px;
+  text-align: center;
+}
+/* .col-kebab .row-actions deleted — the row kebab now renders
+   <IconButton>, which inherits the .icon-btn (chrome.css) ghost-icon
+   treatment. Hit-box shrinks 44x44 → 32x32; the visual diff is
+   intentional to converge on the primitive. */
+.col-arch {
+  width: 10%;
+}
+/* ── Inline-edit / enum-pill cells ──
+   Score renders a bare tabular numeral tinted by level instead of a chip;
+   Seniority / Mode / Archetype are click-to-edit EnumPills, Comp / Location
+   are InlineTextEdits. The .inline-edit base style is global (report-hero.css). */
+.score-num {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.score-num.high {
+  color: var(--score-high);
+}
+.score-num.mid {
+  color: var(--score-mid);
+}
+.score-num.low {
+  color: var(--score-low);
+}
+/* Inherit the status .pill box metrics so cell chips match the status chip.
+   All enum cells share ONE neutral chip — work-mode is no longer value-tinted. */
+.offers .pill-enum {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.src-pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+/* ── Column-header click sort ── */
+/* No `position: relative` here: it would beat the base th's
+   `position: sticky` on specificity and unpin every sortable header
+   (only the unsortable select/kebab corners stayed pinned). The sticky
+   th is already a positioning context for the ::after chevron. */
+.offers thead th[data-sort-key] {
+  cursor: pointer;
+  user-select: none;
+}
+.offers thead th[data-sort-key]:hover {
+  background: var(--surface-2);
+}
+/* Absolute-positioned so a narrow column never wraps the header text under the chevron. */
+.offers thead th[data-sort-key] {
+  padding-right: 22px;
+}
+.offers thead th[data-sort-key]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text-3);
+  /* Visible at rest so users see the column is sortable; opaque + accent
+     when the sort is actually applied. */
+  opacity: 0.3;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--dur-fast) ease,
+    transform var(--dur-fast) ease,
+    border-top-color var(--dur-fast) ease;
+  pointer-events: none;
+}
+.offers thead th[data-sort-key]:hover::after {
+  opacity: 0.6;
+}
+.offers thead th[data-sort-key].sort-active::after {
+  opacity: 1;
+  border-top-color: var(--accent);
+}
+.offers thead th[data-sort-key].sort-active.sort-asc::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+@media (max-width: 640px) {
+  .offers thead th[data-sort-key] {
+    cursor: default;
+  }
+}
+
+/* ── Responsive (narrow-desktop) ──
+   1024-1380px: hide Location + Archetype (the two least-critical text
+   columns) so the remaining 7 columns get more breathing room without
+   collapsing to auto-layout. */
+@media (min-width: 1025px) and (max-width: 1380px) {
+  /* Narrow desktop: hide ONLY Location (col 9) — the most redundant column
+     (the city also shows in the drawer/report). Keep the new editable enum
+     columns (Seniority 7, Mode 10, Archetype 11) visible at common desktop
+     widths like 1280 — hiding them here defeats the point of the feature. */
+  .offers .col-loc {
+    display: none;
+  }
+  /* Rebalance the width budget for this tier. With the default percentages
+     Status pills ('Offer received' needs ~124px) and Comp ranges clipped in
+     every row at 1280 — the two core read-at-a-glance columns. Give Status +
+     Comp the room they need and take it from the long-text columns (Company /
+     Role / Archetype), which clip-fade gracefully by design. Percentages sum
+     to ~85% of the table so the px columns fit without proportional scaling:
+     select 36 + kebab 48 here, plus the # column's width — that one is set
+     as an INLINE style by the column-resize system (table-page.tsx, 76px
+     default), so it can't be budgeted from CSS. Measured against live data
+     at 1280×800 (status p95 box 135px, comp p50 box 138px, ISO date 97px
+     content). */
+  .offers .col-co {
+    width: 10%;
+  }
+  .offers .col-role {
+    width: 11.1%;
+  }
+  .offers .col-status {
+    width: 13.7%;
+  }
+  .offers .col-score {
+    width: 5.8%;
+  }
+  .offers .col-seniority {
+    width: 7.1%;
+  }
+  .offers .col-mode {
+    width: 6.5%;
+  }
+  .offers .col-arch {
+    width: 5.9%;
+  }
+  .offers .col-comp {
+    width: 13.8%;
+  }
+  .offers .col-date,
+  .offers .col-posted {
+    width: 8%;
+  }
+  /* Trim the 16px+16px td padding (same trick as td.col-date above) so the
+     widened columns spend their pixels on content, not gutter. */
+  table.offers td.col-status,
+  table.offers td.col-comp {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+/* ── Responsive (tablet) ──
+   ≤1024px: also drop fixed % widths and let the table size to content.
+   We keep Status + Score + Comp + Date visible. */
+@media (max-width: 1024px) {
+  /* Hide by class (position-independent — covers th + td regardless of
+     column order). */
+  .offers .col-seniority,
+  .offers .col-loc,
+  .offers .col-mode,
+  .offers .col-arch {
+    display: none;
+  }
+  .offers .col-co,
+  .offers .col-role,
+  .offers .col-status,
+  .offers .col-score,
+  .offers .col-comp,
+  .offers .col-date,
+  .offers .col-posted {
+    width: auto;
+  }
+  table.offers {
+    table-layout: auto;
+  }
+}
+.offers-row {
+  cursor: pointer;
+}
+/* Row focus. The row is tabIndex=0, so a click/keyboard focus otherwise paints
+   the browser's default focus outline (a harsh blue rectangle around the row).
+   Replace it with a neutral grey wash (matching the selected-row tint, not the
+   brand accent — the accent tint read pink/orange over the warm surface);
+   keyboard focus additionally keeps an accessible inset ring. */
+.offers-row:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.offers-row:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: -2px;
+}
+.offers-num {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.offers-empty-cell {
+  padding: 32px 24px;
+  color: var(--text-3);
+  text-align: center;
+  /* Match row surface so the empty-state cell doesn't blink to canvas
+     color between the header and the (absent) row body. */
+  background: var(--surface);
+}
+.offers-empty-cell .btn {
+  margin-top: 4px;
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:hover {
+  color: var(--text);
+}
+.link-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-2xs);
+}
+
+/* ── Responsive (phone): table collapses to card list ── */
+@media (max-width: 640px) {
+  /* Hide thead and the # / date columns entirely (card layout renders its
+     own date line). */
+  .offers thead {
+    display: none;
+  }
+  .offers .col-date,
+  .offers .col-posted,
+  .offers tbody td.col-num {
+    display: none;
+  }
+
+  /* Each row becomes a card */
+  .offers,
+  .offers tbody,
+  .offers tr {
+    display: block;
+    width: 100%;
+  }
+  /* Drop the desktop horizontal-scroll floor: cards lay out at the wrap's
+     width and scroll only vertically (no horizontal scroll on phones). */
+  table.offers {
+    min-width: 0;
+  }
+  .offers tbody tr {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-paper);
+    padding: 14px 56px 14px 48px; /* room for absolute checkbox left + kebab right */
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .offers tbody tr:hover {
+    background: var(--bg-paper);
+  }
+
+  /* Checkbox: pinned top-left of card */
+  .offers tbody td.col-select {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    width: auto;
+    padding: 0;
+  }
+  /* Kebab: pinned top-right of card */
+  .offers tbody td.col-kebab {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: auto;
+    padding: 0;
+  }
+
+  /* Cells become block-level pieces of the card.
+     Reset table-cell width / nowrap / ellipsis from base .offers td rule
+     (line 28) so card content reads at full width and wraps naturally. */
+  .offers tbody td {
+    display: block;
+    border: none;
+    padding: 0;
+    line-height: 1.4;
+    width: auto;
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  /* Company (col 2): card title */
+  .offers tbody td.col-co {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  /* Role (col 3): card subtitle */
+  .offers tbody td.col-role {
+    font-size: 13px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+  /* Status / Score / Comp: chip row (inline-block so they sit side-by-side).
+     vertical-align: middle so the smaller status pill + larger score numeral
+     share a common centre line instead of sitting on the text baseline. */
+  .offers tbody td.col-status,
+  .offers tbody td.col-score,
+  .offers tbody td.col-comp {
+    display: inline-block;
+    width: auto;
+    margin-right: 8px;
+    margin-top: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  /* Score is the headline metric — give the numeral real weight so it reads
+     bigger than the status chip (the chip was visually dominating it). */
+  .offers tbody td.col-score .score-num {
+    font-size: 18px;
+    line-height: 1;
+  }
+  /* Trim the status chip so it stops looking oversized next to the numeral. */
+  .offers tbody td.col-status .pill {
+    font-size: 11px;
+    padding: 2px 9px;
+  }
+  /* The interactive variant reserves right padding for its chevron
+     (.drawer-status-trigger::after at right: 8px, chrome.css) — the trim
+     above flattened it to 9px, leaving the chevron on top of the label's
+     last letters. */
+  .offers tbody td.col-status .pill.drawer-status-trigger {
+    padding-right: 22px;
+  }
+  /* Touch hit-area floor for the trimmed pill — it's an interactive popover
+     trigger (StatusPill, 32px tall after chrome.css's ≤640px min-height
+     bump). Grow the tap box to ≥44px via an invisible overlay so the visual
+     chip stays dense. ::before, NOT ::after — ::after is the trigger's
+     chevron (chrome.css .drawer-status-trigger::after). Vertical neighbours
+     (role subtitle above, comp text below) are non-interactive; the ring it
+     steals from the card's row-tap is the standard inset-target trade-off.
+     Coarse pointers only — mouse users keep the exact pixel target. */
+  @media (pointer: coarse) {
+    .offers tbody td.col-status .pill {
+      position: relative;
+    }
+    .offers tbody td.col-status .pill::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      right: -6px;
+      top: -6px;
+      bottom: -6px;
+    }
+  }
+  /* Hide Seniority + Location + Mode + Archetype on phone too (card layout
+     surfaces only Status/Score/Comp as the chip row). */
+  .offers tbody td.col-seniority,
+  .offers tbody td.col-loc,
+  .offers tbody td.col-mode,
+  .offers tbody td.col-arch {
+    display: none;
+  }
+}
+
+/* ===== Filter panel — matches brand book (board-drawer.css):
+   font-display sentence-case eyebrows, ghost-icon close (mirrors
+   .icon-btn 32×32), .cd-foot stretched buttons, 280ms cubic-bezier
+   slide motion. ===== */
+.filter-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(420px, 92vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-drawer);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translate3d(100%, 0, 0);
+  transition: transform var(--dur-sheet) var(--ease-calm);
+  /* Above .rail (--z-rail) and .rail-tooltip (--z-rail-tooltip) so the
+     panel covers the side nav like it covers the table/kanban body. Stays
+     below the offer drawer (--z-drawer) which should still layer on top
+     if both open. */
+  z-index: calc(var(--z-scrim) + 1);
+  visibility: hidden;
+  pointer-events: none;
+}
+.filter-panel.open {
+  transform: translate3d(0, 0, 0);
+  visibility: visible;
+  pointer-events: auto;
+}
+/* Dark side-peek shadow now flows from --shadow-drawer (tokens.css). */
+.filter-panel__handle {
+  display: none;
+}
+
+/* Header — mirrors .cd-head: 56px, eyebrow label in font-display sentence-case. */
+.filter-panel__header {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.filter-panel__title {
+  margin: 0;
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+/* Close button — mirrors .icon-btn (32×32 with surface-2 hover). */
+.filter-panel__close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.filter-panel__close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.filter-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 24px;
+}
+
+/* Footer — mirrors .cd-foot: gap 10px, buttons stretch. */
+.filter-panel__footer {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.filter-panel__footer .btn {
+  flex: 1;
+}
+
+/* Section heads — brand book: font-display sentence-case, muted. NO uppercase, NO tracking. */
+.fp-section {
+  margin-bottom: 24px;
+}
+.fp-section h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  text-transform: none;
+}
+.fp-radios,
+.fp-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fp-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.fp-radios label,
+.fp-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  min-height: 28px;
+  cursor: pointer;
+  color: var(--text);
+}
+/* Native range/radio/checkbox styling lives globally in chrome.css under
+   "BRAND FORM CONTROLS". Filter panel only adds layout, not control chrome. */
+.fp-range {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fp-range label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.fp-range input[type="range"] {
+  flex: 1;
+}
+.fp-range output {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  min-width: 32px;
+  text-align: right;
+  font-size: 12px;
+}
+.fp-sort-dir {
+  margin-top: 10px;
+  padding: 6px 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+.fp-sort-dir:hover {
+  background: var(--surface-2);
+}
+
+.filter-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-sheet) var(--ease-calm);
+  /* Sits between the rail-tooltip layer (60) and the panel itself (66) so
+     it scrims the side rail too — fixes a bug where only the body got
+     dimmed while .rail (z=50) stayed at full opacity. */
+  z-index: var(--z-scrim);
+}
+.filter-panel__backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Phone bottom-sheet at the canonical 640px (was a rogue 767px — tablets
+   641–767px now keep the side-drawer form like the rest of the app). */
+@media (max-width: 640px) {
+  .filter-panel {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 70vh;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0; /* mobile bottom-sheet — top corners only, intentionally above token scale */
+    box-shadow: var(--shadow-sheet);
+    transform: translateY(100%);
+  }
+  .filter-panel.open {
+    transform: translateY(0);
+  }
+  .filter-panel__handle {
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 0;
+    background: var(--border);
+    border-radius: var(--radius-2xs);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel,
+  .filter-panel__backdrop {
+    transition: none;
+  }
+}
+
+.active-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.active-pills:empty {
+  display: none;
+}
+
+/* ── Resizable columns ── */
+/* Always-visible thin divider so users discover the grip; the hit-target
+   is wider than the visible bar (via the ::before overlay below). */
+.col-resize {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border);
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  transition:
+    background var(--dur-fast) ease,
+    width var(--dur-fast) ease;
+}
+.col-resize::before {
+  /* Wider invisible hit zone, so users can grab without pixel-perfect aim. */
+  content: "";
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -5px;
+  right: -5px;
+}
+.col-resize:hover,
+.col-resize.dragging {
+  background: var(--text-3);
+  width: 2px;
+}
+
+/* Hide handles only when the table fully collapses to cards. */
+@media (max-width: 640px) {
+  .col-resize {
+    display: none;
+  }
+}
+
+/* Status pill click affordance now lives on .drawer-status-trigger in
+   chrome.css (V3) — chevron + hover tint applied app-wide. */
+
+/* ===== Actions menu (dropdown attached to "+" trigger) ===== */
+.actions-trigger {
+  gap: 4px;
+}
+.actions-trigger.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.actions-trigger__plus {
+  line-height: 1;
+}
+.actions-trigger__chev {
+  transition: transform var(--dur-fast) ease;
+}
+.actions-trigger[aria-expanded="true"] .actions-trigger__chev {
+  transform: rotate(180deg);
+}
+
+/* actions-menu chrome lives in chrome.css (shared with pipeline.html, analytics.html). */
+
+/* ===== Add-offer URL modal =====
+   Styles live in pipeline-inline.css (single source). This file previously
+   carried a verbatim duplicate of the whole block; both stylesheets are
+   imported app-wide via globals.css, so the second copy was dead weight
+   and a drift hazard. Consumer: src/components/modals/screen-modal.tsx. */
+
+/* ===== Windowed rendering (large-offer-sets design, 2026-06-10) ===== */
+/* Rows are virtualized (use-table-virtualizer.ts) against the .table-wrap
+   inner scroll container (contained data-grid layout): the page chrome stays
+   fixed, the table scrolls both axes inside .table-wrap, and the <thead>
+   sticks to the scrollport top (top: 0). See the .offers-shell /
+   .table-wrap rules at the top of this file. */
+
+/* Spacer rows stand in for unmounted rows above/below the virtualizer's
+   window, preserving scrollbar geometry. They are inert: no border, no
+   hover tint, no pointer affordance — their only property is the inline
+   height the virtualizer computes. */
+table.offers tbody tr.virt-spacer,
+table.offers tbody tr.virt-spacer:hover {
+  border-bottom: 0;
+  cursor: default;
+  background: none;
+}
+table.offers tbody tr.virt-spacer td {
+  padding: 0;
+  border: 0;
+}
+@media (max-width: 640px) {
+  /* Card mode turns rows into bordered, padded blocks — reset all of that
+     on the spacers so they contribute height and nothing else. */
+  .offers tbody tr.virt-spacer {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    cursor: default;
+  }
+}

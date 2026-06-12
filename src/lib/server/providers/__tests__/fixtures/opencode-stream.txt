@@ -1,0 +1,6 @@
+Loading model anthropic/claude-3-haiku
+[run] starting...
+Tool call: shell { command: "curl example.com" }
+Tool result: <200 bytes>
+Wrote artifacts/reports/042-otter-2026-05-25.md
+[run] done

@@ -1,0 +1,54 @@
+# inputs/config/config.yml — How the tool behaves. Edit via the web Settings page
+# (http://127.0.0.1:3000/settings.html) or directly here.
+# Gitignored — copy from content/examples/config.yml to start.
+
+appearance:
+  theme: system # value-list: light | dark | system
+
+screening:
+  smoke_test_limit: 0 # 0 = unlimited. Set >0 to cap a screening run for testing.
+
+# ── SCAN PARAMETERS ─────────────────────────────────────────────
+# Crawler + filtering knobs. What roles you target (terms, locations) lives
+# in inputs/personalization/profile.yml under `search.terms` / `search.locations`.
+scanning:
+  jobspy:
+    # Scans LinkedIn (the only reliable JobSpy board).
+    hours_old: 168 # Only return offers posted in the last N hours
+    results_wanted: 1000 # Max offers per scan run
+  title_filter:
+    positive: [] # Title MUST contain at least one (case-insensitive)
+    negative: [] # Title MUST NOT contain any of these
+    seniority_boost: [] # Soft preference — used for ranking, not filtering
+  schedule:
+    enabled: false # Set true to enable automatic portal scans
+    cron: "0 9 * * *" # When to scan — standard 5-field cron (daily at 09:00)
+    catch_up_hours: 24 # Run a missed scan on restart if miss is < N hours old; 0 = never catch up
+
+# ── PROVIDERS — model picks for scripted runs ───────────────────
+# Interactive modes (auto-pipeline, interview-prep, etc.) use your Claude
+# Code session model regardless of what's set here.
+providers:
+  default_provider: claude
+  default_model: claude-sonnet-4-6
+  modes:
+    screen:
+      platform: claude
+      model: claude-haiku-4-5-20251001 # Used by Scan to rate every URL
+    batch-evaluate:
+      platform: claude
+      model: claude-sonnet-4-6 # Used by Batch evaluate (full eval on survivors)
+
+# ── SYSTEM — update / deployment settings ───────────────────────
+system:
+  update_source: "https://github.com/arspesk/sur9e.git"
+  update_branch: main
+
+# ── ADVANCED — change these only if you understand the impact. ──
+advanced:
+  # Offers scoring below this threshold (0-5) write compact screening notes
+  # instead of full mini-reports, auto-flip to Discarded on tracker merge,
+  # and are skipped by Batch Evaluate. 0 = disabled.
+  score_threshold: 3
+  parallel_workers: 8 # Concurrent screening workers per Scan run (each is a full CLI process; raise with care).
+  timeout_ms: 180000 # Per-URL screening worker timeout.

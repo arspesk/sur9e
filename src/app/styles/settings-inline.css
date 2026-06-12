@@ -1,0 +1,506 @@
+/* settings-inline.css — verbatim port of the settings.html inline <style>
+   block (lines 17-91). The shared toc-rail rules ship from the sibling
+   toc-rail.css that another agent extracted; this file only owns the
+   Settings-page-specific rules. */
+
+/* ────────────────────────────────────────────────────────────────────
+   Settings page — extracted from public/settings.html inline <style>.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* TOC rail anchor inherits the toc-rail.css default (200px) so the rail sits
+   at the same y on profile, settings, and report — keeps visual continuity
+   when navigating between them. */
+.settings-content {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+}
+.settings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.settings-subsection {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--border);
+  margin-top: var(--space-3);
+}
+.settings-subsection:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+.settings-subsection__title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 0 0 var(--space-3);
+}
+.models-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.models-note {
+  /* Body — prose note. Inline <code> elements inside get a visible chip
+     via the .models-note code rule below. Text uses --text-2 for dark-gray
+     legibility (same tier as .form-field__hint). */
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+  margin: 0 0 var(--space-4);
+  line-height: 1.55;
+}
+.models-note code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  background: color-mix(in oklab, var(--text), transparent 92%);
+  color: var(--text-2);
+  border-radius: var(--radius-xs);
+}
+/* At desktop, leave room on the right for the fixed .toc-indicator-host
+   so it doesn't overlap the content. Rail lives at right:24px and is
+   ~48px wide, so we reserve ~80px of right gutter. Apply to both the
+   page-head (page title sits in here) and the form container. Below
+   1024px the rail is hidden, so we drop back to default padding. */
+@media (min-width: 1025px) {
+  .settings-content {
+    padding-right: 88px;
+    padding-left: var(--space-6);
+  }
+  body[data-screen-label="Settings"] .page-head {
+    padding-right: 88px;
+  }
+}
+.settings-content .form-section[id] {
+  scroll-margin-top: 80px;
+}
+/* Invisible anchor aliases for retired deep links (#filtering and
+   #screening-perf now live inside #screening). Zero-size so layout is
+   untouched; same scroll-margin as a section anchor so jumps clear the
+   sticky topbar. */
+.settings-anchor-alias {
+  display: block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  scroll-margin-top: 80px;
+}
+/* Mobile-only theme row — the rail (which hosts the theme switcher at
+   wider widths) is hidden ≤640px, so Settings keeps a compact equivalent
+   between the page head and the form. */
+.settings-theme-row {
+  display: none;
+}
+@media (max-width: 640px) {
+  .settings-theme-row {
+    /* Label above the switch — matches the form's label-over-control rhythm. */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0 auto;
+    width: 100%;
+    max-width: 880px;
+    padding: 0 var(--space-4);
+  }
+  .settings-theme-row__label {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .settings-anchor-alias {
+    scroll-margin-top: 64px;
+  }
+}
+/* Settings section nav — mirrors .profile-nav pattern. Desktop hides this
+   in favor of the shared TOC rail (.toc-indicator-host); below 1024px the
+   rail is hidden and this in-flow horizontal scroller takes over so users
+   can jump between Theme / Search / Models / etc. without scrolling
+   through 9 sections of form fields. */
+/* In-flow horizontal scroller retired — at ≤1024px section nav now flows
+   through the shared .section-pill burger + #tocSheet bottom-sheet, same
+   pattern as Profile + the Offer Report. The markup stays in the DOM but
+   is hidden everywhere so the page renders cleanly. */
+.settings-nav {
+  display: none;
+}
+.settings-nav__item {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-3);
+  text-decoration: none;
+  flex-shrink: 0;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    background var(--dur-quick) var(--ease-firm);
+}
+.settings-nav__item:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.settings-nav__item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.settings-nav__sep {
+  width: 1px;
+  height: auto;
+  margin: 0 var(--space-2);
+  background: var(--border);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.settings-link {
+  color: var(--accent-text);
+  /* axe link-in-text-block: links inside settings copy must be
+     distinguishable from surrounding text by more than color alone. */
+  text-decoration: underline;
+}
+.settings-link:hover {
+  text-decoration: underline;
+}
+.form-field--space {
+  margin-top: var(--space-3);
+}
+/* (The former .settings-advanced-divider rules were removed when the
+   Filtering + Performance sections merged into #screening — the divider
+   no longer separated anything.) */
+/* Scan-source enable toggle (ATS / JobSpy) — give it breathing room below so
+   the toggle doesn't crowd the company manager / tuning fields beneath it. */
+.source-toggle {
+  padding-bottom: var(--space-4);
+}
+/* ── Scheduled scans sub-block ──────────────────────────────────────────── */
+/* Enable toggle — native checkbox + label inline pair. */
+.schedule-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.schedule-toggle__input {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.schedule-toggle__label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.schedule-toggle__input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+/* Queue-status panel — pending count + last-scan time (read-only). */
+.scan-status {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.scan-status__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scan-status__num {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text);
+}
+.scan-status__label {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.scan-status__val {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  color: var(--text);
+}
+/* Queue actions (screen pending / clear queue) — pushed to the right of the
+   stats on desktop, wrap below them when the panel is narrow. */
+.scan-status__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* Next-run preview */
+.schedule-next-run {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 var(--space-2);
+  line-height: 1.45;
+}
+.schedule-next-run strong {
+  font-weight: 600;
+  color: var(--text);
+}
+/* Last-run status */
+.schedule-last-run {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 var(--space-2);
+  line-height: 1.45;
+}
+.schedule-last-run strong {
+  font-weight: 600;
+  color: var(--text);
+}
+/* Honesty note — same treatment as .models-note */
+.schedule-honesty-note {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+  margin: var(--space-2) 0 0;
+  line-height: 1.55;
+}
+
+/* ── ATS portals section ────────────────────────────────────────────────── */
+/* Company manager wrapper — de-emphasized (but still editable) while the
+   ATS source toggle above it is off, so users can curate the list before
+   re-enabling the scan. */
+.portal-manager--dimmed {
+  opacity: 0.55;
+  transition: opacity var(--dur-quick) ease;
+}
+/* Summary counts line under the section description. */
+.portal-summary {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 var(--space-3);
+}
+.portal-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.portal-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+}
+.portal-row--open {
+  border-color: var(--accent);
+}
+.portal-row--disabled .portal-row__name,
+.portal-row--disabled .portal-row__host,
+.portal-row--disabled .portal-row__pill {
+  opacity: 0.55;
+}
+.portal-row__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+.portal-row__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.portal-row__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.portal-row__nofeed {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* Custom-parser companies aren't a built-in ATS — tint the badge (border is
+   currentColor) so it reads as a distinct, user-supplied feed rather than one
+   of the named providers. */
+.portal-row__pill--custom {
+  color: var(--accent);
+}
+.portal-row__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  min-width: 0;
+}
+.portal-row__host {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.portal-row__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color var(--dur-quick) var(--ease-firm),
+    transform var(--dur-quick) var(--ease-firm);
+}
+.portal-row__expand svg {
+  width: 16px;
+  height: 16px;
+}
+.portal-row__expand:hover {
+  color: var(--text);
+}
+.portal-row--open .portal-row__expand svg {
+  transform: rotate(180deg);
+}
+.portal-row__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px dashed var(--border);
+}
+.portal-row__warning {
+  color: var(--st-warn);
+}
+.portal-row__nofeed-note {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--st-warn);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+  margin: 0;
+  line-height: 1.55;
+}
+/* Smart-add composer — label, then an input + Add-button row, then helper.
+   Stacking the label above its own row (rather than beside the button) lets
+   the button match the input height exactly via align-items: stretch — no
+   magic margin-top tied to the label's height. */
+.portal-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.portal-composer__row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.portal-composer__row .form-input {
+  flex: 1;
+  min-width: 0;
+}
+.portal-composer__add {
+  flex-shrink: 0;
+}
+/* Empty state — explains the scanner, hosts the composer + import action. */
+.portal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+}
+.portal-empty__copy {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+  line-height: 1.55;
+}
+.portal-empty .portal-composer {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .settings-content {
+    padding: var(--space-4);
+  }
+  .models-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-content .form-section[id] {
+    scroll-margin-top: 64px;
+  }
+  /* Rows wrap to two lines: toggle+name+pill / host+actions. */
+  .portal-row__meta {
+    flex-basis: 100%;
+    margin-left: 0;
+    /* Indent under the name so the toggle column stays visually clean. */
+    padding-left: calc(15px + var(--space-2));
+  }
+  .portal-row__host {
+    flex: 1;
+  }
+  /* Composer row stacks: input above a full-width Add button. */
+  .portal-composer__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

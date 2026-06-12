@@ -1,0 +1,485 @@
+/* =====================================================================
+   Sur9e — Loading modal deck (Brand book §04 spec)
+   380px floating deck of job-progress cards (bottom-right). One card
+   per in-flight job; newest in front, older cards peek above it.
+   Cross-page persistent via sessionStorage (list of active jobs).
+====================================================================== */
+
+/* ── Deck container — viewport anchor, no visual chrome ── */
+#loading-modal-deck {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  z-index: var(--z-modal);
+  /* Allow peeking cards to overflow upward without clipping. */
+  overflow: visible;
+}
+
+/* Pages with a floating .action-bar (report.html etc.) need the deck lifted
+   above it so cards don't cover the toolbar buttons.
+   Action-bar default bottom: 28px, height ~50px → top ~78px. Lift to 90px. */
+body:has(.action-bar) #loading-modal-deck {
+  bottom: 90px;
+}
+
+/* Mobile (≤640px): no rail offset; switch to full-width-minus-margins and
+   lift to clear both the .bottom-bar (mobile-only, 64px) and .action-bar.
+   640px (canonical), not 768px: the bottom-bar/action-bar lifts bake in the
+   heights of bars that only render ≤640px — at 641–768px the deck floated
+   76px above an invisible bar. */
+@media (max-width: 640px) {
+  #loading-modal-deck {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.action-bar) #loading-modal-deck {
+    bottom: calc(138px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.bottom-bar):not(:has(.action-bar)) #loading-modal-deck {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Batch-action bar open (rows selected): the bar sits at bottom 64+8px,
+     ~50px tall, z-index --z-bottom-bar+5 — ABOVE the deck's --z-modal, so
+     without this lift the in-flight job card hides behind it. Same
+     specificity as the .bottom-bar rule above; last-wins when both match. */
+  body:has(.batch-action-bar.on) #loading-modal-deck {
+    bottom: calc(64px + 8px + 50px + 8px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ── Card chrome ── */
+.loading-modal-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text);
+  animation: loadingSlideIn var(--dur-sheet) var(--ease-calm);
+  transition:
+    transform var(--dur-quick) var(--ease-firm),
+    opacity var(--dur-quick) var(--ease-firm);
+}
+
+/* Behind-cards: collapsed to their header strip and stacked above the
+   front card's top edge, slightly tucked under it — a deck of title bars.
+   --depth: 0 = front, 1 = first card behind, … */
+.loading-modal-card[data-front="false"] {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + (var(--depth) - 1) * 42px - 10px);
+  width: 100%;
+  transform: scale(calc(1 - var(--depth) * 0.03));
+  transform-origin: bottom right;
+  z-index: calc(-1 * var(--depth));
+  cursor: pointer;
+  filter: brightness(0.97);
+}
+/* Behind-cards collapse to the header strip; the aside itself owns the
+   click (bring-to-front) — children must not swallow it into their own
+   handlers (e.g. the header's collapse toggle). */
+.loading-modal-card[data-front="false"] .loading-modal__body {
+  display: none;
+}
+.loading-modal-card[data-front="false"] * {
+  pointer-events: none;
+}
+/* Visible-stack cap: only the front card + 2 peeking strips render; deeper
+   cards stay MOUNTED (their /api/jobs polling must continue) but hidden —
+   the header nav arrows page through them. */
+.loading-modal-card[data-overflow="true"] {
+  display: none;
+}
+
+@keyframes loadingSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Progress bar ── */
+.loading-modal__progress {
+  position: relative;
+  height: 2px;
+  width: 100%;
+  background: var(--rule);
+  overflow: hidden;
+}
+.loading-modal__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  width: 0%;
+  transition:
+    width var(--dur-deliberate) var(--ease-entrance),
+    background var(--dur-base);
+  border-radius: var(--radius-2xs);
+}
+.loading-modal__progress-fill.is-done {
+  background: var(--st-success);
+  width: 100%;
+}
+.loading-modal__progress-fill.is-error {
+  background: var(--st-danger);
+}
+
+/* ── Header row ── */
+/* The header row hosts the collapse-toggle button + dismiss button as
+   siblings (a11y fix #26 made the collapse toggle a real <button> instead
+   of a nested div, so the dismiss button moved out to sit beside it). */
+.loading-modal__header-row {
+  display: flex;
+  /* Center the 24px dismiss button against the taller header button so the ×
+     lines up with the title / elapsed time instead of pinning to the top. */
+  align-items: center;
+}
+.loading-modal__header {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.loading-modal__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Loader circle — the live "working" mark riding with the funny prompt.
+   It SPINS (a static arc reads as broken) but has no opacity animation
+   of its own: the parent .loading-modal__funny pulse fades icon + text
+   as one unit, perfectly in sync. */
+.loading-modal__spinner {
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+  animation: loadingSpinnerRotate 1s linear infinite;
+}
+@keyframes loadingSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loading-modal__icon-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--st-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-on);
+  font-size: 9px;
+  font-weight: 700;
+}
+.loading-modal__icon-error {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--st-danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-on);
+  font-size: 9px;
+  font-weight: 700;
+}
+.loading-modal__title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.loading-modal__title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.loading-modal__sub {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.loading-modal__elapsed {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* (Collapse chevron removed — the whole header row is the toggle.) */
+/* Deck nav — ‹ 2/5 › cluster between the header button and the × */
+.loading-modal__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.loading-modal__nav-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0;
+}
+.loading-modal__nav-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.loading-modal__nav-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.loading-modal__nav-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.loading-modal__close {
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.loading-modal__close:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.loading-modal__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The HTML5 `hidden` attribute applies UA-style display:none, but our
+   __actions / __body have explicit display rules that win over UA defaults.
+   Re-state the hide so [hidden]=true actually disables them. */
+.loading-modal__actions[hidden],
+.loading-modal__sub[hidden],
+.loading-modal__body[hidden] {
+  display: none !important;
+}
+
+.loading-modal__body {
+  display: block;
+}
+.loading-modal-card[data-collapsed="true"] .loading-modal__body {
+  display: none;
+}
+
+/* ── Funny prompt (replaces phase checklist) ──
+   Accent-colored + opacity-pulsing so it reads as the live "working"
+   indicator. Sits tight under the header row (no min-height / top padding
+   — the old 38px reservation produced a dead band above the line). */
+.loading-modal__funny {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--accent-text, var(--accent));
+  padding: 0 16px 12px;
+  font-style: italic;
+  animation: loadingFunnyPulse 1.8s ease-in-out infinite;
+}
+/* The spinner rides WITH the prompt line (moved out of the header). */
+.loading-modal__funny .loading-modal__spinner {
+  flex-shrink: 0;
+}
+/* Inline variant — the collapsed card's header sub-line. Same accent +
+   pulse + spinner as the expanded body, compacted to fit under the title. */
+.loading-modal__funny--inline {
+  padding: 0;
+  font-size: 12px;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.loading-modal__funny--inline .loading-modal__spinner {
+  width: 12px;
+  height: 12px;
+}
+@keyframes loadingFunnyPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ── Fallback-retry note ──
+   Muted footnote under the body when the runner re-stamped the job onto its
+   fallback provider/model. Reuses --text-3 (the same muted token as the sub
+   line / elapsed time) and the body's 16px horizontal inset; wraps freely so
+   long provider·model pairs never overflow the 380px card. */
+.loading-modal__fallback {
+  margin: 0;
+  padding: 0 16px 12px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-3);
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+}
+
+/* ── Actions ── */
+.loading-modal__actions {
+  padding: 0 16px 14px;
+  display: flex;
+  gap: 8px;
+}
+.loading-modal__action-primary {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 0;
+  background: var(--accent-cta);
+  color: var(--accent-on);
+  cursor: pointer;
+  flex: 1;
+}
+.loading-modal__action-primary:hover {
+  background: var(--accent-cta-hover);
+}
+/* F20–F22: focus rings for interactive loading-modal elements */
+.loading-modal__header:focus-visible,
+.loading-modal__logs-toggle:focus-visible,
+.loading-modal__action-primary:focus-visible,
+.loading-modal__action-secondary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.loading-modal__action-secondary {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.loading-modal__action-secondary:hover {
+  background: var(--surface-2);
+}
+
+/* ── Logs ── */
+.loading-modal__logs-toggle {
+  border-top: 1px solid var(--border);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.loading-modal__logs-toggle:hover {
+  color: var(--text-2);
+}
+.loading-modal-card[data-logs-open="true"] .loading-modal__logs-toggle {
+  color: var(--accent-text);
+}
+.loading-modal__logs-chev {
+  width: 10px;
+  height: 10px;
+  transition: transform var(--dur-snappy);
+  color: inherit;
+}
+.loading-modal-card[data-logs-open="true"] .loading-modal__logs-chev {
+  transform: rotate(180deg);
+}
+.loading-modal__logs {
+  display: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px 14px;
+  max-height: 160px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.loading-modal-card[data-logs-open="true"] .loading-modal__logs {
+  display: block;
+}
+.loading-modal__logs pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-modal-card,
+  .loading-modal__progress-fill,
+  .loading-modal__spinner,
+  .loading-modal__funny {
+    animation: none !important;
+    transition: none !important;
+  }
+}

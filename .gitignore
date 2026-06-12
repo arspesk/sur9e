@@ -1,0 +1,112 @@
+# Personal data (user fills these)
+artifacts/interview-prep/*.md
+!artifacts/interview-prep/.gitkeep
+# Runtime + user state — all of data/ is gitignored (only data/.gitkeep is tracked)
+data/*
+!data/.gitkeep
+artifacts/reports/*.md
+artifacts/reports/*.md.bak*
+!artifacts/reports/.gitkeep
+artifacts/output/*
+!artifacts/output/.gitkeep
+# Generated outreach packs (artifacts/outreach/<num>-<slug>-<date>.md)
+artifacts/outreach/*
+!artifacts/outreach/.gitkeep
+# Lighthouse baseline artifacts (HTML/JSON reports — large, regenerate via `npm run lighthouse`)
+artifacts/lighthouse/*
+!artifacts/lighthouse/.gitkeep
+batch/logs/*
+!batch/logs/.gitkeep
+batch/batch-state.tsv
+batch/batch-input.tsv
+batch/tracker-additions/**/*.tsv
+!batch/tracker-additions/.gitkeep
+inputs/jds/*
+!inputs/jds/.gitkeep
+
+# User config and customization (never auto-updated)
+inputs/personalization/
+inputs/config/
+# Local parser scripts (universal-scanner escape hatch) — user/agent-authored,
+# may embed private endpoints; the scanner only runs scripts from here. The
+# folder + its README ship so the feature is discoverable; the scripts don't.
+inputs/parsers/*
+!inputs/parsers/README.md
+.update-dismissed
+.update-lock
+# Local prettier overrides (per-clone, optional — picked up by lint/format)
+.prettierignore.local
+
+# Secrets (never commit — use .env.example as template)
+.env
+
+# Python
+batch/jobspy-env/
+__pycache__/
+
+# Generated
+.resolved-prompt-*
+node_modules/
+bun.lock
+
+# Next.js build output
+.next/
+*.tsbuildinfo
+
+
+# Scanner / screener runtime state (regenerated each run)
+batch/jobspy-results.csv
+batch/screen-state.tsv
+batch/screened-urls.txt
+*.yml.bak
+*.yaml.bak
+
+# OS
+.DS_Store
+*.mov
+*.mp4
+
+# Claude Code local (track only project-owned skills like sur9e)
+.claude/memory/
+.claude/scheduled_tasks.lock
+.claude/settings.json
+.claude/settings.local.json
+.claude/skills/*
+!.claude/skills/sur9e/
+.claude/worktrees/
+
+# Codex local (per-machine hooks wiring; sur9e's Stop hook is installed into
+# your global ~/.codex/config.toml by .codex/install-hook.mjs). The portable,
+# shippable Codex config is .codex/config.toml + the hook scripts themselves.
+.codex/hooks.json
+sur9e-dashboard
+career-dashboard
+package-lock.json
+
+# IDE
+.idea/
+
+# Serena MCP tooling (project memories + config — local, not part of the app)
+.serena/
+
+# CLI binaries (download locally, don't track)
+railway
+
+# Playwright test artifacts (transient — regenerated per run)
+test-results/
+
+# Antigravity (agy) web-search result spillage from headless runs
+text_*.json
+# Antigravity per-project config store (symlinks back to ~/.gemini/config)
+.antigravitycli/
+
+# Local wipe backups (never committed)
+.trash/
+
+# User scan results + runtime PID (untracked 2026-06-04 — user data must not ship)
+batch/stage1-results.tsv
+batch/*.pid
+
+# Scratch dir
+tmp/
+.playwright-mcp/
