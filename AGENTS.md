@@ -133,6 +133,7 @@ The full gate (`test-all.mjs`) covers syntax, scripts, data-contract invariants,
 | Asks for company research                                   | `research`                                                        |
 | Preps for interview at specific company                     | `interview-prep`                                                  |
 | Wants to generate CV/PDF                                    | `tailor-cv`                                                       |
+| Wants to strengthen their CV/profile by interview           | `enrich`                                                          |
 | Evaluates a course/cert                                     | `training`                                                        |
 | Evaluates portfolio project                                 | `project`                                                         |
 | Asks about application status                               | `tracker`                                                         |

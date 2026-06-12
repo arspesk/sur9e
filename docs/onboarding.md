@@ -86,7 +86,9 @@ Deal-breakers → `inputs/personalization/narrative.md`; proof points → `input
 
 Store user-specific content ONLY in `inputs/personalization/*` — never in `content/modes/_shared.md` (see [`data-contract.md`](data-contract.md)).
 
-(Optional) If the user wants the zero-token **ATS portal scan** (company career feeds — Greenhouse, Ashby, Lever, Workday, Workable), copy `content/examples/personalization/portals.yml` to `inputs/personalization/portals.yml` and help them curate `tracked_companies`. Without it, scanning uses JobSpy only. The ATS / JobSpy sources are toggled in Settings → Job scanning → Sources.
+**Tip — for later:** once they're set up, the user can run `enrich` any time to interview-mine each role for quantified impact (%, $, latency) and surface forgotten skills. It's the re-runnable companion to this positioning pass — worth pointing them to after their first win.
+
+(Optional) If the user wants the zero-token **ATS portal scan** (company career feeds — Greenhouse, Ashby, Lever, Workday, Workable, Recruitee, SmartRecruiters, SolidJobs), copy `content/examples/personalization/portals.yml` to `inputs/personalization/portals.yml` and help them curate `tracked_companies`. Without it, scanning uses JobSpy only. The ATS / JobSpy sources are toggled in Settings → Job scanning → Sources.
 
 ## Step 5 — First win (optional): evaluate a real offer together
 

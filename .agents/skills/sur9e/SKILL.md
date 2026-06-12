@@ -43,6 +43,7 @@ Determine the mode from `{{mode}}`:
 | `followup`                             | `follow-up` (legacy alias)                                                                                                                                     |
 | `interview-prep`                       | `interview-prep`                                                                                                                                               |
 | `interview`                            | `interview-prep` (legacy alias)                                                                                                                                |
+| `enrich`                               | `enrich`                                                                                                                                                       |
 | `latex`                                | `latex`                                                                                                                                                        |
 
 **Legacy aliases:** `auto-pipeline`/`pipeline` are the pre-rename names for
@@ -73,6 +74,7 @@ Available commands:
   /sur9e reach-out → LinkedIn power move: find contacts + draft message
   /sur9e research  → Deep research prompt about company
   /sur9e tailor-cv → PDF only, ATS-optimized CV
+  /sur9e enrich    → Interview to strengthen your CV: mine roles for metrics + hidden skills
   /sur9e training  → Evaluate course/cert against North Star
   /sur9e project   → Evaluate portfolio project idea
   /sur9e tracker   → Application status overview

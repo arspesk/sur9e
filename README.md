@@ -104,19 +104,20 @@ The flow is a **two-stage pipeline**: new postings get a _cheap screen_ (fast mo
 
 Each capability is a mode — a versioned prompt file in `content/modes/` with its own default model. Ask your agent in plain language; it routes to the right mode.
 
-| You want to…                                 | Mode                                      | Runs as                         |
-| -------------------------------------------- | ----------------------------------------- | ------------------------------- |
-| Evaluate a job posting end-to-end            | `evaluate-offer` (screen → evaluate)      | paste a URL                     |
-| Triage fast / score deeply                   | `screen` / `evaluate`                     | headless or UI Add menu         |
-| Batch-process a queue of postings            | `batch-evaluate`                          | headless workers                |
-| Scan job boards for new postings             | `scan`                                    | `npm run scan` or scheduled     |
-| Generate a tailored CV PDF / cover letter    | `tailor-cv` / `cover-letter` / `latex`    | from any evaluated offer        |
-| Research a company / prep an interview       | `research` / `interview-prep`             | per-company artifacts           |
-| Draft LinkedIn outreach / negotiate an offer | `reach-out` / `negotiate`                 | chat                            |
-| Compare offers / spot rejection patterns     | `offers` / `patterns`                     | chat                            |
-| Track applications / follow-ups              | `tracker` / `process-queue` / `follow-up` | chat or web UI                  |
-| Fill an application form (you hit Submit)    | `apply`                                   | live browser, stops before send |
-| Evaluate a course or portfolio project       | `training` / `project`                    | chat                            |
+| You want to…                                  | Mode                                      | Runs as                         |
+| --------------------------------------------- | ----------------------------------------- | ------------------------------- |
+| Evaluate a job posting end-to-end             | `evaluate-offer` (screen → evaluate)      | paste a URL                     |
+| Triage fast / score deeply                    | `screen` / `evaluate`                     | headless or UI Add menu         |
+| Batch-process a queue of postings             | `batch-evaluate`                          | headless workers                |
+| Scan job boards for new postings              | `scan`                                    | `npm run scan` or scheduled     |
+| Generate a tailored CV PDF / cover letter     | `tailor-cv` / `cover-letter` / `latex`    | from any evaluated offer        |
+| Strengthen your CV through a guided interview | `enrich`                                  | chat                            |
+| Research a company / prep an interview        | `research` / `interview-prep`             | per-company artifacts           |
+| Draft LinkedIn outreach / negotiate an offer  | `reach-out` / `negotiate`                 | chat                            |
+| Compare offers / spot rejection patterns      | `offers` / `patterns`                     | chat                            |
+| Track applications / follow-ups               | `tracker` / `process-queue` / `follow-up` | chat or web UI                  |
+| Fill an application form (you hit Submit)     | `apply`                                   | live browser, stops before send |
+| Evaluate a course or portfolio project        | `training` / `project`                    | chat                            |
 
 Every mode reads your `inputs/personalization/` files at run time — your CV and narrative are the ground truth, never hardcoded into prompts. Each mode also has its own default model with a fallback chain, all editable in Settings.
 
