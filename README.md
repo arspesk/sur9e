@@ -43,7 +43,7 @@
 
 Sur9e turns an AI coding agent — **Claude Code, Codex, or OpenCode** — into a job-hunt copilot that actually knows you. If you already use one of those daily, you're minutes from your first evaluation; if you've never touched one, it's just an AI chat that runs on your computer, and sur9e walks you through setup itself. It evaluates job postings against your real CV, archetypes, dealbreakers, and comp targets; screens cheap before evaluating deep; tailors CVs per offer; preps you for interviews; and tracks every application in a local web UI.
 
-**Who it's for:** anyone running a deliberate, quality-over-quantity job hunt — not a spray-and-pray autoclicker. You don't need to be a developer: if you can follow a short install guide and chat with an AI, sur9e works for you.
+**Who it's for:** anyone running a deliberate, quality-over-quantity job hunt — not a spray-and-pray autoclicker. You don't have to be a developer, but for now it does ask for a little technical comfort: if you can follow a short setup guide, run a couple of terminal commands, and chat with an AI, sur9e works for you. Making it effortless for non-technical people — a packaged, one-step install — is on the [roadmap](#roadmap).
 
 **The principles:**
 
