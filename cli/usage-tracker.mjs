@@ -159,14 +159,33 @@ function readOpenRouterCache(rootPath) {
 // persist cost_usd: 0 rather than invent a number. Claude keeps the legacy
 // sonnet fallback for back-compat with computeCostFromTokens() and the
 // test-all.mjs assertions.
-function priceFromTokens(providerId, model, inputTokens, outputTokens, rootPath) {
+// Cached input tokens (OpenAI/Codex prompt-cache reads) bill at ~10% of the
+// uncached input rate. Without this, a long agentic session — which re-sends
+// its whole growing context every turn, ~90%+ of it cached — gets billed as if
+// every token were fresh, overstating codex spend ~5x. Mirrors the Anthropic
+// cache-read discount the Claude path applies in computeCostFromUsage().
+const CACHED_INPUT_MULTIPLIER = 0.1;
+
+function priceFromTokens(
+  providerId,
+  model,
+  inputTokens,
+  outputTokens,
+  rootPath,
+  cachedInputTokens = 0,
+) {
   const resolved = resolveModelPrice(providerId, model, orId => {
     const cache = readOpenRouterCache(rootPath);
     return cache[orId] ?? null;
   });
   if (resolved.price) {
+    // `inputTokens` is the TOTAL input; `cachedInputTokens` is the cached
+    // subset of it (clamped defensively). Bill the cached part at the discount.
+    const cached = Math.min(Math.max(0, cachedInputTokens), inputTokens);
+    const uncached = inputTokens - cached;
     return (
-      (inputTokens / 1e6) * resolved.price.in_per_mtok +
+      (uncached / 1e6) * resolved.price.in_per_mtok +
+      (cached / 1e6) * resolved.price.in_per_mtok * CACHED_INPUT_MULTIPLIER +
       (outputTokens / 1e6) * resolved.price.out_per_mtok
     );
   }
@@ -305,6 +324,7 @@ export function trackProvider(providerId, inputTokens, outputTokens, opts = {}) 
       inputTokens || 0,
       outputTokens || 0,
       opts.rootPath,
+      opts.cached_input_tokens || 0,
     );
     cost = typeof computed === 'number' ? computed : 0;
   }

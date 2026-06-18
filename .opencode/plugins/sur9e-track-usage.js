@@ -4,8 +4,8 @@
 // OpenCode plugin — mirrors the Claude Code Stop hook
 // (.claude/hooks/track-mode-usage.mjs): on each COMPLETED assistant turn it
 // attributes that turn's interactive token spend to the active /sur9e <mode>
-// invocation (or the literal label 'session' when no mode is active) and calls
-// trackProvider('opencode', ...). A per-session active mode is tracked the same
+// invocation and calls trackProvider('opencode', ...). Turns with NO active
+// sur9e mode are general work and are NOT tracked. A per-session active mode is
 // way the Claude hook does it: a mode is only "live" for the turn(s) answering a
 // `/sur9e <mode>` message; the next real user message clears it.
 //
@@ -118,7 +118,12 @@ export const Sur9eTrackUsage = async () => {
     entry.countedIds.push(info.id);
     saveState(state);
 
-    const mode = canonicalMode(entry.currentMode) ?? 'session';
+    // Only attribute spend to an active /sur9e <mode> — a turn with no mode is
+    // general work and must not be logged as sur9e "session" spend (mirrors the
+    // Claude hook's `if (!mode) continue`). The turn is already marked counted
+    // above, so it won't be re-evaluated.
+    const mode = canonicalMode(entry.currentMode);
+    if (!mode) return;
     trackProvider('opencode', usage.input, usage.output, {
       model: usage.model,
       mode,

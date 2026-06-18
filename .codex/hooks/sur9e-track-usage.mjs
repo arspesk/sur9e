@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Codex Stop hook — when a Codex turn completes, attribute that turn's
-// interactive token spend to the active /sur9e <mode> invocation (or 'session'
-// when no mode is active) and call trackProvider('codex', ...). Mirrors the
-// Claude Code Stop hook at .claude/hooks/track-mode-usage.mjs.
+// interactive token spend to the active /sur9e <mode> invocation and call
+// trackProvider('codex', ...). Turns with NO active sur9e mode are general
+// work and are NOT tracked (this hook is user-global, so it fires on every
+// Codex session in every project). Mirrors the Claude Code Stop hook at
+// .claude/hooks/track-mode-usage.mjs.
 //
 // Codex's Stop payload does NOT carry token usage — only session metadata. The
 // usage lives in the session ROLLOUT file
@@ -282,10 +284,26 @@ async function main() {
 
   if (input === 0 && output === 0) return;
 
-  const model = payload.model || modelFromRollout(entries) || undefined;
-  const mode = canonicalMode(activeMode) ?? 'session';
+  // Only attribute spend to an active /sur9e <mode>. A Codex turn with no mode
+  // is general work — and since this hook is registered USER-LEVEL (it fires on
+  // every Codex session in every project), the old `?? 'session'` fallback
+  // logged ALL of the user's unrelated Codex usage into sur9e's usage.json.
+  // The cumulative baseline was already persisted above, so skipping here still
+  // computes the next tracked turn's delta correctly. Mirrors the Claude hook's
+  // `if (!mode) continue`.
+  const mode = canonicalMode(activeMode);
+  if (!mode) return;
 
-  trackProvider('codex', input, output, { model, mode, estimated: false, rootPath: ROOT });
+  const model = payload.model || modelFromRollout(entries) || undefined;
+  // Pass the cached-input subset so the tracker bills it at the cache-read
+  // discount instead of the full input rate (delta.input_tokens INCLUDES it).
+  trackProvider('codex', input, output, {
+    model,
+    mode,
+    cached_input_tokens: delta.cached_input_tokens,
+    estimated: false,
+    rootPath: ROOT,
+  });
 }
 
 // Run only when invoked directly as the hook command, never on import (tests

@@ -245,10 +245,27 @@ describe('trackProvider integration (temp rootPath, never real data/)', () => {
   it('persists cost 0 for an unknown codex model (never fabricates)', () => {
     const result = trackProvider('codex', 1000, 200, {
       model: 'gpt-9-unreleased',
-      mode: 'session',
+      mode: 'evaluate',
       rootPath: tmpRoot,
     });
     expect(result.cost_usd).toBe(0);
+  });
+
+  it('bills cached input at the cache-read discount, not the full input rate', () => {
+    // gpt-5: input 2.5/1M. 1M input of which 900k cached → only 100k uncached
+    // at full rate + 900k at 10%. Without the discount this would be the full
+    // 1M × 2.5 = $2.50 (the codex over-billing bug).
+    const input = 1_000_000;
+    const cached = 900_000;
+    const result = trackProvider('codex', input, 0, {
+      model: 'gpt-5',
+      mode: 'evaluate',
+      cached_input_tokens: cached,
+      rootPath: tmpRoot,
+    });
+    const expected = (100_000 / 1e6) * 2.5 + (900_000 / 1e6) * 2.5 * 0.1; // 0.25 + 0.225
+    expect(result.cost_usd).toBeCloseTo(expected, 6);
+    expect(result.cost_usd).toBeLessThan((input / 1e6) * 2.5); // strictly cheaper than full-rate
   });
 });
 
