@@ -118,3 +118,56 @@ describe('profile.ts — schema boundary', () => {
     },
   );
 });
+
+// Helpers for the migration tests below — fresh tmp root with a writable
+// inputs/personalization/profile.yml. Mirrored from tracker-cli-posted.test.mjs.
+function makeRoot(): string {
+  const r = mkdtempSync(join(tmpdir(), 'profile-migration-test-'));
+  mkdirSync(join(r, 'inputs', 'personalization'), { recursive: true });
+  return r;
+}
+
+function writeProfileYml(r: string, content: string): void {
+  writeFileSync(join(r, 'inputs', 'personalization', 'profile.yml'), content, 'utf8');
+}
+
+describe('apply_answers list migration', () => {
+  it('loadProfile coerces a legacy object shape into the list', () => {
+    const r = makeRoot();
+    try {
+      writeProfileYml(
+        r,
+        [
+          'apply_answers:',
+          '  work_authorization_us: "Yes"',
+          '  additional_info: |',
+          '    Gender / sex: Male',
+        ].join('\n'),
+      );
+      const profile = loadProfile(r);
+      expect(profile?.apply_answers).toEqual([
+        { question: 'Work authorization (US)', answer: 'Yes' },
+        { question: 'Gender / sex', answer: 'Male' },
+      ]);
+    } finally {
+      rmSync(r, { recursive: true, force: true });
+    }
+  });
+
+  it('saveProfile then loadProfile round-trips the list and drops both-empty rows', () => {
+    const r = makeRoot();
+    try {
+      writeProfileYml(r, 'candidate:\n  full_name: Test User\n');
+      saveProfile(r, {
+        candidate: { full_name: 'Test User' },
+        apply_answers: [
+          { question: 'Gender / sex', answer: 'Male' },
+          { question: '', answer: '' },
+        ],
+      });
+      expect(loadProfile(r)?.apply_answers).toEqual([{ question: 'Gender / sex', answer: 'Male' }]);
+    } finally {
+      rmSync(r, { recursive: true, force: true });
+    }
+  });
+});

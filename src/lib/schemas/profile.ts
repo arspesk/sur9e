@@ -8,6 +8,9 @@
 // fresh install before onboarding completes.
 
 import { z } from 'zod';
+import { type ApplyAnswer, normalizeApplyAnswers } from './apply-answers';
+
+export type { ApplyAnswer };
 
 export const ProfileCandidate = z
   .object({
@@ -90,18 +93,14 @@ export const ProfileSearch = z
   })
   .passthrough();
 
-export const ProfileApplyAnswers = z
-  .object({
-    // Standing answers to recurring application-form questions, one per
-    // line — voluntary self-identification (gender/sex, race/ethnicity,
-    // sexual orientation, transgender, disability, veteran status) and
-    // other popular ones (work authorization, sponsorship, notice period,
-    // how-did-you-hear, security clearance, relocation). The apply mode
-    // reads these instead of asking on every form. Editable in the web
-    // app: Profile → Apply (Application Questions section).
-    additional_info: z.string().optional(),
-  })
+export const ProfileApplyAnswer = z
+  .object({ question: z.string().default(''), answer: z.string().default('') })
   .passthrough();
+
+// preprocess so a legacy object / additional_info string coerces to the list
+// at parse time — loadProfile (ProfileShape.parse) then never 500s on old
+// files, and saveProfile rewrites them to the list shape on the next save.
+export const ProfileApplyAnswers = z.preprocess(normalizeApplyAnswers, z.array(ProfileApplyAnswer));
 
 export const ProfileShape = z
   .object({
