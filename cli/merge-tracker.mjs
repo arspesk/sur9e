@@ -451,7 +451,12 @@ for (const file of tsvFiles) {
           ...addition,
           num: duplicate.num,
           status: resolveStatus(addition.status, duplicate.status),
-          pdf: addition.pdf || duplicate.pdf,
+          // A re-eval TSV is written before any PDF exists, so addition.pdf is
+          // always "❌" (truthy) — `addition.pdf || duplicate.pdf` would short-
+          // circuit to "❌" and wipe an existing "✅". Preserve the existing flag
+          // (a re-eval never regenerates the PDF); only let an addition that
+          // genuinely carries "✅" set it.
+          pdf: addition.pdf === '✅' ? '✅' : duplicate.pdf,
           notes: note,
           posted: addition.posted || duplicate.posted,
         });
@@ -469,7 +474,9 @@ for (const file of tsvFiles) {
             ...addition,
             num: duplicate.num,
             status: resolveStatus(addition.status, duplicate.status),
-            pdf: addition.pdf || duplicate.pdf,
+            // See the lineIdx branch above: preserve the existing PDF flag on a
+            // re-eval instead of letting the addition's hardcoded "❌" clobber it.
+            pdf: addition.pdf === '✅' ? '✅' : duplicate.pdf,
             notes: note,
             posted: addition.posted || duplicate.posted,
           });

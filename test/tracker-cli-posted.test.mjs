@@ -107,6 +107,30 @@ describe('merge-tracker — posted column', () => {
     expect(row.endsWith('| 2026-05-20 |')).toBe(true);
   });
 
+  it('re-eval preserves an existing PDF ✅ instead of clobbering it with the addition’s ❌', () => {
+    // Regression: a re-eval TSV is written before any PDF exists, so its PDF
+    // cell is always ❌. The merge must keep the row's existing ✅ (the PDF on
+    // disk) rather than short-circuiting to the addition's ❌.
+    writeFileSync(
+      appsFile,
+      `${HEADER}\n| 210 | 2026-06-01 | Acme | Solutions Engineer | 4.1/5 | Evaluated | ✅ | [210](artifacts/reports/210-acme-2026-06-01.md) | evaluated | 2026-05-20 |\n`,
+      'utf-8',
+    );
+    writeFileSync(
+      join(additionsDir, '210-acme.tsv'),
+      '210\t2026-06-10\tAcme\tSolutions Engineer\tEvaluated\t3.7/5\t❌\t[210](artifacts/reports/210-acme-2026-06-10.md)\tevaluated\n',
+      'utf-8',
+    );
+    runCli(
+      'cli/merge-tracker.mjs',
+      { SUR9E_APPS_FILE: appsFile, SUR9E_ADDITIONS_DIR: additionsDir },
+      ['--re-eval=210'],
+    );
+    const row = rowByNum(readFileSync(appsFile, 'utf-8'), 210);
+    expect(row).toContain('| 3.7/5 |'); // score updated (down-eval)
+    expect(row).toContain('| ✅ |'); // PDF flag survives
+  });
+
   it('rejects garbage in the posted TSV field (free text never lands in a date column)', () => {
     writeFileSync(appsFile, `${HEADER}\n`, 'utf-8');
     writeFileSync(
