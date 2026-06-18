@@ -26,12 +26,12 @@ These are **capability verbs**, not tool names — every CLI maps them to its ow
 
 ## Sources of Truth
 
-| File              | Path                                                   | When                                                                                                                                               |
-| ----------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| cv.md             | `inputs/personalization/cv.md`                         | ALWAYS                                                                                                                                             |
-| article-digest.md | `inputs/personalization/article-digest.md` (if exists) | ALWAYS (detailed proof points)                                                                                                                     |
-| profile.yml       | `inputs/personalization/profile.yml`                   | ALWAYS (identity, targets, `apply_answers` + `apply_answers.additional_info` + `eeo` — saved answers for application-form and screening questions) |
-| narrative.md      | `inputs/personalization/narrative.md`                  | ALWAYS (per-archetype framing, cross-cutting advantage, negotiation scripts, voice)                                                                |
+| File              | Path                                                   | When                                                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cv.md             | `inputs/personalization/cv.md`                         | ALWAYS                                                                                                                                                                                                        |
+| article-digest.md | `inputs/personalization/article-digest.md` (if exists) | ALWAYS (detailed proof points)                                                                                                                                                                                |
+| profile.yml       | `inputs/personalization/profile.yml`                   | ALWAYS (identity, targets, `apply_answers` — ordered list of `{question, answer}` standing answers for application-form and screening questions: work auth, self-identification, notice period, and the like) |
+| narrative.md      | `inputs/personalization/narrative.md`                  | ALWAYS (per-archetype framing, cross-cutting advantage, negotiation scripts, voice)                                                                                                                           |
 
 **RULE: NEVER hardcode metrics from proof points.** Read them from inputs/personalization/cv.md + inputs/personalization/article-digest.md at evaluation time.
 **RULE: For article/project metrics, inputs/personalization/article-digest.md takes precedence over inputs/personalization/cv.md.**

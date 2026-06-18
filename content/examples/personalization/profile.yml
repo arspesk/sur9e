@@ -73,3 +73,12 @@ search:
     - "Machine Learning Engineer"
   locations:
     - "San Francisco, CA"
+# Standing answers the apply assistant reuses on every form. One list item per
+# question; edit these in the web app under Profile → Apply answers.
+apply_answers:
+  - question: Work authorization (US)
+    answer: "Yes"
+  - question: Require visa sponsorship?
+    answer: "No"
+  - question: Gender / sex
+    answer: "" # voluntary — fill if you choose to self-identify
