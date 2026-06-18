@@ -138,8 +138,17 @@ export function BoardColumn({
   // collapsed Discarded stub — expand just enough to mount it and scroll it
   // into view so the highlighted card stays visible behind the drawer.
   const drawerNum = useDrawerStore(s => (s.open ? s.num : null));
+  // Only respond to genuine drawer navigation (the open card changed), NOT to a
+  // card relocating into this column under a STABLE drawer num. The latter
+  // happens when a status change moves the open card into another column
+  // (e.g. → Discarded): the destination column's effect would otherwise
+  // setExpanded + scrollIntoView and yank the board's horizontal scroll to it.
+  const prevDrawerNumRef = useRef<number | null>(null);
   useEffect(() => {
+    const prev = prevDrawerNumRef.current;
+    prevDrawerNumRef.current = drawerNum;
     if (drawerNum == null) return;
+    if (drawerNum === prev) return; // card moved under us — not a navigation
     const index = items.findIndex(r => r.num === drawerNum);
     if (index === -1) return;
     if (collapsed) setExpanded(true);
