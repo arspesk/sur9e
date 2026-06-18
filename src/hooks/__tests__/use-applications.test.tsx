@@ -11,8 +11,11 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useToastStore } from '@/components/toast/toast-store';
-import { useUpdateApplicationStatus } from '@/hooks/use-applications';
-import { updateApplicationStatusAction } from '@/server/actions/applications';
+import { useUpdateApplicationStatus, useUpdateReportField } from '@/hooks/use-applications';
+import {
+  updateApplicationStatusAction,
+  updateReportFieldAction,
+} from '@/server/actions/applications';
 
 vi.mock('@/server/actions/applications', () => ({
   updateApplicationStatusAction: vi.fn(),
@@ -75,5 +78,31 @@ describe('useUpdateApplicationStatus', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+});
+
+describe('useUpdateReportField', () => {
+  it('invalidates the drawer key [application, num] (not just list + report)', async () => {
+    vi.mocked(updateReportFieldAction).mockResolvedValueOnce(undefined);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useUpdateReportField(), { wrapper });
+
+    act(() => {
+      result.current.mutate({ num: 42, field: 'archetype', value: 'Solutions Engineer' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const keys = spy.mock.calls.map(c => JSON.stringify(c[0]?.queryKey));
+    // The drawer reads ['application', num] — previously NOT invalidated, so a
+    // chip edit in the drawer never refetched ("the chip won't change").
+    expect(keys).toContain(JSON.stringify(['application', 42]));
+    expect(keys).toContain(JSON.stringify(['applications']));
+    expect(keys).toContain(JSON.stringify(['report']));
   });
 });

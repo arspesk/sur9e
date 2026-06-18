@@ -91,8 +91,16 @@ export function useUpdateReportField() {
   return useMutation({
     mutationFn: (input: { num: number; field: string; value: string }) =>
       updateReportFieldAction(input),
-    onSuccess: () => {
+    onSuccess: (_data, { num }) => {
+      // Invalidate every cache holding this row so all surfaces re-render
+      // with the new field value. Mirrors useUpdateApplicationStatus — the
+      // drawer reads ['application', num], which was previously NOT
+      // invalidated here, so a chip edit (archetype/seniority/work_mode/…)
+      // in the drawer wrote to disk but the drawer kept showing the stale
+      // value ("the chip won't change"). Table ['applications'] and the
+      // report page ['report', …] were already covered.
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['application', num] });
       queryClient.invalidateQueries({ queryKey: ['report'] });
     },
   });
