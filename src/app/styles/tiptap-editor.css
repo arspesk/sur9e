@@ -1352,6 +1352,17 @@ div[data-running-mode][data-status="failed"] .running-mode-card__icon {
   font-style: italic;
 }
 
+/* The block drag handle (.be-handle) is position:absolute and is positioned
+ * by the editor relative to its nearest positioned ancestor. Without this the
+ * editor article is static, so the handle anchors to whatever is positioned
+ * further up the tree (.report-wrap on /report, the fixed .cd-drawer in the
+ * offers drawer) — dropping the FIRST block's handle at that ancestor's origin,
+ * which renders the grip + a stray rule up inside the hero. Make the article
+ * itself the positioned ancestor so the handle stays in the editor gutter. */
+.report-body {
+  position: relative;
+}
+
 /* Editor body — give the gutter handle more breathing room from the
  * text, and shift the article left inside #reportHost so the text
  * column visually aligns with Hero/Snapshot's left edge (the article
