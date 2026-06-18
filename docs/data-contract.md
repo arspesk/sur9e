@@ -13,7 +13,7 @@ The repo root has four sur9e-domain buckets, sorted by lifecycle:
 
 - **`content/`** — committed product content (modes, templates, examples). Ships with the repo. System Layer.
 - **`inputs/`** — user-authored, gitignored (personalization, config, jds). Each user fills these in. User Layer.
-- **`artifacts/`** — generated per-offer (reports, output, outreach, interview-prep). Output of background jobs. User Layer (the user's work product, even though sur9e wrote it).
+- **`artifacts/`** — generated artifacts (per-offer reports + CV/cover-letter PDFs in `output/`, plus the shared `interview-prep/story-bank.md`). Research, interview-prep, outreach, and negotiation analyses live inside the report body, not as separate files. Output of background jobs. User Layer (the user's work product, even though sur9e wrote it).
 - **`data/`** — runtime state (applications.md, usage.json, pipeline.md, jobs/). Mutable databases. Stays at root. Mixed: tracker is User Layer; transient logs are System Layer.
 
 `batch/` (Python+shell scan/screen subsystem) is code, not data — also at root, System Layer.

@@ -62,19 +62,17 @@ export const ApplicationWithSummary = ApplicationRow.extend({
 });
 export type ApplicationWithSummary = z.infer<typeof ApplicationWithSummary>;
 
-export const OutreachPack = z.object({
-  frontmatter: z.unknown(), // refined per-section once the outreach schema lands
-  body: z.string(),
-});
-export type OutreachPack = z.infer<typeof OutreachPack>;
-
 export const ApplicationDetail = ApplicationRow.extend({
   report: z.unknown().optional(), // refined in the reports schema
   cv_pdf_path: z.string().nullable(),
   cover_letter_path: z.string().nullable(),
-  outreach_path: z.string().nullable(),
-  outreach: OutreachPack.nullable(),
+  // Section-mode presence flags, derived from `## <title>` blocks in the
+  // report body (research / interview-prep / reach-out / negotiate all append
+  // there now — there are no separate per-offer artifact files). The report
+  // toolbar locks each generator button on its flag.
   has_company_research: z.boolean(),
   has_interview_process: z.boolean(),
+  has_outreach: z.boolean(),
+  has_negotiation: z.boolean(),
 });
 export type ApplicationDetail = z.infer<typeof ApplicationDetail>;

@@ -6,7 +6,6 @@
 import 'server-only';
 import { readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import yaml from 'js-yaml';
 import { cache } from 'react';
 import type { z } from 'zod';
 import type { ReportSummary } from '../schemas/applications';
@@ -15,7 +14,6 @@ import {
   ApplicationRow,
   ApplicationStatus,
   ApplicationWithSummary,
-  OutreachPack,
 } from '../schemas/applications';
 import { atomicWrite } from './atomic-write';
 import { companySlug } from './format';
@@ -198,48 +196,6 @@ function readDirOrEmpty(dir: string): string[] {
 }
 
 /**
- * Find the newest outreach pack file for a given offer num.
- *
- * Outreach files live at `artifacts/outreach/<num>-<slug>-<date>.md`.
- * Returns a path relative to rootPath (e.g. "artifacts/outreach/1251-...md") or null.
- */
-export function findOutreach(rootPath: string, num: number): string | null {
-  if (!Number.isInteger(num)) return null;
-  const dir = join(rootPath, 'artifacts', 'outreach');
-  const pattern = new RegExp(`^${num}-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md$`);
-  const matches = readDirOrEmpty(dir)
-    .filter(f => pattern.test(f))
-    .sort()
-    .reverse();
-  return matches[0] ? `artifacts/outreach/${matches[0]}` : null;
-}
-
-/**
- * Read and parse an outreach pack file.
- *
- * Format: YAML frontmatter (delimited by `---` lines) + Markdown body.
- * Returns { frontmatter, body } or null if the file is missing / malformed.
- */
-export function loadOutreach(
-  rootPath: string,
-  outreachPath: string | null | undefined,
-): { frontmatter: unknown; body: string } | null {
-  if (!outreachPath) return null;
-  const full = join(rootPath, outreachPath);
-  const raw = readFileOrNull(full);
-  if (raw == null) return null;
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!m) return null;
-  try {
-    const frontmatter = yaml.load(m[1]);
-    const result = OutreachPack.parse({ frontmatter, body: m[2] });
-    return result;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Find a single application entry by its num.
  *
  * Always attaches `cv_pdf_path` and `cover_letter_path` (null if not found
@@ -263,14 +219,14 @@ export function findByNum(rootPath: string, num: number): ApplicationDetail | nu
   const candidate = companySlug(profile?.candidate?.full_name ?? '');
   const slug = companySlug(entry.company);
 
-  // Resolve a path with a two-tier fallback:
+  // Resolve a downloadable-PDF path with a two-tier fallback:
   //   1. findArtifact — disk scan keyed on (candidate, slug). Requires
   //      profile.yml to know the candidate name.
-  //   2. Report YAML frontmatter — the cover-letter / tailor-cv / outreach
-  //      modes write `cv_pdf_path` / `cover_letter_path` / `outreach_path`
-  //      back into the report on completion. Reading those means we
-  //      surface the artifact even when profile.yml is missing (fresh
-  //      worktrees, demo data, post-OSS clone before first run).
+  //   2. Report YAML frontmatter — the cover-letter / tailor-cv modes write
+  //      `cv_pdf_path` / `cover_letter_path` back into the report on
+  //      completion. Reading those means we surface the artifact even when
+  //      profile.yml is missing (fresh worktrees, demo data, post-OSS clone
+  //      before first run).
   let parsedFrontmatter: Record<string, unknown> | null | undefined;
   let r: ReturnType<typeof loadReport> | null = null;
   if (entry.reportPath) {
@@ -286,36 +242,33 @@ export function findByNum(rootPath: string, num: number): ApplicationDetail | nu
   const cv_pdf_path = findArtifact(rootPath, 'cv', candidate, slug, num) ?? fmPath('cv_pdf_path');
   const cover_letter_path =
     findArtifact(rootPath, 'cover-letter', candidate, slug, num) ?? fmPath('cover_letter_path');
-  const outreach_path = findOutreach(rootPath, num) ?? fmPath('outreach_path');
-  const outreach = outreach_path ? loadOutreach(rootPath, outreach_path) : null;
 
   if (r && !('error' in r)) {
-    // The research / interview-prep jobs append their `## Company Research` /
-    // `## Interview Process` H2 sections to the report BODY (no frontmatter
-    // key exists for them), so derive the flags by scanning the body.
+    // research / interview-prep / reach-out / negotiate append their
+    // `## <title>` H2 sections to the report BODY (no separate file, no
+    // frontmatter key), so derive each presence flag by scanning the body.
     const body = typeof parsedFrontmatter?.body === 'string' ? parsedFrontmatter.body : r.markdown;
     const appended = extractAppendedSections(body);
-    const has_company_research = appended.some(s => s.title === 'Company Research');
-    const has_interview_process = appended.some(s => s.title === 'Interview Process');
+    const has = (title: string) => appended.some(s => s.title === title);
     return ApplicationDetail.parse({
       ...entry,
       report: r,
       cv_pdf_path,
       cover_letter_path,
-      outreach_path,
-      outreach,
-      has_company_research,
-      has_interview_process,
+      has_company_research: has('Company Research'),
+      has_interview_process: has('Interview Process'),
+      has_outreach: has('Outreach'),
+      has_negotiation: has('Negotiation Strategy'),
     });
   }
   return ApplicationDetail.parse({
     ...entry,
     cv_pdf_path,
     cover_letter_path,
-    outreach_path,
-    outreach,
     has_company_research: false,
     has_interview_process: false,
+    has_outreach: false,
+    has_negotiation: false,
   });
 }
 
@@ -413,6 +366,7 @@ export function deleteApplication(
   const lines = content.split('\n');
   let foundIndex = -1;
   let removedReport: string | null = null;
+  let company = '';
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.startsWith('|')) continue;
@@ -420,6 +374,7 @@ export function deleteApplication(
     if (parts.length < 9) continue;
     if (parseInt(parts[1]) === num) {
       foundIndex = i;
+      company = parts[3];
       const reportMatch = parts[8].match(/\[(\d+)\]\(([^)]+)\)/);
       if (reportMatch) removedReport = reportMatch[2];
       break;
@@ -477,6 +432,33 @@ export function deleteApplication(
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENOENT') {
       console.warn(`[deleteApplication] could not scan reports dir: ${(err as Error).message}`);
+    }
+  }
+
+  // 3. Sweep this offer's downloadable deliverables in artifacts/output/:
+  //    the tailored CV and cover-letter PDFs. These are the only separate
+  //    per-offer artifacts (research / interview-prep / outreach / negotiate
+  //    all live in the report BODY and die with it above). Match num-exact —
+  //    `{type}-{candidate}-{slug}-{num}-{date}.pdf` — so a same-company
+  //    sibling's PDF is never collaterally deleted. Legacy num-less files are
+  //    intentionally left (their slug-only name can't be safely attributed).
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const candidate = companySlug(loadProfile(rootPath)?.candidate?.full_name ?? '');
+  const slug = companySlug(company);
+  if (candidate && slug) {
+    const outputDir = join(rootPath, 'artifacts/output');
+    const pdfRe = new RegExp(
+      `^(cv|cover-letter)-${escapeRe(candidate)}-${escapeRe(slug)}-${num}-\\d{4}-\\d{2}-\\d{2}\\.pdf$`,
+    );
+    try {
+      for (const f of readdirSync(outputDir)) {
+        if (pdfRe.test(f)) tryUnlink(join(outputDir, f));
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        console.warn(`[deleteApplication] could not scan output dir: ${(err as Error).message}`);
+      }
     }
   }
 

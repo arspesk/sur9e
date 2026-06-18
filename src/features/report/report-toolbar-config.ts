@@ -80,7 +80,7 @@ export const MODE_REGISTRY: Record<string, ModeMeta> = {
     icon: ICON.reachOut,
     cliMode: 'reach-out',
     singleUse: true,
-    isLocked: r => Boolean(r.outreach_path),
+    isLocked: r => Boolean(r.has_outreach),
   },
   'interview-prep': {
     label: 'Interview prep',
@@ -100,7 +100,7 @@ export const MODE_REGISTRY: Record<string, ModeMeta> = {
     icon: ICON.negotiate,
     cliMode: 'negotiate',
     singleUse: true,
-    isLocked: r => Boolean(r.negotiation_doc_path),
+    isLocked: r => Boolean(r.has_negotiation),
   },
   'cover-letter': {
     label: 'Cover letter',

@@ -41,11 +41,10 @@ function tilesForReport(r: ReportR): AttachmentTile[] {
       filename: p.split('/').pop() ?? 'cover-letter.pdf',
     });
   }
-  // Outreach is NOT an attachment anymore — it's prose appended into the report
-  // body as a `## Outreach` markdown section (see content/modes/reach-out.md),
-  // like research / interview-prep. Attachments are downloadable PDFs only
-  // (Tailored CV, Cover letter). The legacy `outreach_path` download tile was
-  // a markdown file masquerading as a "pack" and is intentionally dropped.
+  // Outreach is NOT an attachment — it's prose appended into the report body as
+  // a `## Outreach` markdown section (see content/modes/reach-out.md), like
+  // research / interview-prep / negotiate. Attachments are downloadable PDFs
+  // only (Tailored CV, Cover letter); there is no separate outreach file.
   return tiles;
 }
 

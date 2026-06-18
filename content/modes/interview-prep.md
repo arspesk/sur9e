@@ -192,15 +192,19 @@ Put this under a `### Company signals` heading. Things to say, do, and avoid bas
 
 ## Output
 
-Save the full report to `artifacts/interview-prep/{company-slug}-{role-slug}.md` with this header:
+The deliverable is the single `## Interview Process` section described above —
+**folded into the offer's report**, never a separate file (same model as
+`/research`, `/reach-out`, and `/negotiate`). There is **no
+`artifacts/interview-prep/{...}.md` per-offer file**; the only file in that
+directory is the shared `story-bank.md` (Input 3).
 
-```markdown
-# Interview intel: {Company}, {Role}
-
-**Report:** {link to evaluation report if exists, or "N/A"}
-**Researched:** {YYYY-MM-DD}
-**Sources:** {N} glassdoor reviews, {N} blind posts, {N} other
-```
+- Triggered through the job runner (the normal path): emit the section between
+  the `<<<SUR9E_OUTPUT>>>` / `<<<SUR9E_END>>>` sentinels and let the app upsert
+  it into the report — never edit the report yourself.
+- Run directly in the agent against an offer: upsert the same `## Interview
+Process` section into that offer's report in `artifacts/reports/` (the report
+  carries the interview intel; the toolbar's "Interview prep" button hides once
+  the section exists).
 
 ## Post-research
 

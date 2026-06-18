@@ -53,38 +53,6 @@ export interface AppendedSection {
   rawHtml: string;
 }
 
-export interface OutreachContact {
-  id?: string;
-  name?: string;
-  persona?: string;
-  company?: string;
-  title?: string;
-  linkedin?: string;
-  email?: string;
-  framework?: string;
-  message_en?: string;
-  message_es?: string;
-  char_count?: number;
-  alts_en?: string[];
-  alts_es?: string[];
-  rationale?: string;
-  notes?: string;
-}
-
-export interface OutreachFrontmatter {
-  contacts?: OutreachContact[];
-  pending?: { persona?: string; reason?: string }[];
-  why_outreach?: string[];
-  sequencing?: { day?: string | number; action?: string }[];
-  drafted?: string;
-  score?: string;
-  primary?: string;
-}
-
-export interface OutreachPack {
-  frontmatter?: OutreachFrontmatter;
-}
-
 export interface ScoreBreakdown {
   cv_match?: number;
   seniority?: number;
@@ -146,12 +114,11 @@ export interface ReportR {
   sections?: { letter: string; title: string; body: string; rawHtml: string }[];
   cv_pdf_path?: string | null;
   cover_letter_path?: string | null;
-  outreach?: OutreachPack | null;
-  outreach_path?: string | null;
   has_company_research?: boolean;
   has_interview_process?: boolean;
+  has_outreach?: boolean;
+  has_negotiation?: boolean;
   appended_sections?: AppendedSection[];
-  negotiation_doc_path?: string | null;
   work_mode?: string;
   company_logo?: string;
   /** Canonical city-only location (city fallback resolved in ReportHero). */
@@ -194,10 +161,10 @@ export interface ApplicationEntry {
   };
   cv_pdf_path?: string | null;
   cover_letter_path?: string | null;
-  outreach?: OutreachPack | null;
-  outreach_path?: string | null;
   has_company_research?: boolean;
   has_interview_process?: boolean;
+  has_outreach?: boolean;
+  has_negotiation?: boolean;
 }
 
 /* ---------- fmtDate ---------- */
@@ -418,10 +385,10 @@ export function mapEntryToR(entry: ApplicationEntry): ReportR | null {
     sections: p.sections || [],
     cv_pdf_path: entry.cv_pdf_path || null,
     cover_letter_path: entry.cover_letter_path || null,
-    outreach: entry.outreach || null,
-    outreach_path: entry.outreach_path || null,
     has_company_research: Boolean(entry.has_company_research),
     has_interview_process: Boolean(entry.has_interview_process),
+    has_outreach: Boolean(entry.has_outreach),
+    has_negotiation: Boolean(entry.has_negotiation),
     appended_sections:
       (entry.report && entry.report.parsed && entry.report.parsed.appended_sections) || [],
     format: (p.format as 'frontmatter' | undefined) ?? 'frontmatter',

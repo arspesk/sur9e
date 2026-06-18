@@ -113,8 +113,9 @@ export const ReportFrontmatter = z.object({
     .optional(),
   cv_pdf_path: z.string().nullable().optional(),
   cover_letter_path: z.string().nullable().optional(),
-  outreach_path: z.string().nullable().optional(),
   has_company_research: z.boolean().optional(),
   has_interview_process: z.boolean().optional(),
+  has_outreach: z.boolean().optional(),
+  has_negotiation: z.boolean().optional(),
 });
 export type ReportFrontmatter = z.infer<typeof ReportFrontmatter>;

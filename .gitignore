@@ -9,9 +9,6 @@ artifacts/reports/*.md.bak*
 !artifacts/reports/.gitkeep
 artifacts/output/*
 !artifacts/output/.gitkeep
-# Generated outreach packs (artifacts/outreach/<num>-<slug>-<date>.md)
-artifacts/outreach/*
-!artifacts/outreach/.gitkeep
 # Lighthouse baseline artifacts (HTML/JSON reports — large, regenerate via `npm run lighthouse`)
 artifacts/lighthouse/*
 !artifacts/lighthouse/.gitkeep

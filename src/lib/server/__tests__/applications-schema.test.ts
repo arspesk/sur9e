@@ -388,4 +388,35 @@ describe('deleteApplication', () => {
     // #20's report is untouched — `002-` is dash-bounded, so it can't match `020-`.
     expect(existsSync(join(reports, '020-other-2026-06-02.md'))).toBe(true);
   });
+
+  it('sweeps the offer’s num-exact cv + cover-letter PDFs, sparing siblings', () => {
+    const out = join(scratchRoot, 'artifacts', 'output');
+    mkdirSync(out, { recursive: true });
+    mkdirSync(join(scratchRoot, 'inputs', 'personalization'), { recursive: true });
+    // Candidate name drives the {candidate} slot — without a profile the
+    // sweep is skipped (candidate empty → no possible match).
+    writeFileSync(
+      join(scratchRoot, 'inputs/personalization/profile.yml'),
+      'candidate:\n  full_name: Test User\n',
+      'utf-8',
+    );
+    // Offer #2 is "Acme" → slug "acme". Its num-exact deliverables:
+    const cv2 = `cv-test-user-acme-2-2026-06-20.pdf`;
+    const cl2 = `cover-letter-test-user-acme-2-2026-06-20.pdf`;
+    writeFileSync(join(out, cv2), 'pdf', 'utf-8');
+    writeFileSync(join(out, cl2), 'pdf', 'utf-8');
+    // Sibling-safety: a same-slug PDF under a DIFFERENT num, and a legacy
+    // num-less file — neither may be collaterally deleted.
+    const cvOtherNum = `cv-test-user-acme-99-2026-06-20.pdf`;
+    const cvLegacy = `cv-test-user-acme-2026-06-20.pdf`;
+    writeFileSync(join(out, cvOtherNum), 'pdf', 'utf-8');
+    writeFileSync(join(out, cvLegacy), 'pdf', 'utf-8');
+
+    deleteApplication(scratchRoot, 2);
+
+    expect(existsSync(join(out, cv2))).toBe(false);
+    expect(existsSync(join(out, cl2))).toBe(false);
+    expect(existsSync(join(out, cvOtherNum))).toBe(true);
+    expect(existsSync(join(out, cvLegacy))).toBe(true);
+  });
 });

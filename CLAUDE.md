@@ -76,7 +76,7 @@ content/examples/         — Personalization templates new users copy from
 cli/                      — Node CLI tools (doctor, verify-pipeline, generate-pdf, merge-tracker, etc.)
 scripts/                  — Web launcher, setup migrations, maintainer tools
 batch/                    — Headless workers: ATS portal + JobSpy scanning + screen/evaluate runners
-artifacts/                — Generated reports / outreach packs / PDFs / interview-prep (gitignored)
+artifacts/                — Generated reports / CV+cover-letter PDFs / interview-prep story bank (gitignored)
 data/                     — Runtime state (applications.md, pipeline.md, jobs/, usage.json — gitignored)
 test/                     — vitest unit tests + Playwright e2e (test/e2e/)
 ```

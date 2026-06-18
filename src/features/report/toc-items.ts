@@ -62,7 +62,7 @@ export function getTocItems(r: ReportR): TocItem[] {
   if (r.has_interview_process) {
     evaluatedItems.push({ id: 'interview-process', title: 'Interview prep' });
   }
-  if (r.outreach) {
+  if (r.has_outreach) {
     evaluatedItems.push({ id: 'outreach', title: 'Outreach' });
   }
   return isEvaluated

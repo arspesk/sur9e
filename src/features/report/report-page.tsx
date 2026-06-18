@@ -127,8 +127,8 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
 
   // Documents moved out of the topbar — the in-document <ReportAttachments>
   // section below the editor handles downloads now, gated on the same
-  // r.cv_pdf_path / cover_letter_path / outreach_path data the legacy
-  // Documents trigger used to read.
+  // r.cv_pdf_path / cover_letter_path data the legacy Documents trigger used
+  // to read.
 
   return (
     <>
