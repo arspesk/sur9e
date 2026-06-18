@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 
 import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
+import { normalizeApplyAnswers } from '@/lib/schemas/apply-answers';
 import { loadProfile, saveProfile } from '@/lib/server/profile';
 
 export function GET() {
@@ -15,6 +16,7 @@ export function GET() {
       location: profile.location ?? {},
       languages: profile.languages ?? [],
       search: profile.search ?? { terms: [], locations: [] },
+      apply_answers: normalizeApplyAnswers(profile.apply_answers),
     });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Failed to load profile');
@@ -41,6 +43,7 @@ export async function PATCH(request: Request) {
       'location',
       'languages',
       'search',
+      'apply_answers',
     ] as const) {
       if (body[key] !== undefined) {
         (profile as Record<string, unknown>)[key] = body[key];
