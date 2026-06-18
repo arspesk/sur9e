@@ -41,6 +41,14 @@ export const ProfileFormSchema = ProfileShape.extend({
       target_range: z.string().min(1, 'Required'),
     })
     .passthrough(),
+  // Explicit override: z.preprocess in ProfileApplyAnswers makes the type
+  // opaque to react-hook-form's ArrayPath constraint, and optional() adds
+  // | undefined which prevents ArrayPath from matching the field. Use a
+  // plain array with .default([]) so the inferred type is always
+  // { question: string; answer: string }[] and useFieldArray resolves it.
+  apply_answers: z
+    .array(z.object({ question: z.string().default(''), answer: z.string().default('') }))
+    .default([]),
 });
 
 export type ProfileFormValues = z.infer<typeof ProfileFormSchema>;
