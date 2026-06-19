@@ -2,12 +2,15 @@
 
 // sections/apply-section.tsx — "Apply answers" Q&A row editor.
 // Each row is one { question, answer } pair, persisted as one profile.yml list
-// item. The schema preprocess (normalizeApplyAnswers) drops both-blank rows on
-// save, so no trim logic is needed here.
+// item. Rows reuse the shared .form-rows / .form-row / .row-cell /
+// .form-row__remove / .form-row__add styling (same as the archetypes /
+// proof-points / languages rows) so the inputs and remove button match the
+// rest of the profile. The schema preprocess (normalizeApplyAnswers) drops
+// both-blank rows on save, so no trim logic is needed here.
 
 import type { Control } from 'react-hook-form';
 import { useFieldArray, useFormContext } from 'react-hook-form';
-import { Button, Input, Textarea } from '@/components/primitives';
+import { Input } from '@/components/primitives';
 import { COMMON_QUESTIONS } from '@/lib/schemas/apply-answers';
 import type { ProfileFormValues } from '../schemas';
 
@@ -44,47 +47,48 @@ export function ApplySection() {
         asking.
       </p>
 
-      <div className="apply-answers">
-        {fields.length === 0 ? (
-          <p className="apply-answers__empty">No answers yet — add one below.</p>
-        ) : (
-          fields.map((field, i) => (
-            <div className="apply-answers__row" key={field.id}>
-              <Input
-                aria-label={`Question ${i + 1}`}
-                placeholder="Question (e.g. Work authorization (US))"
-                {...register(`apply_answers.${i}.question` as const)}
-              />
-              <Textarea
-                aria-label={`Answer ${i + 1}`}
-                rows={1}
-                placeholder="Answer (e.g. Yes)"
-                {...register(`apply_answers.${i}.answer` as const)}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label={`Remove answer ${i + 1}`}
-                onClick={() => remove(i)}
-              >
-                ✕
-              </Button>
-            </div>
-          ))
-        )}
+      <div className="form-rows">
+        {fields.map((field, i) => (
+          <div className="form-row" data-row-idx={i} key={field.id}>
+            <Input
+              className="row-cell"
+              aria-label={`Question ${i + 1}`}
+              placeholder="Question"
+              {...register(`apply_answers.${i}.question` as const)}
+            />
+            <Input
+              className="row-cell"
+              aria-label={`Answer ${i + 1}`}
+              placeholder="Answer"
+              {...register(`apply_answers.${i}.answer` as const)}
+            />
+            <button
+              className="form-row__remove"
+              type="button"
+              aria-label={`Remove answer ${i + 1}`}
+              onClick={() => remove(i)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
       </div>
 
+      {fields.length === 0 && (
+        <p className="apply-answers__empty">No answers yet — add one below.</p>
+      )}
+
       <div className="apply-answers__actions">
-        <Button
+        <button
+          className="form-row__add"
           type="button"
-          variant="secondary"
           onClick={() => append({ question: '', answer: '' })}
         >
           + Add answer
-        </Button>
-        <Button type="button" variant="ghost" onClick={addCommonQuestions}>
+        </button>
+        <button className="form-row__add" type="button" onClick={addCommonQuestions}>
           + Add common questions
-        </Button>
+        </button>
       </div>
     </section>
   );

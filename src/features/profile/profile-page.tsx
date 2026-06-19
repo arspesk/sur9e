@@ -25,7 +25,7 @@ const SECTIONS: TocItem[] = [
   { id: 'pitch', title: 'Pitch' },
   { id: 'comp', title: 'Compensation' },
   { id: 'location', title: 'Location' },
-  { id: 'apply', title: 'Application questions' },
+  { id: 'apply', title: 'Apply answers' },
   { id: 'cv', title: 'CV' },
   { id: 'narrative', title: 'Narrative' },
   { id: 'digest', title: 'Article digest' },

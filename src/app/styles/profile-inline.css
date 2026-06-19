@@ -186,18 +186,10 @@
   }
 }
 
-/* Apply answers Q&A row editor */
-.apply-answers {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.apply-answers__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
-  gap: var(--space-2);
-  align-items: start;
-}
+/* Apply answers — rows reuse the shared .form-row / .row-cell /
+   .form-row__remove styling (same as archetypes / proof-points / languages),
+   so only the dual add-button row and the empty-state hint need their own
+   rules here. */
 .apply-answers__actions {
   display: flex;
   gap: var(--space-2);
@@ -205,10 +197,6 @@
   flex-wrap: wrap;
 }
 .apply-answers__empty {
-  color: var(--text-muted);
-}
-@media (max-width: 640px) {
-  .apply-answers__row {
-    grid-template-columns: 1fr;
-  }
+  color: var(--text-3);
+  font-size: 13px;
 }
