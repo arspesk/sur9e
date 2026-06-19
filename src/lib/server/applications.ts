@@ -353,6 +353,104 @@ export function updateStatus(
  * `removedReport` is the report path that was deleted (or null if the row had
  * no report link, the file didn't exist, or nothing was deleted).
  */
+/**
+ * Sweep every on-disk artifact belonging to a single offer: the linked report
+ * (+ `.bak`), same-num orphan report siblings, and the tailored CV / cover-letter
+ * PDFs. Shared by the single-row {@link deleteApplication} and the multi-select
+ * {@link batchDeleteApplications} so the two paths can't drift — the batch path
+ * used to unlink ONLY the linked report, leaving `.bak` sidecars, orphan-slug
+ * siblings, and every PDF behind.
+ *
+ * The tracker row is the source of truth and is removed by the caller BEFORE
+ * this runs; a file-system failure here is logged but never aborts the delete.
+ * Returns whether the linked report file was actually on disk (callers surface
+ * `removedReport` as null when it wasn't, preserving back-compat).
+ */
+function cleanupOfferArtifacts(
+  rootPath: string,
+  num: number,
+  company: string,
+  removedReport: string | null,
+): boolean {
+  // Delete a file, swallowing ENOENT. Returns whether it was actually removed.
+  const tryUnlink = (absPath: string): boolean => {
+    try {
+      unlinkSync(absPath);
+      return true;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        console.warn(
+          `[cleanupOfferArtifacts] could not delete ${absPath}: ${(err as Error).message}`,
+        );
+      }
+      return false;
+    }
+  };
+
+  // 1. The report file linked in the tracker row (whatever its name), plus its
+  //    `.bak` sidecar — which the previous implementation left orphaned.
+  let linkedRemoved = false;
+  if (removedReport) {
+    const fullPath = join(rootPath, removedReport);
+    linkedRemoved = tryUnlink(fullPath);
+    tryUnlink(`${fullPath}.bak`);
+  }
+
+  // 2. Sweep any same-num sibling artifacts left on disk: `NNN-<slug>-<date>.md`
+  //    (+ `.md.bak`) created by re-generation or screener churn under a
+  //    DIFFERENT slug than the linked file. Deleting only the linked report
+  //    used to leave these behind, and an orphan whose name sorts first then
+  //    shadows the next report that reuses the number (loadReport resolves
+  //    `NNN-*.md` by readdir order). The `NNN-` prefix is dash-bounded, so
+  //    deleting #2 (`002-`) can't match #20 (`020-`) or #200 (`200-`).
+  const reportsDir = join(rootPath, 'artifacts/reports');
+  const prefix = `${String(num).padStart(3, '0')}-`;
+  try {
+    for (const f of readdirSync(reportsDir)) {
+      if (f.startsWith(prefix) && (f.endsWith('.md') || f.includes('.md.bak'))) {
+        tryUnlink(join(reportsDir, f));
+      }
+    }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      console.warn(`[cleanupOfferArtifacts] could not scan reports dir: ${(err as Error).message}`);
+    }
+  }
+
+  // 3. Sweep this offer's downloadable deliverables in artifacts/output/:
+  //    the tailored CV and cover-letter PDFs. These are the only separate
+  //    per-offer artifacts (research / interview-prep / outreach / negotiate
+  //    all live in the report BODY and die with it above). Match num-exact —
+  //    `{type}-{candidate}-{slug}-{num}-{date}.pdf` — so a same-company
+  //    sibling's PDF is never collaterally deleted. Legacy num-less files are
+  //    intentionally left (their slug-only name can't be safely attributed).
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const candidate = companySlug(loadProfile(rootPath)?.candidate?.full_name ?? '');
+  const slug = companySlug(company);
+  if (candidate && slug) {
+    const outputDir = join(rootPath, 'artifacts/output');
+    const pdfRe = new RegExp(
+      `^(cv|cover-letter)-${escapeRe(candidate)}-${escapeRe(slug)}-${num}-\\d{4}-\\d{2}-\\d{2}\\.pdf$`,
+    );
+    try {
+      for (const f of readdirSync(outputDir)) {
+        if (pdfRe.test(f)) tryUnlink(join(outputDir, f));
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        console.warn(
+          `[cleanupOfferArtifacts] could not scan output dir: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  return linkedRemoved;
+}
+
 export function deleteApplication(
   rootPath: string,
   num: number,
@@ -388,79 +486,7 @@ export function deleteApplication(
   lines.splice(foundIndex, 1);
   atomicWrite(filePath, lines.join('\n'));
 
-  // Delete a file, swallowing ENOENT. Returns whether it was actually removed.
-  // Tracker delete is the source of truth, so a file-system failure is logged
-  // but never aborts the delete.
-  const tryUnlink = (absPath: string): boolean => {
-    try {
-      unlinkSync(absPath);
-      return true;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
-        console.warn(`[deleteApplication] could not delete ${absPath}: ${(err as Error).message}`);
-      }
-      return false;
-    }
-  };
-
-  // 1. The report file linked in the tracker row (whatever its name), plus its
-  //    `.bak` sidecar — which the previous implementation left orphaned.
-  let linkedRemoved = false;
-  if (removedReport) {
-    const fullPath = join(rootPath, removedReport);
-    linkedRemoved = tryUnlink(fullPath);
-    tryUnlink(`${fullPath}.bak`);
-  }
-
-  // 2. Sweep any same-num sibling artifacts left on disk: `NNN-<slug>-<date>.md`
-  //    (+ `.md.bak`) created by re-generation or screener churn under a
-  //    DIFFERENT slug than the linked file. Deleting only the linked report
-  //    used to leave these behind, and an orphan whose name sorts first then
-  //    shadows the next report that reuses the number (loadReport resolves
-  //    `NNN-*.md` by readdir order). The `NNN-` prefix is dash-bounded, so
-  //    deleting #2 (`002-`) can't match #20 (`020-`) or #200 (`200-`).
-  const reportsDir = join(rootPath, 'artifacts/reports');
-  const prefix = `${String(num).padStart(3, '0')}-`;
-  try {
-    for (const f of readdirSync(reportsDir)) {
-      if (f.startsWith(prefix) && (f.endsWith('.md') || f.includes('.md.bak'))) {
-        tryUnlink(join(reportsDir, f));
-      }
-    }
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') {
-      console.warn(`[deleteApplication] could not scan reports dir: ${(err as Error).message}`);
-    }
-  }
-
-  // 3. Sweep this offer's downloadable deliverables in artifacts/output/:
-  //    the tailored CV and cover-letter PDFs. These are the only separate
-  //    per-offer artifacts (research / interview-prep / outreach / negotiate
-  //    all live in the report BODY and die with it above). Match num-exact —
-  //    `{type}-{candidate}-{slug}-{num}-{date}.pdf` — so a same-company
-  //    sibling's PDF is never collaterally deleted. Legacy num-less files are
-  //    intentionally left (their slug-only name can't be safely attributed).
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const candidate = companySlug(loadProfile(rootPath)?.candidate?.full_name ?? '');
-  const slug = companySlug(company);
-  if (candidate && slug) {
-    const outputDir = join(rootPath, 'artifacts/output');
-    const pdfRe = new RegExp(
-      `^(cv|cover-letter)-${escapeRe(candidate)}-${escapeRe(slug)}-${num}-\\d{4}-\\d{2}-\\d{2}\\.pdf$`,
-    );
-    try {
-      for (const f of readdirSync(outputDir)) {
-        if (pdfRe.test(f)) tryUnlink(join(outputDir, f));
-      }
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
-        console.warn(`[deleteApplication] could not scan output dir: ${(err as Error).message}`);
-      }
-    }
-  }
+  const linkedRemoved = cleanupOfferArtifacts(rootPath, num, company, removedReport);
 
   // Back-compat: `removedReport` reports the linked path only when it was
   // actually on disk (null otherwise), as before.
@@ -585,9 +611,15 @@ export function batchDeleteApplications(rootPath: string, nums: number[]): Batch
   const lines = content.split('\n');
   // Dedup nums so duplicate entries don't collide on the same row index.
   const uniq = Array.from(new Set(nums));
-  // Collect (index, num, reportPath) for every num before mutating, then
-  // splice in reverse order so earlier indices stay valid.
-  const targets: Array<{ idx: number; num: number; removedReport: string | null }> = [];
+  // Collect (index, num, company, reportPath) for every num before mutating,
+  // then splice in reverse order so earlier indices stay valid. `company` is
+  // needed for the PDF sweep in cleanupOfferArtifacts.
+  const targets: Array<{
+    idx: number;
+    num: number;
+    company: string;
+    removedReport: string | null;
+  }> = [];
   const results: BatchDeleteResult[] = [];
   for (const num of uniq) {
     const idx = findRowIndex(lines, num);
@@ -597,7 +629,12 @@ export function batchDeleteApplications(rootPath: string, nums: number[]): Batch
     }
     const parts = lines[idx].split('|').map(s => s.trim());
     const reportMatch = parts[8].match(/\[(\d+)\]\(([^)]+)\)/);
-    targets.push({ idx, num, removedReport: reportMatch ? reportMatch[2] : null });
+    targets.push({
+      idx,
+      num,
+      company: parts[3],
+      removedReport: reportMatch ? reportMatch[2] : null,
+    });
   }
   if (targets.length === 0) {
     return results;
@@ -606,24 +643,15 @@ export function batchDeleteApplications(rootPath: string, nums: number[]): Batch
     lines.splice(t.idx, 1);
   }
   atomicWrite(filePath, lines.join('\n'));
+  // Full per-offer artifact sweep — same as deleteApplication — so batch delete
+  // no longer leaves `.bak` sidecars, orphan-slug report siblings, and PDFs behind.
   for (const t of targets) {
-    let removedReport = t.removedReport;
-    if (removedReport) {
-      const fullPath = join(rootPath, removedReport);
-      try {
-        unlinkSync(fullPath);
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === 'ENOENT') {
-          removedReport = null;
-        } else {
-          console.warn(
-            `[batchDeleteApplications] could not delete report ${fullPath}: ${(err as Error).message}`,
-          );
-        }
-      }
-    }
-    results.push({ num: t.num, ok: true, removedReport });
+    const linkedRemoved = cleanupOfferArtifacts(rootPath, t.num, t.company, t.removedReport);
+    results.push({
+      num: t.num,
+      ok: true,
+      removedReport: t.removedReport && linkedRemoved ? t.removedReport : null,
+    });
   }
   return results;
 }

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationRow, ApplicationStatus } from '../../schemas/applications';
 import {
+  batchDeleteApplications,
   batchUpdateStatus,
   CANONICAL_STATUSES,
   deleteApplication,
@@ -418,5 +419,99 @@ describe('deleteApplication', () => {
     expect(existsSync(join(out, cl2))).toBe(false);
     expect(existsSync(join(out, cvOtherNum))).toBe(true);
     expect(existsSync(join(out, cvLegacy))).toBe(true);
+  });
+});
+
+// ── batchDeleteApplications ───────────────────────────────────────────────────
+// Regression: the multi-select path used to unlink ONLY the linked report,
+// leaving `.bak` sidecars, orphan-slug siblings, and every PDF behind. It now
+// shares cleanupOfferArtifacts with deleteApplication.
+
+describe('batchDeleteApplications', () => {
+  const FIXTURE = [
+    '# Applications Tracker (test fixture)',
+    '',
+    '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+    '|---|------|---------|------|-------|--------|-----|--------|-------|',
+    '| 1 | 2026-04-15 | Anthropic | Forward Deployed Engineer | 4.8/5 | Evaluated | ❌ | [1](artifacts/reports/1.md) | row 1 |',
+    '| 2 | 2026-04-20 | Acme | Backend Engineer | 4.2/5 | Applied | ✅ | [2](artifacts/reports/2.md) | row 2 |',
+    '| 3 | 2026-04-25 | Globex | Platform Engineer | 3.0/5 | Discarded | ❌ | [3](artifacts/reports/3.md) | row 3 |',
+  ].join('\n');
+
+  let scratchRoot: string;
+
+  function seed(): void {
+    mkdirSync(join(scratchRoot, 'data'), { recursive: true });
+    mkdirSync(join(scratchRoot, 'artifacts', 'reports'), { recursive: true });
+    mkdirSync(join(scratchRoot, 'artifacts', 'output'), { recursive: true });
+    mkdirSync(join(scratchRoot, 'inputs', 'personalization'), { recursive: true });
+    writeFileSync(join(scratchRoot, 'data/applications.md'), FIXTURE, 'utf-8');
+    writeFileSync(
+      join(scratchRoot, 'inputs/personalization/profile.yml'),
+      'candidate:\n  full_name: Test User\n',
+      'utf-8',
+    );
+    for (const n of [1, 2, 3]) {
+      writeFileSync(join(scratchRoot, `artifacts/reports/${n}.md`), `# row ${n}`, 'utf-8');
+    }
+  }
+
+  beforeEach(() => {
+    scratchRoot = mkdtempSync(join(tmpdir(), 'batch-delete-app-test-'));
+    seed();
+  });
+
+  afterEach(() => {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  });
+
+  it('removes the rows and linked report files; reports per-num results', () => {
+    const results = batchDeleteApplications(scratchRoot, [1, 3]);
+    expect(results).toEqual([
+      { num: 1, ok: true, removedReport: 'artifacts/reports/1.md' },
+      { num: 3, ok: true, removedReport: 'artifacts/reports/3.md' },
+    ]);
+    const remaining = loadApplications(scratchRoot);
+    expect(remaining.map(e => e.num)).toEqual([2]);
+    expect(existsSync(join(scratchRoot, 'artifacts/reports/1.md'))).toBe(false);
+    expect(existsSync(join(scratchRoot, 'artifacts/reports/3.md'))).toBe(false);
+    expect(existsSync(join(scratchRoot, 'artifacts/reports/2.md'))).toBe(true);
+  });
+
+  it('sweeps .bak sidecars, orphan-slug siblings, and num-exact PDFs for every deleted offer', () => {
+    const reports = join(scratchRoot, 'artifacts/reports');
+    const out = join(scratchRoot, 'artifacts/output');
+    // Per-offer churn artifacts that the old batch path left orphaned.
+    writeFileSync(join(reports, '2.md.bak'), 'bak', 'utf-8');
+    writeFileSync(join(reports, '002-orphan-2026-06-02.md'), 'orphan', 'utf-8');
+    writeFileSync(join(reports, '003-globex-2026-06-02.md.bak'), 'orphan-bak', 'utf-8');
+    // Offer #2 Acme + #3 Globex PDF deliverables (num-exact).
+    writeFileSync(join(out, 'cv-test-user-acme-2-2026-06-20.pdf'), 'pdf', 'utf-8');
+    writeFileSync(join(out, 'cover-letter-test-user-acme-2-2026-06-20.pdf'), 'pdf', 'utf-8');
+    writeFileSync(join(out, 'cv-test-user-globex-3-2026-06-20.pdf'), 'pdf', 'utf-8');
+    // Survivors: offer #1's report stays, and a legacy num-less PDF is spared.
+    const cvLegacy = 'cv-test-user-acme-2026-06-20.pdf';
+    writeFileSync(join(out, cvLegacy), 'pdf', 'utf-8');
+
+    batchDeleteApplications(scratchRoot, [2, 3]);
+
+    expect(existsSync(join(reports, '2.md'))).toBe(false);
+    expect(existsSync(join(reports, '2.md.bak'))).toBe(false);
+    expect(existsSync(join(reports, '002-orphan-2026-06-02.md'))).toBe(false);
+    expect(existsSync(join(reports, '3.md'))).toBe(false);
+    expect(existsSync(join(reports, '003-globex-2026-06-02.md.bak'))).toBe(false);
+    expect(existsSync(join(out, 'cv-test-user-acme-2-2026-06-20.pdf'))).toBe(false);
+    expect(existsSync(join(out, 'cover-letter-test-user-acme-2-2026-06-20.pdf'))).toBe(false);
+    expect(existsSync(join(out, 'cv-test-user-globex-3-2026-06-20.pdf'))).toBe(false);
+    // Untouched: offer #1 and the legacy num-less file.
+    expect(existsSync(join(reports, '1.md'))).toBe(true);
+    expect(existsSync(join(out, cvLegacy))).toBe(true);
+  });
+
+  it('reports unknown nums as errors while committing the valid deletes', () => {
+    const results = batchDeleteApplications(scratchRoot, [2, 99999]);
+    expect(results).toContainEqual({ num: 99999, ok: false, error: 'num not found: 99999' });
+    expect(results).toContainEqual({ num: 2, ok: true, removedReport: 'artifacts/reports/2.md' });
+    expect(loadApplications(scratchRoot).map(e => e.num)).toEqual([1, 3]);
   });
 });
