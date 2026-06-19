@@ -18,6 +18,13 @@ import type { ProfileFormValues } from '../schemas';
 // to NOT carry an index signature (Zod's .passthrough() adds one). Cast to a
 // plain structural type so useFieldArray can resolve 'apply_answers' as an
 // ArrayPath and infer the correct element type.
+//
+// Why useFieldArray here and not the shared _widgets/ControlledRowList: that
+// widget is Controller-based (so it avoids this cast) but assumes a single
+// add button and a typed `kind` with Select-backed columns. This section
+// needs two add buttons (+ Add answer / + Add common questions) over two
+// free-text columns, so useFieldArray with stable field.id row keys fits
+// better; we reuse the widget's .form-row CSS for visual parity instead.
 type ApplySectionFormValues = {
   apply_answers: { question: string; answer: string }[];
 };
@@ -30,6 +37,10 @@ export function ApplySection() {
   });
 
   function addCommonQuestions() {
+    // Idempotent by EXACT (case-insensitive) question match — appends only
+    // labels not already present. Near-duplicate wording from a free-text
+    // legacy migration (e.g. "Gender" vs "Gender / sex") won't be caught;
+    // acceptable since the data model tolerates duplicate questions.
     const existing = new Set(
       (getValues('apply_answers') ?? []).map(a => (a?.question ?? '').trim().toLowerCase()),
     );
