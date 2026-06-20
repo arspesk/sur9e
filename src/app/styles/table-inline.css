@@ -458,15 +458,27 @@ table.offers th.col-kebab {
   font-family: var(--font-mono);
   font-size: 12px;
 }
-.offers-empty-cell {
+/* Empty-state banner — a direct child of .table-wrap (NOT a table cell), so
+   position: sticky pins it horizontally. width: 100% resolves against the
+   scroll container's content box = the VISIBLE width (clientWidth), so the
+   message + CTA span the whole table view and stay centered in the viewport
+   even while the header scrolls horizontally underneath. */
+.offers-empty-banner {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
   padding: 32px 24px;
   color: var(--text-3);
   text-align: center;
-  /* Match row surface so the empty-state cell doesn't blink to canvas
-     color between the header and the (absent) row body. */
+  /* Match row surface so the banner doesn't blink to canvas color between the
+     header and the (absent) row body. */
   background: var(--surface);
 }
-.offers-empty-cell .btn {
+.offers-empty-banner p {
+  margin: 0 0 12px;
+}
+.offers-empty-banner .btn {
   margin-top: 4px;
 }
 .link-btn {

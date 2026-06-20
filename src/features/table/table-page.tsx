@@ -42,6 +42,14 @@ import { stripView, withView } from './view-url';
 const NUMERIC_DESC_KEYS = new Set(['num', 'score', 'date', 'posted', 'comp']);
 const COL_WIDTHS_KEY = 'sur9e.table.colWidths';
 
+// Client-side mirror of the labels in lib/server/onboarding-status.ts — kept
+// local because importing the server module's values would pull node:fs into
+// the client bundle.
+const SETUP_MISSING_LABEL: Record<OnboardingMissing, string> = {
+  cv: 'your CV',
+  profile: 'your profile',
+};
+
 /* Inline scripts only execute when the browser parses them out of
    server-rendered HTML; a <script> created by React during a client render
    (client-side nav to this page) is inert, and React 19 dev logs
@@ -178,6 +186,18 @@ function TablePageInner({ initialData, setupMissing }: TablePageInnerProps) {
   useScrollEdgeFade(wrapRef);
 
   const totalCount = query.data?.entries?.length ?? 0;
+
+  // Empty-state copy selection (rendered as the sticky banner below the table).
+  // isEmpty: no offers at all → onboarding CTA (needsSetup) or "+ Add offer".
+  // Otherwise rows.length === 0 means filters hid everything.
+  const isEmpty = totalCount === 0;
+  const needsSetup = isEmpty && setupMissing != null && setupMissing.length > 0;
+  const emptyState = {
+    isEmpty,
+    needsSetup,
+    missingLabel: (setupMissing ?? []).map(key => SETUP_MISSING_LABEL[key]).join(' and '),
+  };
+
   const rowCount = query.data
     ? rows.length === totalCount
       ? `${totalCount} offers`
@@ -393,15 +413,34 @@ function TablePageInner({ initialData, setupMissing }: TablePageInnerProps) {
                 ))}
               </tbody>
             ) : (
-              <OffersTable
-                rows={rows}
-                totalCount={totalCount}
-                setupMissing={setupMissing}
-                tableRef={tableRef}
-                wrapRef={wrapRef}
-              />
+              <OffersTable rows={rows} tableRef={tableRef} wrapRef={wrapRef} />
             )}
           </table>
+          {/* Empty state lives OUTSIDE the table, as a direct child of the
+              scroll container, so `position: sticky; left: 0` (CSS) pins it to
+              the visible width across the whole table view and keeps it put
+              during horizontal scroll. A banner inside the over-wide colSpan
+              <td> can't stick — its containing block is the 1320px cell, not
+              the viewport — so it would scroll off-screen. */}
+          {!query.isPending && rows.length === 0 && (
+            <div className="offers-empty-banner" role="status">
+              {emptyState.needsSetup ? (
+                // First-run dead-end guard: without cv.md / profile.yml every
+                // screen job hard-fails (batch/screen.mjs exits 1), so point at
+                // onboarding instead of offering a doomed "+ Add offer".
+                <>
+                  <p>sur9e needs {emptyState.missingLabel} before it can screen offers.</p>
+                  <Link href="/profile" className="btn btn-primary">
+                    Finish setup on Profile
+                  </Link>
+                </>
+              ) : emptyState.isEmpty ? (
+                <p>No offers yet. Scan for new offers or add one directly.</p>
+              ) : (
+                <p>No offers match your filters.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {/* Anti-flash boot: applies saved column widths + clip/edge fades

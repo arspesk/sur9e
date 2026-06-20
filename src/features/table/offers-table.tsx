@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useOptimistic, useRef, useState, useTransition } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { scoreLevel } from '@/components/domain/score-chip';
@@ -13,16 +12,13 @@ import { useUpdateApplicationStatus } from '@/hooks/use-applications';
 import { useJobLock } from '@/hooks/use-job-lock';
 import { useProfileQuery } from '@/hooks/use-profile';
 import type { ApplicationStatus } from '@/lib/schemas/applications';
-// Type-only import — erased at compile time, so the node:fs dependency of
-// the server module never reaches the client bundle.
-import type { OnboardingMissing } from '@/lib/server/onboarding-status';
 import { VALID_SENIORITY, VALID_WORK_MODE } from '@/lib/server/report-schema';
 import { interceptStatusPick } from '@/lib/status-transitions';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { useModalStore } from '@/stores/modal-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { fmtDate } from '../report/report-types';
-// Empty-state colSpan — derived from the shared column definitions
+// Spacer-row colSpan — derived from the shared column definitions
 // (table-columns.ts), the same source the loading skeleton and the
 // drift-guard test use, so it can't fall out of sync with the thead in
 // table-page.tsx.
@@ -35,27 +31,11 @@ import { sliceVirtualRows, spacerHeights } from './virtual-rows';
 
 interface OffersTableProps {
   rows: ApplicationRow[];
-  totalCount?: number;
-  /**
-   * First-run preflight (computed server-side by the RSC page): which
-   * personalization files are missing. When the table is empty AND setup is
-   * incomplete, the empty state points at onboarding instead of offering a
-   * screen-job CTA that would hard-fail without cv.md.
-   */
-  setupMissing?: OnboardingMissing[];
   /** The <table> — used to measure the tbody offset within the scrollport (scrollMargin). */
   tableRef: React.RefObject<HTMLTableElement | null>;
   /** The `.table-wrap` scroll container — the virtualizer's scroll element. */
   wrapRef: React.RefObject<HTMLDivElement | null>;
 }
-
-// Client-side mirror of the labels in lib/server/onboarding-status.ts —
-// kept local because importing the server module's values would pull
-// node:fs into the client bundle.
-const SETUP_MISSING_LABEL: Record<OnboardingMissing, string> = {
-  cv: 'your CV',
-  profile: 'your profile',
-};
 
 interface StatusPopoverState {
   num: number;
@@ -81,13 +61,7 @@ function optimisticReducer(current: ApplicationRow[], action: OptimisticAction):
   }
 }
 
-export function OffersTable({
-  rows,
-  totalCount = 0,
-  setupMissing,
-  tableRef,
-  wrapRef,
-}: OffersTableProps) {
+export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
   const has = useSelectionStore(s => s.has);
   const toggle = useSelectionStore(s => s.toggle);
   const setAll = useSelectionStore(s => s.setAll);
@@ -197,69 +171,12 @@ export function OffersTable({
     patchStatus(newStatus);
   }
 
+  // Empty state is rendered by table-page as a sticky banner that is a direct
+  // child of the scroll container (.table-wrap) — horizontal `position: sticky`
+  // can't pin an element trapped inside the over-wide colSpan <td>, so the
+  // message would scroll out of the viewport. Here we just emit an empty tbody.
   if (optimisticRows.length === 0) {
-    const isEmpty = totalCount === 0;
-    const needsSetup = isEmpty && setupMissing != null && setupMissing.length > 0;
-    return (
-      <tbody id="tableBody">
-        <tr>
-          <td colSpan={TABLE_COLUMN_COUNT} className="offers-empty-cell" role="status">
-            {/* The cell spans the full 13-column table, which is wider than
-                the scrollport at desktop/tablet — without this wrapper the
-                copy + CTA render past the right edge of .table-wrap. Sticky
-                with symmetric left/right insets (percentages resolve against
-                the scrollport) pins the box centered in the VISIBLE scroll
-                area; on mobile, where the table fits the viewport, both
-                insets collapse to 0 and the box lays out naturally. Inline
-                because the 220px is half the box width below — keep in sync. */}
-            <div
-              style={{
-                position: 'sticky',
-                left: 'max(0px, calc(50% - 220px))',
-                right: 'max(0px, calc(50% - 220px))',
-                width: 'min(440px, 100%)',
-                // Table cells inherit white-space: nowrap (table-inline.css)
-                // — without this the copy renders as one clipped line.
-                whiteSpace: 'normal',
-              }}
-            >
-              {needsSetup ? (
-                // First-run dead-end guard: without cv.md / profile.yml every
-                // screen job hard-fails (batch/screen.mjs exits 1), so point
-                // at onboarding instead of offering a doomed "+ Add offer".
-                <>
-                  <p style={{ margin: '0 0 12px' }}>
-                    Welcome! Before sur9e can screen offers it needs{' '}
-                    {setupMissing.map(key => SETUP_MISSING_LABEL[key]).join(' and ')}. Open your AI
-                    coding agent in the sur9e folder and it will walk you through setup — or fill in
-                    the basics yourself on the Profile page.
-                  </p>
-                  <Link href="/profile" className="btn btn-primary">
-                    Finish setup on Profile
-                  </Link>
-                </>
-              ) : isEmpty ? (
-                <>
-                  <p style={{ margin: '0 0 12px' }}>
-                    No offers tracked yet. Paste a job-posting URL to add your first one, or run{' '}
-                    <code>/sur9e scan</code> in your terminal to pull from configured portals.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => openModal('screen')}
-                  >
-                    + Add offer
-                  </button>
-                </>
-              ) : (
-                <>No offers match your filters.</>
-              )}
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    );
+    return <tbody id="tableBody" />;
   }
 
   return (
