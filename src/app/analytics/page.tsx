@@ -9,7 +9,7 @@ import { loadStatusLog, reconcileStatusLog } from '@/lib/server/status-log';
 import { loadUsage } from '@/lib/server/usage';
 
 export const metadata: Metadata = {
-  title: 'Sur9e — Analytics',
+  title: 'sur9e — Analytics',
 };
 
 // force-dynamic stays. Same audit rationale as /table and /pipeline

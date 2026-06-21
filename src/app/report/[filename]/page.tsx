@@ -16,14 +16,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const entry = findByFilename(ROOT, decoded);
     if (entry) {
       return {
-        title: `Sur9e — ${entry.company}`,
+        title: `sur9e — ${entry.company}`,
         description: `${entry.role} at ${entry.company}`,
       };
     }
   } catch {
     // Missing or malformed applications.md — fall back to generic title.
   }
-  return { title: 'Sur9e — Offer Report' };
+  return { title: 'sur9e — Offer Report' };
 }
 
 // force-dynamic dropped. report-render.tsx no longer

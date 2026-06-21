@@ -9,7 +9,7 @@ import { loadScanQueueStatus } from '@/lib/server/scan-status';
 import { loadSettingsResult } from '@/lib/server/settings';
 
 export const metadata: Metadata = {
-  title: 'Sur9e — Settings',
+  title: 'sur9e — Settings',
 };
 
 // force-dynamic stays. An audit found that synchronous filesystem

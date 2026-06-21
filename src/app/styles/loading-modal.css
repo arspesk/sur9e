@@ -1,5 +1,5 @@
 /* =====================================================================
-   Sur9e — Loading modal deck (Brand book §04 spec)
+   sur9e — Loading modal deck (Brand book §04 spec)
    380px floating deck of job-progress cards (bottom-right). One card
    per in-flight job; newest in front, older cards peek above it.
    Cross-page persistent via sessionStorage (list of active jobs).

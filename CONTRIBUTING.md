@@ -1,4 +1,4 @@
-# Contributing to Sur9e
+# Contributing to sur9e
 
 Thanks for considering a contribution! Sur9e is a free, self-hosted OSS
 project built at side-project pace — focused PRs and well-described issues
@@ -93,5 +93,5 @@ setup step. Web search and fetch use each CLI's native tools.
 ## License
 
 By contributing you agree your contribution is licensed under the
-[MIT License](LICENSE). The Sur9e name and logo are reserved — see
+[MIT License](LICENSE). The sur9e name and logo are reserved — see
 [`TRADEMARK.md`](TRADEMARK.md).

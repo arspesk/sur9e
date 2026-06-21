@@ -10,7 +10,7 @@ import { getOnboardingStatus } from '@/lib/server/onboarding-status';
 import Loading from './loading';
 
 export const metadata: Metadata = {
-  title: 'Sur9e — Offers',
+  title: 'sur9e — Offers',
 };
 
 // force-dynamic stays. applications.md changes between requests (status

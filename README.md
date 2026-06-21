@@ -4,7 +4,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/assets/sur9e-wordmark-white.svg">
-  <img src="public/assets/sur9e-wordmark-black.svg" alt="Sur9e" width="320">
+  <img src="public/assets/sur9e-wordmark-black.svg" alt="sur9e" width="320">
 </picture>
 
 ### Your AI job-hunt command center. Free, open-source, runs on your laptop.
@@ -55,7 +55,7 @@ Sur9e turns an AI coding agent — **Claude Code, Codex, or OpenCode** — into 
 <!-- screenshots:start -->
 <div align="center">
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="public/gifs/quick-demo-dark.gif"><img alt="Sur9e in action — screen, evaluate, and track an offer end to end" src="public/gifs/quick-demo-bright.gif" width="800"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="public/gifs/quick-demo-dark.gif"><img alt="sur9e in action — screen, evaluate, and track an offer end to end" src="public/gifs/quick-demo-bright.gif" width="800"></picture>
 
 </div>
 <!-- screenshots:end -->
@@ -158,7 +158,7 @@ The web UI is fully responsive — table, board, report editor, and settings all
 
 <div align="center">
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/mobile-dark.png"><img alt="Sur9e on mobile — table, report, and pipeline at phone width" src="public/screenshots/mobile-bright.png" width="280"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/mobile-dark.png"><img alt="sur9e on mobile — table, report, and pipeline at phone width" src="public/screenshots/mobile-bright.png" width="280"></picture>
 
 </div>
 
@@ -179,7 +179,7 @@ Next.js 16 (App Router, Turbopack) · React 19 · TanStack Query · Zustand · R
 Built standing on two projects that are both stack and inspiration:
 
 - **[career-ops](https://github.com/santifer/career-ops)** by Santiago Fernández de Valderrama — the project that proved AI job-hunt tooling could work as a CLI workflow. Sur9e takes that core idea further with multi-provider support, a web UI, and a two-stage screening pipeline.
-- **[JobSpy](https://github.com/cullenwatson/JobSpy)** by Cullen Watson — the MIT-licensed scraper that powers Sur9e's LinkedIn scanning.
+- **[JobSpy](https://github.com/cullenwatson/JobSpy)** by Cullen Watson — the MIT-licensed scraper that powers sur9e's LinkedIn scanning.
 
 ## Project structure
 
@@ -237,7 +237,7 @@ Sur9e is a local tool that connects to the AI provider **you** choose; evaluatio
 
 Code is licensed under the [MIT License](LICENSE) — including the upstream copyright of Santiago Fernández de Valderrama (career-ops).
 
-The **Sur9e name and logo are not covered by the MIT license.** They may not be used to name forks, imply endorsement, or suggest official affiliation — see [`TRADEMARK.md`](TRADEMARK.md).
+The **sur9e name and logo are not covered by the MIT license.** They may not be used to name forks, imply endorsement, or suggest official affiliation — see [`TRADEMARK.md`](TRADEMARK.md).
 
 ## About the author
 
@@ -254,7 +254,7 @@ Sur9e is built and maintained by **Arsenii Peskovatskov** ([arspesk](https://git
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/assets/sur9e-wordmark-white.svg">
-  <img src="public/assets/sur9e-wordmark-black.svg" alt="Sur9e" width="120">
+  <img src="public/assets/sur9e-wordmark-black.svg" alt="sur9e" width="120">
 </picture>
 
 <sub>MIT licensed · Arsenii Peskovatskov · <a href="https://github.com/arspesk">@arspesk</a></sub>

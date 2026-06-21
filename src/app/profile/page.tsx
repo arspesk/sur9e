@@ -5,7 +5,7 @@ import { ROOT } from '@/lib/root';
 import { loadProfileResult } from '@/lib/server/profile';
 
 export const metadata: Metadata = {
-  title: 'Sur9e — Profile',
+  title: 'sur9e — Profile',
 };
 
 // Profile keeps force-dynamic. The TipTap editor inside ProfilePage is
