@@ -63,10 +63,12 @@ batch/screened-urls.txt
 *.mov
 *.mp4
 
-# Claude Code local (track only project-owned skills like sur9e)
+# Claude Code local (track only project-owned skills like sur9e).
+# settings.json ships tracked so the usage-tracking Stop hook reaches users on
+# clone (mirrors OpenCode's tracked plugin); per-machine overrides live in the
+# ignored settings.local.json.
 .claude/memory/
 .claude/scheduled_tasks.lock
-.claude/settings.json
 .claude/settings.local.json
 .claude/skills/*
 !.claude/skills/sur9e/

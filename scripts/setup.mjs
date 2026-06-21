@@ -234,13 +234,22 @@ async function launchStep(provider, defaultModel) {
     console.log(`\nCouldn't launch ${CLI_BINARY[provider]} — run it manually to start onboarding.`);
 }
 
+function binOnPath(bin) {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], {
+    stdio: 'ignore',
+  });
+  return probe.status === 0;
+}
+
 // Wire per-CLI usage tracking. Claude (.claude/settings.json) and OpenCode
 // (.opencode/plugins/) ship wired and auto-load straight from the repo on
 // clone. Codex can't — only the global ~/.codex/config.toml fires hooks
 // (openai/codex#17532) — so we install its Stop hook into that global config
-// here, per machine. Doctor's usage-tracking check reports the same state.
-function wireProviderHooks(provider) {
-  if (provider !== 'codex') return; // claude + opencode auto-load from the repo
+// here, per machine, for ANYONE with the codex binary on PATH (not just users
+// who picked codex as their provider — a multi-CLI user would otherwise lose
+// codex token tracking). Doctor's usage-tracking check reports the same state.
+export function wireUsageHooks() {
+  if (!binOnPath('codex')) return; // claude + opencode auto-load from the repo
   try {
     const r = installCodexHook();
     log.success(
@@ -261,11 +270,20 @@ async function main() {
   await envStep();
   const { provider, defaultModel } = await settingsStep();
   seedPersonalization();
-  wireProviderHooks(provider);
+  wireUsageHooks();
   await launchStep(provider, defaultModel);
 }
 
-main().catch(err => {
-  console.error('\nsetup failed:', err?.message ?? err);
-  process.exit(1);
-});
+// Only run the interactive flow when executed directly — importing this module
+// (e.g. to unit-test wireUsageHooks) must not launch setup. Mirrors the isMain
+// guard in .codex/install-hook.mjs.
+function isMain() {
+  return Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
+}
+
+if (isMain()) {
+  main().catch(err => {
+    console.error('\nsetup failed:', err?.message ?? err);
+    process.exit(1);
+  });
+}
