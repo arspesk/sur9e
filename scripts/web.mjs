@@ -352,6 +352,57 @@ export function cmdStatus(deps = {}) {
   return 0;
 }
 
+/** kill() that swallows ESRCH (pid already gone) so escalation never throws. */
+function safeKill(kill, pid, signal) {
+  try {
+    kill(pid, signal);
+  } catch {
+    /* process already gone between poll and kill — fine */
+  }
+}
+
+/** Poll until :3000 is free or `ms` elapses. Returns true once it clears. */
+async function waitForPortClear({ exec, pollMs = 250 }, ms) {
+  const deadline = Date.now() + ms;
+  while (getListener({ exec }) && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, pollMs));
+  }
+  return !getListener({ exec });
+}
+
+/** ppid + command of a pid in one ps call, or null when the pid is gone. */
+function psPidInfo(pid, { exec }) {
+  const res = exec('ps', ['-p', String(pid), '-o', 'ppid=,command=']);
+  if (res.status !== 0) return null;
+  const m = /^\s*(\d+)\s+(.*)$/.exec(res.stdout.trim());
+  return m ? { ppid: Number(m[1]), command: m[2] } : null;
+}
+
+/** True when the :3000 listener belongs to THIS checkout — an untracked
+ *  foreground `npm run web` (no state file), vs a genuinely foreign app we must
+ *  never touch. next renames its listener to "next-server (vX)", so the holder's
+ *  own command rarely names the repo; walk the parent chain, where `node
+ *  scripts/web.mjs` and this checkout's `next dev` both carry identifying strings. */
+function isOwnDevServer(pid, { exec, root }) {
+  for (let cur = pid, i = 0; cur > 1 && i < 8; i++) {
+    const info = psPidInfo(cur, { exec });
+    if (!info) break;
+    if (info.command.includes('scripts/web.mjs') || (root && info.command.includes(root))) {
+      return true;
+    }
+    cur = info.ppid;
+  }
+  return false;
+}
+
+/** Process-group id of a pid, or null — lets us kill the whole foreground
+ *  tree (launcher + next + build workers) in one shot. */
+function processGroup(pid, { exec }) {
+  const res = exec('ps', ['-p', String(pid), '-o', 'pgid=']);
+  const n = res.status === 0 ? Number(res.stdout.trim()) : Number.NaN;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export async function cmdStop(deps = {}) {
   const {
     exec = defaultExec,
@@ -360,6 +411,12 @@ export async function cmdStop(deps = {}) {
     log = console.log,
     error = console.error,
     stateDir = DEFAULT_STATE_DIR,
+    root = ROOT,
+    // Injectable so tests don't wait real seconds. Prod values give a graceful
+    // shutdown room before escalating, then a short window for SIGKILL to land.
+    termWaitMs = 8_000,
+    killWaitMs = 5_000,
+    pollMs = 250,
   } = deps;
   const pid = readPid(stateDir);
   const meta = readMeta(stateDir);
@@ -367,35 +424,70 @@ export async function cmdStop(deps = {}) {
   // (stale state — just clean up), live foreign process (refuse loudly).
   const cmdline = pid ? psCommand(pid, { exec }) : null;
 
+  let portFree = true; // is :3000 free (or was never ours) when we return?
+  let keepState = false; // preserve web.pid so a retry can still target the PID
+
   if (pid && cmdline?.includes('scripts/web.mjs')) {
-    kill(pid, 'SIGTERM');
-    // The wrapper forwards SIGTERM to its next child, but the port can
-    // stay bound for a beat after we return — long enough for an
-    // immediate restart to trip cmdStart's port guard (`stop && start`).
-    // Wait (bounded) for the listener to actually clear.
-    const deadline = Date.now() + 10_000;
-    while (getListener({ exec }) && Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 250));
+    // SIGCONT first: a suspended (Ctrl-Z'd, state "T") tree never acts on
+    // SIGTERM until it's resumed — that is how a stopped dev server keeps
+    // :3000 bound while shrugging off `web:stop`. Resume, then ask it to exit.
+    safeKill(kill, pid, 'SIGCONT');
+    safeKill(kill, pid, 'SIGTERM');
+    portFree = await waitForPortClear({ exec, pollMs }, termWaitMs);
+    if (!portFree) {
+      // Graceful stop didn't free the port. Escalate to SIGKILL — and kill
+      // whatever still holds :3000 directly, since the `next` child can outlive
+      // a SIGKILL'd wrapper (SIGKILL is never forwarded).
+      error(`PID ${pid} didn't release :${PORT} on SIGTERM — escalating to SIGKILL.`);
+      const held = getListener({ exec });
+      safeKill(kill, pid, 'SIGKILL');
+      if (held && held.pid !== pid) safeKill(kill, held.pid, 'SIGKILL');
+      portFree = await waitForPortClear({ exec, pollMs }, killWaitMs);
     }
-    log(`Stopped managed server (PID ${pid}).`);
+    if (portFree) {
+      log(`Stopped managed server (PID ${pid}).`);
+    } else {
+      // Don't claim success and don't drop our state — that is what orphaned
+      // the process from the launcher before. Keep the PID for a retry.
+      const held = getListener({ exec });
+      error(
+        `Could not free :${PORT}${held ? ` — PID ${held.pid} still holds it` : ''}. ` +
+          `Run: kill -9 ${held?.pid ?? pid}`,
+      );
+      keepState = true;
+    }
   } else if (pid && cmdline === null) {
     log(`Stale state: PID ${pid} is no longer running — cleaning up.`);
   } else if (pid) {
     error(`PID ${pid} from the state file is not a sur9e launcher — not killing it.`);
   } else {
+    // No state file. A foreground `npm run web` doesn't track state, so a
+    // Ctrl-Z'd dev server lands here. Kill it only if it's identifiably OURS
+    // (command line references this checkout); never touch a foreign app.
     const listener = getListener({ exec });
-    if (listener) {
-      error(
-        `:${PORT} is PID ${listener.pid} (${listener.command}) — not started by this launcher; not killing it.`,
-      );
-    } else {
+    if (!listener) {
       log('No server running.');
+    } else if (isOwnDevServer(listener.pid, { exec, root })) {
+      log(`:${PORT} is an untracked sur9e dev server (PID ${listener.pid}) — stopping it.`);
+      safeKill(kill, listener.pid, 'SIGCONT'); // resume if Ctrl-Z'd
+      const pgid = processGroup(listener.pid, { exec });
+      if (pgid) safeKill(kill, -pgid, 'SIGKILL'); // whole foreground tree
+      safeKill(kill, listener.pid, 'SIGKILL'); // fallback: the listener itself
+      portFree = await waitForPortClear({ exec, pollMs }, killWaitMs);
+      if (portFree) log(`Stopped (PID ${listener.pid}).`);
+      else error(`Could not free :${PORT} — run: kill -9 ${listener.pid}`);
+    } else {
+      portFree = false;
+      error(
+        `:${PORT} is PID ${listener.pid} (${listener.command}) — not a sur9e server; not killing it.\n` +
+          `  If you're sure it's yours, run: kill -9 ${listener.pid}`,
+      );
     }
   }
 
   if (meta?.tailscale) resetServe({ exec, exists, error });
-  clearState(stateDir);
-  return 0;
+  if (!keepState) clearState(stateDir);
+  return portFree ? 0 : 1;
 }
 
 // ── main ──

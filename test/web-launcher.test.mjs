@@ -338,3 +338,128 @@ describe('cmdStop — never kills foreign processes', () => {
     expect(exec.mock.calls.map(c => c[0])).not.toContain('/usr/local/bin/tailscale');
   });
 });
+
+describe('cmdStop — suspended / wedged servers', () => {
+  it('resumes a suspended tree (SIGCONT) before asking it to exit (SIGTERM)', async () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '3333');
+    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    // lsof returns no listener → port is already free, no escalation needed.
+    const exec = vi.fn(cmd => ({ status: cmd === 'ps' ? 0 : 1, stdout: 'node scripts/web.mjs\n' }));
+    const kill = vi.fn();
+    await cmdStop({ exec, kill, error: vi.fn(), log: vi.fn(), stateDir });
+    const signals = kill.mock.calls.filter(c => c[0] === 3333).map(c => c[1]);
+    expect(signals.slice(0, 2)).toEqual(['SIGCONT', 'SIGTERM']); // resume, then terminate
+  });
+
+  it('escalates to SIGKILL (launcher + actual port holder) when SIGTERM does not free :3000', async () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '3333');
+    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    let sigkilled = false;
+    const kill = vi.fn((_pid, sig) => {
+      if (sig === 'SIGKILL') sigkilled = true;
+    });
+    // The port stays bound (suspended child) until something sends SIGKILL.
+    const exec = vi.fn(cmd => {
+      if (cmd === 'ps') return { status: 0, stdout: 'node scripts/web.mjs\n' };
+      if (cmd === 'lsof')
+        return sigkilled ? { status: 1, stdout: '' } : { status: 0, stdout: 'p9999\ncnode\n' };
+      return { status: 1, stdout: '' };
+    });
+    const error = vi.fn();
+    const code = await cmdStop({
+      exec,
+      kill,
+      error,
+      log: vi.fn(),
+      stateDir,
+      termWaitMs: 60,
+      killWaitMs: 300,
+      pollMs: 10,
+    });
+    expect(kill).toHaveBeenCalledWith(3333, 'SIGKILL'); // the wrapper
+    expect(kill).toHaveBeenCalledWith(9999, 'SIGKILL'); // the actual :3000 holder
+    expect(error.mock.calls.flat().join('\n')).toMatch(/escalating to SIGKILL/i);
+    expect(code).toBe(0);
+    expect(existsSync(joinPath(stateDir, 'web.pid'))).toBe(false); // cleared on real success
+  });
+
+  it('reports failure honestly and KEEPS state when :3000 will not free even after SIGKILL', async () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '3333');
+    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    const exec = vi.fn(cmd => {
+      if (cmd === 'ps') return { status: 0, stdout: 'node scripts/web.mjs\n' };
+      if (cmd === 'lsof') return { status: 0, stdout: 'p9999\ncnode\n' }; // never clears
+      return { status: 1, stdout: '' };
+    });
+    const error = vi.fn();
+    const code = await cmdStop({
+      exec,
+      kill: vi.fn(),
+      error,
+      log: vi.fn(),
+      stateDir,
+      termWaitMs: 40,
+      killWaitMs: 40,
+      pollMs: 10,
+    });
+    expect(code).toBe(1);
+    expect(error.mock.calls.flat().join('\n')).toMatch(/kill -9 9999/);
+    // State preserved so a retry can still target the PID (the old bug cleared
+    // it after a failed stop, orphaning the process from the launcher).
+    expect(existsSync(joinPath(stateDir, 'web.pid'))).toBe(true);
+  });
+
+  it("kills an untracked foreground dev server (Ctrl-Z'd `npm run web`) identified by its command", async () => {
+    const stateDir = tmpStateDir(); // foreground start writes no state file
+    const root = '/repo/sur9e';
+    let groupKilled = false;
+    const kill = vi.fn((pid, sig) => {
+      if (sig === 'SIGKILL' && pid < 0) groupKilled = true; // killing the group frees :3000
+    });
+    // Real ancestry: next renames the listener (no repo path); the identifying
+    // process is its parent `next dev` from this checkout.
+    const tree = {
+      77001: '77000 next-server (v16.2.7)',
+      77000: `76000 node ${root}/node_modules/.bin/next dev -p 3000`,
+    };
+    const exec = vi.fn((cmd, args) => {
+      if (cmd === 'lsof')
+        return groupKilled ? { status: 1, stdout: '' } : { status: 0, stdout: 'p77001\ncnode\n' };
+      if (cmd === 'ps' && args?.includes('ppid=,command=')) {
+        const pid = args[args.indexOf('-p') + 1];
+        return tree[pid] ? { status: 0, stdout: `${tree[pid]}\n` } : { status: 1, stdout: '' };
+      }
+      if (cmd === 'ps' && args?.includes('pgid=')) return { status: 0, stdout: '77000\n' };
+      return { status: 1, stdout: '' };
+    });
+    const log = vi.fn();
+    const code = await cmdStop({
+      exec,
+      kill,
+      error: vi.fn(),
+      log,
+      stateDir,
+      root,
+      killWaitMs: 300,
+      pollMs: 10,
+    });
+    expect(kill).toHaveBeenCalledWith(77001, 'SIGCONT'); // resume the suspended tree
+    expect(kill).toHaveBeenCalledWith(-77000, 'SIGKILL'); // kill the whole process group
+    expect(code).toBe(0);
+    expect(log.mock.calls.flat().join('\n')).toMatch(/untracked sur9e dev server/i);
+  });
+
+  it('refuses (kill -9 hint, exit 1) a foreign listener that is NOT a sur9e server', async () => {
+    const stateDir = tmpStateDir(); // no web.pid; ps shows an unrelated command
+    const exec = vi.fn(cmd =>
+      cmd === 'lsof' ? { status: 0, stdout: 'p91548\ncnginx\n' } : { status: 1, stdout: '' },
+    );
+    const error = vi.fn();
+    const code = await cmdStop({ exec, kill: vi.fn(), error, log: vi.fn(), stateDir });
+    expect(code).toBe(1);
+    expect(error.mock.calls.flat().join('\n')).toMatch(/not a sur9e server.*kill -9 91548/s);
+  });
+});
