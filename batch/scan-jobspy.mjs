@@ -24,6 +24,7 @@ import { spawnSync } from 'child_process';
 import { resolve } from 'path';
 import yaml from 'js-yaml';
 import { buildTitleMatcher } from './lib/job-filter.mjs';
+import { jobspyVenvPython } from './lib/jobspy-venv.mjs';
 import { toIsoDate } from './lib/posted-date.mjs';
 
 const ROOT = resolve(process.cwd());
@@ -32,7 +33,7 @@ const CONFIG_PATH = `${ROOT}/inputs/config/config.yml`;
 const SCAN_HISTORY_PATH = `${ROOT}/data/scan-history.tsv`;
 const PIPELINE_PATH = `${ROOT}/data/pipeline.md`;
 const APPLICATIONS_PATH = `${ROOT}/data/applications.md`;
-const PYTHON = `${ROOT}/batch/jobspy-env/bin/python`;
+const PYTHON = jobspyVenvPython(ROOT);
 const SCRIPT = `${ROOT}/batch/scan-jobspy.py`;
 
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -163,9 +164,7 @@ function main() {
 
   if (!existsSync(PYTHON)) {
     console.error(`ERROR: Python venv missing at ${PYTHON}`);
-    console.error(
-      `Run: python3 -m venv batch/jobspy-env && batch/jobspy-env/bin/pip install python-jobspy pyyaml`,
-    );
+    console.error('Run: npm run setup (provisions the JobSpy venv)');
     process.exit(1);
   }
 

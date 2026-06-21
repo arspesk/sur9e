@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { defaultConfigPath as codexConfigPath } from '../.codex/install-hook.mjs';
+import { jobspyVenvPython, legacyJobspyVenvDir } from '../batch/lib/jobspy-venv.mjs';
 import { findPython } from '../scripts/setup-jobspy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -178,10 +179,21 @@ function pyMinorOk(versionStr) {
 }
 
 function checkPython() {
-  // The offer scanner (npm run scan) runs in batch/jobspy-env, which needs
-  // Python >= 3.10 (python-jobspy's floor). Prefer reporting on the built venv;
-  // before setup, fall back to probing for an installable interpreter.
-  const venvPy = join(projectRoot, 'batch', 'jobspy-env', 'bin', 'python');
+  // The offer scanner (npm run scan) runs in the JobSpy venv, which needs
+  // Python >= 3.10 (python-jobspy's floor). The venv lives OUTSIDE the repo
+  // (batch/lib/jobspy-venv.mjs) so `next build` doesn't trip on its symlinks.
+  // A leftover in-tree venv from an older install still breaks the build —
+  // flag it so the user clears it.
+  if (existsSync(legacyJobspyVenvDir(projectRoot))) {
+    return {
+      pass: false,
+      label: 'Legacy in-tree venv at batch/jobspy-env breaks `next build`',
+      fix: 'Run: npm run setup (removes it + rebuilds the venv outside the repo)',
+    };
+  }
+  // Prefer reporting on the built venv; before setup, fall back to probing for
+  // an installable interpreter.
+  const venvPy = jobspyVenvPython(projectRoot);
   if (existsSync(venvPy)) {
     const res = spawnSync(venvPy, ['-c', 'import sys; print("%d.%d" % sys.version_info[:2])'], {
       encoding: 'utf-8',

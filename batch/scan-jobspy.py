@@ -19,7 +19,8 @@ Reads config from two files:
           hours_old:       72           # only offers newer than N hours
 
 Usage:
-    batch/jobspy-env/bin/python batch/scan-jobspy.py [--dry-run]
+    Invoked by batch/scan-jobspy.mjs via the JobSpy venv interpreter.
+    To run directly, use that venv's python (see `npm run setup`).
 """
 from __future__ import annotations
 
@@ -153,7 +154,7 @@ def main() -> int:
         import pandas as pd
     except Exception as e:
         print(
-            f"ERROR: jobspy import failed — run batch/jobspy-env/bin/pip install python-jobspy. {e}",
+            f"ERROR: jobspy import failed — run `npm run setup` to provision the venv. {e}",
             file=sys.stderr,
         )
         return 2

@@ -10,12 +10,16 @@
 // the (often ancient) bundled pip, then install the batch requirements.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { jobspyVenvDir, legacyJobspyVenvDir } from '../batch/lib/jobspy-venv.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const VENV = join(ROOT, 'batch', 'jobspy-env');
+// The venv lives OUTSIDE the repo so `next build` (Turbopack) never trips on
+// its escaping bin/python symlink — see batch/lib/jobspy-venv.mjs.
+const VENV = jobspyVenvDir(ROOT);
+const LEGACY_VENV = legacyJobspyVenvDir(ROOT);
 const REQUIREMENTS = join(ROOT, 'batch', 'requirements.txt');
 const MIN = [3, 10];
 
@@ -91,13 +95,21 @@ export function setupJobspyVenv() {
     );
   }
 
+  // Migrate pre-2026-06-21 installs: a venv at batch/jobspy-env (in-tree) makes
+  // `next build` panic on its escaping bin/python symlink. Remove it; the venv
+  // now lives outside the repo (VENV).
+  if (existsSync(LEGACY_VENV)) rmSync(LEGACY_VENV, { recursive: true, force: true });
+
   const venvPy = join(VENV, 'bin', 'python');
   let needCreate = !existsSync(venvPy);
   if (!needCreate && !satisfies(versionOf(venvPy))) {
     rmSync(VENV, { recursive: true, force: true });
     needCreate = true;
   }
-  if (needCreate) run(py.bin, ['-m', 'venv', VENV], 'Creating venv');
+  if (needCreate) {
+    mkdirSync(dirname(VENV), { recursive: true });
+    run(py.bin, ['-m', 'venv', VENV], 'Creating venv');
+  }
   run(venvPy, ['-m', 'pip', 'install', '--quiet', '--upgrade', 'pip'], 'Upgrading pip');
   run(venvPy, ['-m', 'pip', 'install', '-r', REQUIREMENTS], 'Installing batch requirements');
   patchJobspyTlsClient(venvPy);

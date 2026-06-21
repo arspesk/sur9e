@@ -22,14 +22,23 @@ const nextConfig: NextConfig = {
   ...(process.env.SUR9E_TAILNET_HOST
     ? { allowedDevOrigins: [process.env.SUR9E_TAILNET_HOST] }
     : {}),
-  // KNOWN BUILD FOOTGUN (verified 2026-06-04): `next build` panics if
-  // batch/jobspy-env contains symlinks resolving outside the repo
-  // ("Symlink … points out of the filesystem root" — vercel/next.js#88335).
-  // Turbopack traces the whole project dir (server code joins runtime-opaque
-  // roots) and there is NO config escape — outputFileTracingExcludes was
-  // tested and does not gate module-graph traversal. Fix: create the venv
-  // with `python3 -m venv --copies batch/jobspy-env` so bin/* are copies,
-  // not symlinks.
+  // KNOWN BUILD FOOTGUN (verified 2026-06-04): `next build` panics on any
+  // symlink inside the project tree whose target escapes the repo ("Symlink …
+  // points out of the filesystem root" — vercel/next.js#88335). Turbopack
+  // enumerates the WHOLE project dir during ModuleGraph::create; there is no
+  // config escape (outputFileTracingExcludes does not gate it) and no code fix
+  // (it is structural, independent of any module). The JobSpy venv's bin/python
+  // is such a symlink, and `python -m venv --copies` is refused by framework
+  // Pythons — so the venv is created OUTSIDE the repo (batch/lib/jobspy-venv.mjs)
+  // and the build never sees it. A leftover in-tree batch/jobspy-env from an
+  // older install still trips this; `npm run setup` removes it.
+  // next.config.ts is build-time only — it must never land in a route's runtime
+  // output-file trace. Server loaders join runtime-opaque roots
+  // (join(process.cwd(), …)), which makes Turbopack's tracer over-trace and pull
+  // next.config.ts into the NFT list ("Encountered unexpected file in NFT list").
+  // Excluding it kills that warning class; it has no runtime effect (sur9e runs
+  // `next start`, not standalone output).
+  outputFileTracingExcludes: { '*': ['next.config.ts'] },
   // Compile-time route safety. In Next 16 this option has been
   // promoted out of `experimental` to a top-level flag. Build emits typed
   // route definitions to `.next/types/` so <Link href> / router.push /
