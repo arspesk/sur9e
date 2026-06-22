@@ -400,24 +400,10 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  /* Hidden by default; revealed only when hovering the card. Same legacy
-     reveal pattern as the old .card-actions (the opacity rule was
-     inadvertently dropped when the icon-trigger CSS was consolidated). */
-  opacity: 0;
-  transition: opacity var(--dur-fast) ease;
-}
-.card:hover .board-card-kebab,
-.board-card-kebab[aria-expanded="true"],
-.board-card-kebab:focus-visible {
+  /* Always visible — every view, every state, hover or not. The card-id line
+     reserves room for it (padding-right above) so it never collides with the
+     score. Previously hover-gated, which hid it from touch users at rest. */
   opacity: 1;
-}
-/* Touch surfaces have no hover — keep the card-actions kebab always visible
-   so phone/tablet users get the same affordance desktop users get on hover
-   (mirrors the coarse-pointer drag-disable in pipeline-page.tsx). */
-@media (hover: none) {
-  .board-card-kebab {
-    opacity: 1;
-  }
 }
 /* Dark mode override removed — .card now uses var(--surface) which
    resolves correctly in both themes (light: #ffffff, dark: #1c1c1f).
@@ -450,6 +436,11 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
+  /* Reserve room for the absolute kebab (top:6/right:6, ~26px glyph) on every
+     width so the right-aligned score never renders under the ⋯ — on touch the
+     kebab is always visible, on desktop it appears on hover. Consistent across
+     all views. */
+  padding-right: 30px;
 }
 .card-company {
   font-family: var(--font-display);

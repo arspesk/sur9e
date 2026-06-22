@@ -435,6 +435,11 @@ table.offers th.col-kebab {
   }
   table.offers {
     table-layout: auto;
+    /* Drop the 1320px desktop floor — at tablet most columns are hidden, so
+       the floor stretched the few remaining columns into a table far wider
+       than the viewport (runaway horizontal scroll / empty space on the
+       right). Let the auto layout size the table to the visible content. */
+    min-width: 0;
   }
 }
 .offers-row {
@@ -595,6 +600,16 @@ table.offers th.col-kebab {
     font-size: 12px;
     white-space: nowrap;
     vertical-align: middle;
+  }
+  /* Kill the fog-of-war clip-fade in card mode. It belongs to the column
+     (table) layout; here the cells are inline-block + auto-width and aren't
+     truly truncated. The touch tap-target ::before (pointer:coarse, inset
+     -6px) adds ~5px of phantom scrollWidth that trips use-cell-clip-fade's
+     .is-clipped, so the mask faded the status pill's right edge to transparent
+     (looked cut off). Source order beats the base td.is-clipped rule. */
+  table.offers td.is-clipped {
+    mask-image: none;
+    -webkit-mask-image: none;
   }
   /* Score is the headline metric — give the numeral real weight so it reads
      bigger than the status chip (the chip was visually dominating it). */
