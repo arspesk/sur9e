@@ -91,8 +91,22 @@ export function useSectionSheet(items: readonly SectionSheetItem[]): void {
             if (!det.open) det.open = true;
           }
           requestAnimationFrame(() => {
-            const top = target.getBoundingClientRect().top + window.scrollY - 80;
-            window.scrollTo({ top, behavior: 'smooth' });
+            // Profile/Settings inner-scroll inside a `.page-scroll` container at
+            // ≤1024px; report + desktop scroll the document. Pick whichever is
+            // the active scroller so "tap a section" works in both.
+            const scroller = target.closest<HTMLElement>('.page-scroll');
+            const usesContainer = !!scroller && scroller.scrollHeight > scroller.clientHeight + 1;
+            if (usesContainer && scroller) {
+              const top =
+                target.getBoundingClientRect().top -
+                scroller.getBoundingClientRect().top +
+                scroller.scrollTop -
+                80;
+              scroller.scrollTo({ top, behavior: 'smooth' });
+            } else {
+              const top = target.getBoundingClientRect().top + window.scrollY - 80;
+              window.scrollTo({ top, behavior: 'smooth' });
+            }
           });
         }
         close();

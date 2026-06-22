@@ -158,7 +158,10 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
         />
       </Topbar>
 
-      <div className="report-wrap">
+      {/* page-scroll: inner-scroll on mobile/tablet so the document never
+          scrolls — otherwise iOS Safari's URL-bar collapse drifts the fixed
+          chrome. The section-sheet scroll-to already targets `.page-scroll`. */}
+      <div className="report-wrap page-scroll">
         {/* Notion-style TOC indicator — declarative JSX now. */}
         {tocItems.length > 0 ? <ReportTocRail items={tocItems} /> : <ReportTocPlaceholder />}
         <div className="content" id="reportHost">

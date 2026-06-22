@@ -74,30 +74,32 @@ export function SettingsPage({
 
       <ReportTocRail items={SECTIONS} hostId="tocIndicator" />
 
-      <div className="page-head">
-        <div>
-          <h1>Settings</h1>
-          <div className="sub">
-            How sur9e scans, screens, and spends on this install. <SaveStateText />
+      <div className="page-scroll">
+        <div className="page-head">
+          <div>
+            <h1>Settings</h1>
+            <div className="sub">
+              How sur9e scans, screens, and spends on this install. <SaveStateText />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Mobile-only theme row (≤640px): the rail — which hosts the theme
-          switcher on wider screens — is hidden under the bottom bar there,
-          so Settings keeps a compact equivalent. Hidden via CSS elsewhere. */}
-      <div className="settings-theme-row">
-        <span className="settings-theme-row__label">Theme</span>
-        <ThemeSwitch />
-      </div>
+        {/* Mobile-only theme row (≤640px): the rail — which hosts the theme
+            switcher on wider screens — is hidden under the bottom bar there,
+            so Settings keeps a compact equivalent. Hidden via CSS elsewhere. */}
+        <div className="settings-theme-row">
+          <span className="settings-theme-row__label">Theme</span>
+          <ThemeSwitch />
+        </div>
 
-      <SettingsForm
-        initialData={initialData}
-        lastRunState={lastRunState}
-        initialPortals={initialPortals}
-        queueStatus={queueStatus}
-        loadError={loadError}
-      />
+        <SettingsForm
+          initialData={initialData}
+          lastRunState={lastRunState}
+          initialPortals={initialPortals}
+          queueStatus={queueStatus}
+          loadError={loadError}
+        />
+      </div>
 
       {/* Burger trigger + bottom-sheet TOC (mobile/tablet ≤1024px). Markup
            is required by useSectionSheet which queries #tocSheet, #tocSheetBackdrop,

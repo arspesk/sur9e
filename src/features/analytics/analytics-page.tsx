@@ -220,43 +220,48 @@ export function AnalyticsPage({ initialData }: AnalyticsPageProps = {}) {
       <Topbar crumbs={[{ href: '/', label: 'Workspace' }, { label: 'Analytics' }]}>
         <DateRangePicker value={range} onChange={updateRange} />
       </Topbar>
-      <div className="page-head">
-        <div>
-          <h1>Analytics</h1>
-          <div className="sub">How your pipeline converts and what it costs</div>
+      {/* .page-scroll: inner-scroll on mobile/tablet so the document never
+          scrolls — otherwise iOS Safari's URL-bar collapse drifts the fixed
+          chrome (header/footer). Same pattern as Profile/Settings. */}
+      <div className="page-scroll">
+        <div className="page-head">
+          <div>
+            <h1>Analytics</h1>
+            <div className="sub">How your pipeline converts and what it costs</div>
+          </div>
         </div>
-      </div>
 
-      <div className="analytics-content" data-loading={loading ? 'true' : 'false'}>
-        <div className="analytics-zone-label">Pipeline</div>
-        <StatGrid
-          screened={derived.funnelCurr.screened}
-          applied={derived.funnelCurr.applied}
-          monthSpend={derived.monthSpend != null ? fmtMoney(derived.monthSpend) : '—'}
-          allTimeSpend={derived.allTime != null ? fmtMoney(derived.allTime) : '—'}
-          screenedDelta={screenedDelta}
-          appliedDelta={appliedDelta}
-          monthSpendDelta={monthDelta}
-        />
+        <div className="analytics-content" data-loading={loading ? 'true' : 'false'}>
+          <div className="analytics-zone-label">Pipeline</div>
+          <StatGrid
+            screened={derived.funnelCurr.screened}
+            applied={derived.funnelCurr.applied}
+            monthSpend={derived.monthSpend != null ? fmtMoney(derived.monthSpend) : '—'}
+            allTimeSpend={derived.allTime != null ? fmtMoney(derived.allTime) : '—'}
+            screenedDelta={screenedDelta}
+            appliedDelta={appliedDelta}
+            monthSpendDelta={monthDelta}
+          />
 
-        <FunnelSection
-          breakdown={derived.breakdown}
-          totalOffers={derived.totalOffers}
-          rejections={derived.rejections}
-        />
+          <FunnelSection
+            breakdown={derived.breakdown}
+            totalOffers={derived.totalOffers}
+            rejections={derived.rejections}
+          />
 
-        <ArchetypeSection entries={derived.filteredCurr} />
+          <ArchetypeSection entries={derived.filteredCurr} />
 
-        <div className="analytics-zone-label">Usage</div>
-        <SpendSection
-          totals={derived.providerTotals}
-          filter={providerFilter}
-          onFilterChange={setProviderFilter}
-          visibleProviders={derived.visibleProviders}
-          spendByMode={derived.spend}
-          spendByModel={derived.modelSpend}
-          pricedModels={usage?.pricedModels}
-        />
+          <div className="analytics-zone-label">Usage</div>
+          <SpendSection
+            totals={derived.providerTotals}
+            filter={providerFilter}
+            onFilterChange={setProviderFilter}
+            visibleProviders={derived.visibleProviders}
+            spendByMode={derived.spend}
+            spendByModel={derived.modelSpend}
+            pricedModels={usage?.pricedModels}
+          />
+        </div>
       </div>
     </>
   );

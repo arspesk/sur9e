@@ -67,17 +67,19 @@ export function ProfilePage({ initialData, loadError }: ProfilePageProps = {}) {
             widths the in-flow .profile-nav horizontal scroller takes over. */}
       <ReportTocRail items={SECTIONS} hostId="tocIndicator" />
 
-      <div className="page-head">
-        <div>
-          <h1>Profile</h1>
-          <div className="sub">
-            Who you are and what you&rsquo;re hunting for — powers every evaluation, CV, and cover
-            letter. <SaveStateText />
+      <div className="page-scroll">
+        <div className="page-head">
+          <div>
+            <h1>Profile</h1>
+            <div className="sub">
+              Who you are and what you&rsquo;re hunting for — powers every evaluation, CV, and cover
+              letter. <SaveStateText />
+            </div>
           </div>
         </div>
-      </div>
 
-      <ProfileForm initialData={initialData} loadError={loadError} />
+        <ProfileForm initialData={initialData} loadError={loadError} />
+      </div>
 
       {/* Burger trigger + bottom-sheet TOC (mobile/tablet ≤1024px). Markup
            is required by useSectionSheet which queries #tocSheet, #tocSheetBackdrop,

@@ -1005,6 +1005,14 @@ html:has(.be-prose) {
    .be-bm dropdown scoped to that axis (Notion pattern). */
 .be-th-grip {
   position: absolute;
+  /* Default to the top-left. Without an explicit offset, position:absolute
+     leaves these (body-portaled) grips at their STATIC position — the end of
+     <body> — so the hidden grips extend the document ~22px past the viewport,
+     which on mobile reads as a small document scroll that drifts the iOS chrome.
+     The editor sets inline top/left when it actually shows a grip, overriding
+     this default. */
+  top: 0;
+  left: 0;
   width: 22px;
   height: 22px;
   display: inline-flex;

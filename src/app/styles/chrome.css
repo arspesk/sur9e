@@ -1160,6 +1160,46 @@ button {
   background: var(--bg);
 }
 
+/* Inner-scroll shell for the document-scrolling pages (Profile, Settings,
+   Analytics, Report). At <=1024px the content scrolls INSIDE .page-scroll, so
+   the DOCUMENT never scrolls — which is what let iOS Safari collapse its URL
+   bar mid-scroll and drift the fixed/sticky chrome (an on-device probe caught
+   the topbar tracking the document scroll 1:1). Desktop (>1024px) keeps normal
+   document scroll.
+
+   Flex-fill, NOT `height: calc(100dvh - var(--topbar-h))`: the Report topbar
+   wraps taller than --topbar-h, so a fixed calc left a ~22px sliver of document
+   scroll. Instead, lock .main to the viewport and let .page-scroll consume
+   exactly the space below the (variable-height) topbar — correct at any height.
+   .main:has() scopes this to inner-scroll pages only; Offers (.offers-shell)
+   and everything else are untouched. */
+@media (max-width: 1024px) {
+  /* Drop the `.app { min-height: 100vh }` floor on inner-scroll pages. 100vh is
+     the URL-bar-COLLAPSED height, but .main below uses 100dvh (the CURRENT
+     height) — the mismatch left .app ~22px taller than the viewport, which is a
+     real (if small) document scroll. Match them so the page is exactly the
+     viewport. */
+  .app:has(.page-scroll) {
+    min-height: 0;
+  }
+  .app .main:has(.page-scroll) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app .main:has(.page-scroll) > .topbar {
+    flex: 0 0 auto;
+  }
+  .page-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    /* Last content must clear the fixed .bottom-bar (64px) + safe area. */
+    padding-bottom: calc(64px + 24px + env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 /* ── MOTION ── */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1407,6 +1447,16 @@ button.bottom-bar-tab {
   .app .main,
   .app .content {
     padding-bottom: 64px;
+  }
+  /* …but a page that inner-scrolls (via .page-scroll OR the Offers
+     .offers-shell) already clears the bottom-bar inside that scroller. Keeping
+     the shell's 64px padding here adds a phantom strip of *document* scroll —
+     an on-device probe caught it: on kanban the document scrolled ~40px and the
+     sticky topbar tracked it 1:1. Dropping it removes that document scroll so
+     the chrome can't drift. */
+  .app .main:has(.page-scroll),
+  .app .main:has(.offers-shell) {
+    padding-bottom: 0;
   }
   .bottom-bar {
     display: flex;
