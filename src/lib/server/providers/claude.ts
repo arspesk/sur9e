@@ -41,7 +41,7 @@
 
 import 'server-only';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
@@ -66,11 +66,73 @@ const STATIC_MODELS: ModelChoice[] = [
 // worst case is one dev-server restart to refresh, not a production issue.
 let claudeModelsCache: { version: string; models: ModelChoice[] } | null = null;
 
-// Resolve the path to the actual platform-arch binary inside the
-// `@anthropic-ai/claude-code` npm package. The user-facing `claude` on
-// PATH is a wrapper (`bin/claude.exe` or `cli-wrapper.cjs`); `strings`
-// needs the real Mach-O / ELF executable that sits one level deeper, in
-// `node_modules/@anthropic-ai/claude-code-<platform>-<arch>/claude`.
+// Size floor (bytes) above which a resolved path is treated as the real
+// CLI executable rather than a shim. The shipped binary is ~200MB+; a JS
+// wrapper (`cli-wrapper.cjs`) is a few KB. 10MB sits comfortably between
+// the two regardless of future binary growth or wrapper size.
+const CLAUDE_BINARY_MIN_BYTES = 10 * 1024 * 1024;
+
+// fs probes for `_pickClaudeBinaryFromReal`, injected so the pure layout
+// logic is unit-testable without mocking `node:fs` (Vitest's node-builtin
+// mocking is flaky in this project — see the test header).
+type BinaryProbes = {
+  // Is `p` itself the strings-able executable (a large Mach-O/ELF, not a shim)?
+  isExecutable: (p: string) => boolean;
+  dirExists: (p: string) => boolean;
+  readdir: (p: string) => string[];
+  fileExists: (p: string) => boolean;
+};
+
+// Pure core: given the realpath'd target of `which claude` plus fs probes,
+// return the path to a `strings`-able executable (or null). Two install
+// layouts in the wild, and we must handle BOTH:
+//
+//   1. Native installer (`curl … | bash`, or Claude Code's self-update):
+//      `~/.local/bin/claude` → `~/.local/share/claude/versions/<version>`.
+//      The symlink target IS the ~200MB executable itself, named by version
+//      number. npm's `bin/claude.exe` is likewise the full binary. In both
+//      cases the realpath target is large → strings it directly.
+//
+//   2. npm with a JS shim: `which claude` → a few-KB `cli-wrapper.cjs`. Not
+//      an executable → walk up to the platform sub-package
+//      `node_modules/@anthropic-ai/claude-code-<platform>-<arch>/claude`.
+//
+// Before this handled layout #1, a native install (the default on a fresh
+// `curl` install and on Claude Code self-updates) always returned null here,
+// so listModels() silently served the stale STATIC_MODELS fallback no matter
+// which CLI version was installed.
+function _pickClaudeBinaryFromReal(real: string, fs: BinaryProbes): string | null {
+  // Layout #1: the realpath target is already the executable (native install
+  // `versions/<v>`, or npm `bin/claude.exe`). Strings it directly.
+  if (fs.isExecutable(real)) return real;
+
+  // Layout #2: realpath landed on a wrapper — walk to the npm sub-package.
+  //   <pkg>/bin/claude.exe   → up two
+  //   <pkg>/cli-wrapper.cjs  → up one
+  //   <pkg>/<something-else> → up one (defensive default)
+  const base = real.split('/').pop() ?? '';
+  const pkgRoot =
+    base === 'claude.exe' || base === 'claude' ? dirname(dirname(real)) : dirname(real);
+  // Find the platform-specific sub-package. On Apple Silicon Macs this is
+  // `claude-code-darwin-arm64`; the same scan works for Linux x64/arm64, so
+  // we don't hardcode the suffix.
+  const platformPkgDir = join(pkgRoot, 'node_modules', '@anthropic-ai');
+  if (!fs.dirExists(platformPkgDir)) return null;
+  for (const dir of fs.readdir(platformPkgDir).filter(n => n.startsWith('claude-code-'))) {
+    const candidate = join(platformPkgDir, dir, 'claude');
+    // Defense-in-depth: confirm the candidate lives where we expect before
+    // shelling out to `strings` on it.
+    if (fs.fileExists(candidate) && candidate.includes('/@anthropic-ai/claude-code-')) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+// Resolve the path to the real Claude Code executable so we can `strings`
+// it for the model list. The user-facing `claude` on PATH is a symlink
+// (native install) or wrapper (npm); `_pickClaudeBinaryFromReal` handles
+// both layouts.
 //
 // Returns null if anything in the chain fails — caller falls back to
 // STATIC_MODELS rather than crashing the Settings dropdown.
@@ -78,34 +140,19 @@ function _resolveClaudeBinary(): string | null {
   try {
     const which = execFileSync('which', ['claude'], { encoding: 'utf-8', timeout: 2000 }).trim();
     if (!which) return null;
-    // Resolve the wrapper through any symlinks. On a typical macOS install
-    // this lands on `.../@anthropic-ai/claude-code/bin/claude.exe` (yes,
-    // `.exe` even on macOS — that's how Anthropic ships it).
     const real = realpathSync(which);
-    // Walk up to the npm package root. Handle both wrapper layouts:
-    //   <pkg>/bin/claude.exe        → up two
-    //   <pkg>/cli-wrapper.cjs       → up one
-    //   <pkg>/<something-else>      → up one (defensive default)
-    const base = real.split('/').pop() ?? '';
-    const pkgRoot =
-      base === 'claude.exe' || base === 'claude' ? dirname(dirname(real)) : dirname(real);
-    // Find the platform-specific sub-package. On Apple Silicon Macs this
-    // is `claude-code-darwin-arm64`; the same scan works for Linux x64,
-    // Linux arm64, etc., so we don't hardcode the suffix.
-    const platformPkgDir = join(pkgRoot, 'node_modules', '@anthropic-ai');
-    if (!existsSync(platformPkgDir)) return null;
-    const candidates = readdirSync(platformPkgDir).filter(n => n.startsWith('claude-code-'));
-    for (const dir of candidates) {
-      const candidate = join(platformPkgDir, dir, 'claude');
-      if (existsSync(candidate)) {
-        // Defense-in-depth: confirm the candidate path lives where we
-        // expect it to before shelling out to `strings` on it. The path
-        // came from `which claude` so it's already trusted, but a one-line
-        // guard reads cleanly and avoids surprises with weird symlinks.
-        if (candidate.includes('/@anthropic-ai/claude-code-')) return candidate;
-      }
-    }
-    return null;
+    return _pickClaudeBinaryFromReal(real, {
+      isExecutable: p => {
+        try {
+          return statSync(p).size > CLAUDE_BINARY_MIN_BYTES;
+        } catch {
+          return false;
+        }
+      },
+      dirExists: existsSync,
+      readdir: readdirSync,
+      fileExists: existsSync,
+    });
   } catch {
     return null;
   }
@@ -168,6 +215,7 @@ function _extractModelsFromBinary(binPath: string): ModelChoice[] {
 // this as private surface; do not import from production code.
 export const __testing = {
   resolveClaudeBinary: _resolveClaudeBinary,
+  pickClaudeBinaryFromReal: _pickClaudeBinaryFromReal,
   extractModelsFromBinary: _extractModelsFromBinary,
   resetCache(): void {
     claudeModelsCache = null;

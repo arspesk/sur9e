@@ -264,6 +264,56 @@ describe('claude provider', () => {
     });
   });
 
+  describe('pickClaudeBinaryFromReal (install-layout resolution)', () => {
+    // Fake fs probes so the pure layout logic is tested without touching
+    // the real filesystem. `executables` = paths treated as the big binary;
+    // `dirs`/`files` = what dirExists/fileExists/readdir report.
+    function probes(opts: { executables?: string[]; dirs?: Record<string, string[]> }) {
+      const exes = new Set(opts.executables ?? []);
+      const dirs = opts.dirs ?? {};
+      return {
+        isExecutable: (p: string) => exes.has(p),
+        dirExists: (p: string) => p in dirs,
+        readdir: (p: string) => dirs[p] ?? [],
+        fileExists: (p: string) => exes.has(p),
+      };
+    }
+
+    it('native installer: `versions/<version>` target is strings-ed directly (regression)', () => {
+      // ~/.local/bin/claude → ~/.local/share/claude/versions/2.1.197. The
+      // realpath target is the executable itself, named by version number.
+      // Before the fix this returned null (it looked for a node_modules tree
+      // that doesn't exist next to a native install) → stale STATIC_MODELS.
+      const real = '/Users/clawbro/.local/share/claude/versions/2.1.197';
+      const got = __testing.pickClaudeBinaryFromReal(real, probes({ executables: [real] }));
+      expect(got).toBe(real);
+    });
+
+    it('npm `bin/claude.exe`: the binary at realpath is used directly', () => {
+      const real = '/home/u/.nvm/.../@anthropic-ai/claude-code/bin/claude.exe';
+      const got = __testing.pickClaudeBinaryFromReal(real, probes({ executables: [real] }));
+      expect(got).toBe(real);
+    });
+
+    it('npm JS shim: walks up to the platform sub-package binary', () => {
+      const real = '/home/u/.nvm/.../@anthropic-ai/claude-code/cli-wrapper.cjs';
+      const pkgDir = '/home/u/.nvm/.../@anthropic-ai/claude-code/node_modules/@anthropic-ai';
+      const got = __testing.pickClaudeBinaryFromReal(
+        real,
+        probes({
+          dirs: { [pkgDir]: ['claude-code-linux-x64', 'README.md'] },
+          executables: [`${pkgDir}/claude-code-linux-x64/claude`],
+        }),
+      );
+      expect(got).toBe(`${pkgDir}/claude-code-linux-x64/claude`);
+    });
+
+    it('returns null when no executable and no package tree is found', () => {
+      const real = '/weird/path/claude.exe';
+      expect(__testing.pickClaudeBinaryFromReal(real, probes({}))).toBeNull();
+    });
+  });
+
   describe('listModels (binary-strings extraction)', () => {
     let resolveSpy: ReturnType<typeof vi.spyOn>;
     let extractSpy: ReturnType<typeof vi.spyOn>;
