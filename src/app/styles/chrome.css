@@ -3572,66 +3572,6 @@ select.form-input {
   }
 }
 
-/* -- DropdownMenu (menu-*) -------------------------------------------- */
-.menu-content {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-popover);
-  padding: 6px;
-  min-width: 180px;
-  z-index: var(--z-popover);
-  animation: popoverFadeIn var(--dur-quick) var(--ease-calm);
-}
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: 9px var(--space-3);
-  border-radius: var(--radius);
-  background: transparent;
-  border: 0;
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-  color: var(--text);
-  cursor: pointer;
-  outline: none;
-}
-.menu-item:hover {
-  /* Mouse hover only — color-mix tint visible in both themes. */
-  background: color-mix(in oklab, var(--surface), var(--text) 6%);
-}
-.menu-item[data-highlighted]:not(:hover) {
-  /* Keyboard navigation indicator — Radix sets data-highlighted on the
-     focused item (including the first item on auto-focus when the menu
-     opens). Show a subtle accent outline instead of a bg tint so the
-     menu doesn't visually announce a "selected" item to mouse-only users
-     who just opened the menu. */
-  outline: 1.5px solid color-mix(in oklab, var(--accent), transparent 30%);
-  outline-offset: -3px;
-}
-.menu-item[data-disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.menu-separator {
-  display: block;
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-1) 0;
-}
-.menu-label {
-  padding: var(--space-1) var(--space-3);
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 /* -- Select (select-*) -----------------------------------------------
    Radix-backed <Select> primitive. Trigger reuses .form-input chrome so
    it visually matches <Input>; the chevron + popup are custom so the
