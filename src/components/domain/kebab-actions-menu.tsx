@@ -80,15 +80,22 @@ export function KebabActionsMenu({
     const floor = bottomChromeTop() - 8;
     const roomBelow = floor - (rect.bottom + gap);
     const roomAbove = rect.top - gap - 8;
+    // Below-first (the platform convention): open under the trigger whenever
+    // below has USABLE room — capped with internal scroll when the full menu
+    // doesn't fit — and flip above only when below is genuinely too tight.
+    // (An earlier "roomier side" tiebreak maximized visible items, but with
+    // this menu's ~550px natural height it flipped upward from mid-screen
+    // down, which reads as upside-down.)
+    const MIN_BELOW = 220; // ≈5 rows — enough to be usable with scroll
     let top: number;
     if (mH <= roomBelow) {
       top = rect.bottom + gap;
-    } else if (mH <= roomAbove) {
-      top = rect.top - mH - gap;
-    } else if (roomBelow >= roomAbove) {
+    } else if (roomBelow >= MIN_BELOW || roomBelow >= roomAbove) {
       top = rect.bottom + gap;
       menu.style.maxHeight = `${Math.max(48, Math.floor(roomBelow))}px`;
       menu.style.overflowY = 'auto';
+    } else if (mH <= roomAbove) {
+      top = rect.top - mH - gap;
     } else {
       const capped = Math.max(48, Math.floor(roomAbove));
       top = rect.top - capped - gap;
