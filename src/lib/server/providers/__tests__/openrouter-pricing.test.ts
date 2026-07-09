@@ -3,11 +3,15 @@
 // (`refreshNow`) is exercised only through the parser; we don't hit
 // the live endpoint here.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getOpenRouterPrice,
   __testing as orTesting,
   parseOpenRouterModels,
+  refreshPricingIfStale,
 } from '../openrouter-pricing';
 
 describe('parseOpenRouterModels', () => {
@@ -79,5 +83,60 @@ describe('getOpenRouterPrice (sync hot path)', () => {
     );
     const r = getOpenRouterPrice('z-ai/glm-5.1', '/any/path');
     expect(r).toEqual({ in_per_mtok: 0.98, out_per_mtok: 3.08 });
+  });
+});
+
+describe('refreshPricingIfStale (job-launch freshness trigger)', () => {
+  let root: string;
+
+  beforeEach(() => {
+    orTesting.reset();
+    root = mkdtempSync(join(tmpdir(), 'sur9e-orcache-'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does NOT fetch when the cache is within TTL', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    orTesting.seedDirect(new Map([['x/y', { in_per_mtok: 1, out_per_mtok: 2 }]]), Date.now());
+
+    refreshPricingIfStale(root);
+
+    expect(orTesting.state().inFlight).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fires a background refresh when the cache is past TTL, landing live prices', async () => {
+    // Simulate a model listed on OpenRouter AFTER the last cache write.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'anthropic/claude-sonnet-5',
+            pricing: { prompt: '0.000002', completion: '0.00001' },
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const longAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    orTesting.seedDirect(new Map([['stale/model', { in_per_mtok: 9, out_per_mtok: 9 }]]), longAgo);
+
+    refreshPricingIfStale(root);
+
+    // Fired synchronously (non-blocking), then settles to a fresh cache.
+    expect(orTesting.state().inFlight).toBe(true);
+    await vi.waitFor(() => expect(orTesting.state().inFlight).toBe(false));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    // The just-listed model now resolves live instead of missing.
+    expect(getOpenRouterPrice('anthropic/claude-sonnet-5', root)).toEqual({
+      in_per_mtok: 2,
+      out_per_mtok: 10,
+    });
   });
 });

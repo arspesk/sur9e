@@ -212,6 +212,27 @@ export function getOpenRouterPrice(openrouterId: string, rootPath: string): Open
   return inMemoryPrices.get(openrouterId) ?? null;
 }
 
+/**
+ * Fire a background cache refresh when the on-disk pricing is past its TTL —
+ * WITHOUT doing a price lookup. Non-blocking: returns immediately, the fetch
+ * rewrites `data/openrouter-pricing-cache.json` for whoever reads it next.
+ *
+ * Why this exists: the auto-refresh in `getOpenRouterPrice` only fires from
+ * the web display path (analytics rendering). But job spend is recorded by the
+ * CLI-side tracker (`trackProvider` in cli/usage-tracker.mjs), which reads the
+ * cache file DIRECTLY and can't trigger a refresh. So a long-idle server would
+ * price every job against a stale cache — mispricing (and logging
+ * `[usage-tracker] Unknown claude model`) for any model listed since the last
+ * refresh. `createJob` calls this at launch so the refresh runs while the job
+ * executes, landing a fresh cache before the job records its cost.
+ */
+export function refreshPricingIfStale(rootPath: string): void {
+  seedFromDisk(rootPath);
+  if (Date.now() - lastSuccessfulFetchAt > TTL_MS) {
+    refreshInBackground(rootPath);
+  }
+}
+
 // Internals exported so unit tests can reset module state between
 // fixtures without restarting the process. Treat as private surface.
 export const __testing = {

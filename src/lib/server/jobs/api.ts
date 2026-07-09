@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JobRecord, JobType } from '../../schemas/jobs';
+import { refreshPricingIfStale } from '../providers/openrouter-pricing';
 import { spawnJob } from './runner';
 import { isJobStale, markInterrupted } from './stale';
 
@@ -93,6 +94,13 @@ export function createJob(
     exitCode: null,
   });
   persist(rootPath, job);
+
+  // Keep live pricing fresh for the spend the job is about to record. The
+  // usage tracker reads the OpenRouter cache file directly and can't refresh
+  // it; firing a stale-check here (non-blocking, ~1s, only re-fetches past the
+  // 24h TTL) means the cache is current by the time the job finishes and logs
+  // its cost — so a just-listed model prices live instead of falling back.
+  refreshPricingIfStale(rootPath);
 
   // Defer the spawn so the route can return immediately. Backstop .catch:
   // an unhandled rejection here would leave the record 'queued' forever,
