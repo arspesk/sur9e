@@ -1,6 +1,6 @@
 {
   "name": "sur9e",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI-powered job search pipeline built on Claude Code",
   "engines": {
     "node": ">=20"
