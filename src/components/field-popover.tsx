@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { bottomChromeTop, useDismissOnScroll } from '@/hooks/use-floating-anchor';
 
 export interface FieldOption {
   key: string;
@@ -49,17 +50,16 @@ export function FieldPopover({
 
   // Compute top/left from anchor rect after the popover renders so we
   // can read its real offsetHeight and flip above the trigger if there's
-  // no room below.
-  // anchorRef is intentionally NOT in deps — callers often pass a
-  // freshly-built `{current}` object every parent render, and we only
-  // want to position ONCE on open.
-  useLayoutEffect(() => {
+  // no room below. The floor is bottomChromeTop(), not window.innerHeight —
+  // the mobile bottom nav (--z-bottom-bar) outranks this popover's z, so a
+  // tail crossing it would paint underneath.
+  const position = useCallback(() => {
     const trigger = anchorRef.current;
     const popover = popoverRef.current;
     if (!trigger || !popover) return;
     const r = trigger.getBoundingClientRect();
     const pH = popover.offsetHeight;
-    const spaceBelow = window.innerHeight - r.bottom;
+    const spaceBelow = bottomChromeTop() - r.bottom;
     const top = spaceBelow >= pH + 8 ? r.bottom + 4 : r.top - pH - 4;
     // Clamp left so the popover never overflows the right edge (matters in
     // the narrow drawer + small viewports).
@@ -69,11 +69,24 @@ export function FieldPopover({
     // stays glued to a fixed-position anchor while the page scrolls.
     const scrollTop = strategy === 'fixed' ? 0 : window.scrollY;
     const scrollLeft = strategy === 'fixed' ? 0 : window.scrollX;
-    setPos({
+    const next = {
       top: Math.round(top + scrollTop),
       left: Math.round(left + scrollLeft),
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    };
+    // Bail on unchanged coords so per-frame scroll repositions don't
+    // re-render the option list needlessly.
+    setPos(prev => (prev && prev.top === next.top && prev.left === next.left ? prev : next));
+  }, [anchorRef, strategy]);
+
+  useLayoutEffect(() => {
+    position();
+  }, [position]);
+
+  // A scroll outside the popover moves the pill out from under it — the
+  // popover would float detached (kanban columns, drawer, .page-scroll all
+  // scroll INSIDE containers, so document scroll offsets never change).
+  // Dismiss instead of re-anchoring — same rationale as KebabActionsMenu.
+  useDismissOnScroll(true, popoverRef, onClose);
 
   // Close on outside click
   useEffect(() => {

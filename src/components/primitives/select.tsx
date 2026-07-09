@@ -20,6 +20,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import type { ComponentPropsWithoutRef, ElementRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import { useBottomChromeCollisionPadding } from '@/hooks/use-floating-anchor';
 import { cn } from '@/lib/cn';
 
 /* --------------------------------- Root --------------------------------- */
@@ -93,12 +94,18 @@ export const SelectContent = forwardRef<
   { className, position = 'popper', sideOffset = 4, children, ...rest },
   ref,
 ) {
+  // Reserve the visible fixed bottom chrome (mobile nav etc.) so Radix
+  // flips/constrains the popup above it instead of sliding underneath
+  // (the nav's --z-bottom-bar outranks the popup's z tier). Callers can
+  // still override via an explicit collisionPadding prop (spread wins).
+  const collisionPadding = useBottomChromeCollisionPadding();
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         ref={ref}
         position={position}
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         className={cn('select-content', className)}
         {...rest}
       >

@@ -13,8 +13,9 @@
  * downstream handlers don't have to call close themselves.
  */
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { bottomChromeTop, useDismissOnScroll } from '@/hooks/use-floating-anchor';
 
 export interface KebabItem {
   /** Optional grouping label (currently unused by the renderer; kept for future). */
@@ -61,15 +62,23 @@ export function KebabActionsMenu({
   // Delete row, or a generator launch). When neither side fits the full
   // menu, it stays on the roomier side with maxHeight capped to the
   // available gap (scrolling inside) instead of clamping over the trigger.
-  useLayoutEffect(() => {
+  //
+  // The floor is bottomChromeTop(), not window.innerHeight: the mobile
+  // bottom nav / batch bar / action bar all outrank --z-popover, so a menu
+  // tail crossing them would paint underneath.
+  const position = useCallback(() => {
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     if (!trigger || !menu) return;
+    // Reset any earlier cramped-fit cap so re-measuring sees natural size.
+    menu.style.maxHeight = '';
+    menu.style.overflowY = '';
     const rect = trigger.getBoundingClientRect();
     const mW = menu.offsetWidth;
     const mH = menu.offsetHeight;
     const gap = 6;
-    const roomBelow = window.innerHeight - 8 - (rect.bottom + gap);
+    const floor = bottomChromeTop() - 8;
+    const roomBelow = floor - (rect.bottom + gap);
     const roomAbove = rect.top - gap - 8;
     let top: number;
     if (mH <= roomBelow) {
@@ -90,10 +99,21 @@ export function KebabActionsMenu({
     const left = Math.max(8, Math.min(rect.right - mW, maxLeft));
     menu.style.top = `${Math.round(top)}px`;
     menu.style.left = `${Math.round(left)}px`;
+  }, [triggerRef]);
+
+  useLayoutEffect(() => {
+    position();
     // Focus the menu container (not the first item) so Arrow Down arms an
     // item but Enter on open doesn't accidentally fire a destructive action.
-    menu.focus();
-  }, [triggerRef]);
+    menuRef.current?.focus();
+  }, [position]);
+
+  // A scroll outside the menu moves the trigger out from under it — the
+  // menu would float detached (kanban columns, drawer, .page-scroll all
+  // scroll INSIDE containers, so `position: fixed` never follows). Dismiss
+  // instead of re-anchoring: a menu chasing a card through an inner-scroll
+  // column escapes the column bounds and floats over neighboring chrome.
+  useDismissOnScroll(true, menuRef, onClose);
 
   // Outside-click + Escape. mousedown (not click) to avoid racing the same
   // click that opened the menu.

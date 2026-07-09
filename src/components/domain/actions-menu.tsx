@@ -31,6 +31,7 @@ import { FilePlusCorner, FileSearchCorner, FolderSearch } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { type ScanConfirmJobType, ScanConfirmModal } from '@/components/modals/scan-confirm-modal';
+import { useDismissOnScroll } from '@/hooks/use-floating-anchor';
 import { JOB_TYPES } from '@/lib/job-types';
 
 // Lucide icons for the global Add menu, keyed by job type. Overrides the plain
@@ -93,6 +94,11 @@ export function ActionsMenu({ open, anchorRef, scope, onClose, onSelect }: Actio
     // immediately after opening the menu.
     menu.focus();
   }, [open, anchorRef]);
+
+  // A scroll outside the menu invalidates its anchor (the table/board
+  // scrolls under the fixed topbar) — dismiss rather than float detached.
+  // Gated on `open`: this menu stays mounted while closed.
+  useDismissOnScroll(open, menuRef, onClose);
 
   // Outside-click + Escape — global listeners only when menu is open.
   useEffect(() => {

@@ -59,4 +59,40 @@ describe('KebabActionsMenu', () => {
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(document.activeElement).toBe(items[0]);
   });
+
+  it('dismisses when anything outside the menu scrolls (kanban column, drawer, page-scroll)', () => {
+    const onClose = vi.fn();
+    const ref = createRef<HTMLButtonElement>();
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    (ref as { current: HTMLButtonElement | null }).current = trigger;
+    render(
+      <KebabActionsMenu
+        items={[{ label: 'A', onClick: () => {} }]}
+        triggerRef={ref}
+        onClose={onClose}
+      />,
+    );
+    const column = document.createElement('div');
+    document.body.appendChild(column);
+    fireEvent.scroll(column);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('stays open when the scroll happens inside the menu (cramped-fit internal scrolling)', () => {
+    const onClose = vi.fn();
+    const ref = createRef<HTMLButtonElement>();
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    (ref as { current: HTMLButtonElement | null }).current = trigger;
+    render(
+      <KebabActionsMenu
+        items={[{ label: 'A', onClick: () => {} }]}
+        triggerRef={ref}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.scroll(screen.getByRole('menu'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
