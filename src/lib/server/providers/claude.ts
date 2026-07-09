@@ -161,13 +161,17 @@ function _resolveClaudeBinary(): string | null {
 // Extract model ids from the binary's compiled-in strings table. Returns
 // a cleaned, sorted list — aliases are added by the caller.
 function _extractModelsFromBinary(binPath: string): ModelChoice[] {
-  // `strings` on a ~200MB binary runs in ~0.3s on a modern Mac. The
-  // ~32MB buffer is generous — the strings output is much smaller than
-  // the binary itself — and the 15s timeout is far above the observed
-  // worst case but still bounds us if `strings` ever hangs.
+  // `strings` on a ~200MB binary runs in ~0.3s on a modern Mac. maxBuffer
+  // must comfortably exceed the strings OUTPUT: Claude 2.1.205's binary
+  // (237MB) emits ~33.6MB of strings, which overflowed the previous 32MB
+  // cap — execFileSync threw and every install silently served the stale
+  // STATIC_MODELS fallback (the 2026-07-09 mac-mini "old models" bug).
+  // 256MB is above any possible output (strings emits a subset of the
+  // binary) and maxBuffer is a cap, not a preallocation. The 15s timeout
+  // is far above the observed worst case but bounds a hung `strings`.
   const out = execFileSync('strings', [binPath], {
     encoding: 'utf-8',
-    maxBuffer: 32 * 1024 * 1024,
+    maxBuffer: 256 * 1024 * 1024,
     timeout: 15_000,
   });
   // Match real id lines at line start. The character class deliberately
