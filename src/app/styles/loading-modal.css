@@ -12,7 +12,10 @@
   right: 24px;
   width: 380px;
   max-width: calc(100vw - 32px);
-  z-index: var(--z-modal);
+  /* --z-deck (85) sits below dropdowns/popovers (--z-popover, 90) so an open
+     row/kebab actions menu is never hidden behind an in-flight job card, and
+     above the drawer (--z-drawer, 81) so a running job stays visible over it. */
+  z-index: var(--z-deck);
   /* Allow peeking cards to overflow upward without clipping. */
   overflow: visible;
 }
@@ -44,7 +47,7 @@ body:has(.action-bar) #loading-modal-deck {
     bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
   /* Batch-action bar open (rows selected): the bar sits at bottom 64+8px,
-     ~50px tall, z-index --z-bottom-bar+5 — ABOVE the deck's --z-modal, so
+     ~50px tall, z-index --z-bottom-bar+5 — ABOVE the deck's --z-deck, so
      without this lift the in-flight job card hides behind it. Same
      specificity as the .bottom-bar rule above; last-wins when both match. */
   body:has(.batch-action-bar.on) #loading-modal-deck {

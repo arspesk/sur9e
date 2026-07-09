@@ -2690,7 +2690,7 @@ input[type="range"]::-moz-range-track {
 /* ── TOAST HOST ── Fixed column above the job deck. --corner-deck-clearance
    is published by LoadingModalHost (0px when no jobs) so toasts stack above
    the deck instead of overlapping it. z stays at --z-toast (110, clears
-   dialogs); the deck keeps --z-modal (95, below dialogs) — see spec §2. */
+   dialogs); the deck sits at --z-deck (85, below dropdowns + dialogs) — see spec §2. */
 .toast-host {
   position: fixed;
   right: 24px;
