@@ -1009,7 +1009,9 @@ button {
 
 /* ── PAGE HEAD ── */
 .page-head {
-  padding: var(--space-7) var(--space-6) var(--space-5);
+  /* Tight bottom (space-3): body containers bring their own top padding
+     (space-4 tier), landing the head→content gap at ~28px on every page. */
+  padding: var(--space-7) var(--space-6) var(--space-3);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -1046,6 +1048,16 @@ button {
 .page-head > div {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* Pages whose content is a centered max-width column (Settings, Profile,
+   Analytics) constrain the head to the same column so the h1's left edge
+   lines up with the container below it. --page-col defaults to the 880px
+   form column; pages with a wider column override it (see .analytics-head).
+   Full-bleed pages (Offers table, Pipeline board) keep the plain .page-head. */
+.page-head--constrained {
+  width: 100%;
+  max-width: var(--page-col, 880px);
+  margin: 0 auto;
 }
 
 /* ── FILTER BAR ── */

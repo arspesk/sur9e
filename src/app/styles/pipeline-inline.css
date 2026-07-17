@@ -173,7 +173,7 @@
 .board {
   display: flex;
   gap: var(--space-3);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-6) var(--space-5);
   /* stretch (not flex-start): every column fills the board height so its
      .col-body scroll area is the full viewport remainder — the column list
      scrolls, the page doesn't. */

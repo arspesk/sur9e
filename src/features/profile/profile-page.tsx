@@ -68,7 +68,7 @@ export function ProfilePage({ initialData, loadError }: ProfilePageProps = {}) {
       <ReportTocRail items={SECTIONS} hostId="tocIndicator" />
 
       <div className="page-scroll">
-        <div className="page-head">
+        <div className="page-head page-head--constrained">
           <div>
             <h1>Profile</h1>
             <div className="sub">

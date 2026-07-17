@@ -7,8 +7,13 @@
  * this file is analytics-only.
  */
 
+/* Head shares the 960px column of .analytics-content so the h1's left
+   edge lines up with the KPI grid (see .page-head--constrained). */
+.analytics-head {
+  --page-col: 960px;
+}
 .analytics-content {
-  padding: var(--space-6);
+  padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
@@ -425,6 +430,12 @@ a.funnel-row:focus-visible {
   }
 }
 @media (max-width: 640px) {
+  /* Match the app-wide mobile gutter (page-head, settings-content,
+     profile-content all sit at space-4 here) so the h1 and the KPI grid
+     share the same left edge on phones. */
+  .analytics-content {
+    padding: var(--space-4);
+  }
   .stat-grid {
     /* 2-col keeps KPI tiles above the fold on 375px phones so the funnel
        section is reachable without scrolling past 4 full-width tiles. */

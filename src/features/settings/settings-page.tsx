@@ -75,7 +75,7 @@ export function SettingsPage({
       <ReportTocRail items={SECTIONS} hostId="tocIndicator" />
 
       <div className="page-scroll">
-        <div className="page-head">
+        <div className="page-head page-head--constrained">
           <div>
             <h1>Settings</h1>
             <div className="sub">

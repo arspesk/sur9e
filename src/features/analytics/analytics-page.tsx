@@ -224,7 +224,7 @@ export function AnalyticsPage({ initialData }: AnalyticsPageProps = {}) {
           scrolls — otherwise iOS Safari's URL-bar collapse drifts the fixed
           chrome (header/footer). Same pattern as Profile/Settings. */}
       <div className="page-scroll">
-        <div className="page-head">
+        <div className="page-head page-head--constrained analytics-head">
           <div>
             <h1>Analytics</h1>
             <div className="sub">How your pipeline converts and what it costs</div>
