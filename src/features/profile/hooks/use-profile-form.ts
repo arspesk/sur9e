@@ -47,10 +47,27 @@ export function useProfileForm(options?: UseProfileFormOptions) {
     mode: 'onBlur',
   });
 
+  // Suppress auto-save while hydration resets run (same guard as
+  // use-settings-form): RHF's reset notifies the watch subscription like an
+  // edit would.
+  const hydratingRef = useRef(false);
+  // JSON snapshot of the last hydrated or committed values. RHF's
+  // useFieldArray effect unconditionally re-emits the (unchanged) form values
+  // after every render of its host — most visibly right after the hydration
+  // reset. Before this guard, that echo scheduled a debounced save on every
+  // /profile PAGE LOAD: profile.yml was rewritten (rotating the user's .bak
+  // away) and the beforeunload "unsaved changes" dialog armed with zero
+  // interaction. null until first hydration — saving before real data is in
+  // the form would overwrite profile.yml with empty defaults.
+  const lastCommittedRef = useRef<string | null>(null);
+
   // Hydrate once when profile data arrives (mirrors legacy useState init).
   useEffect(() => {
     if (query.data && !form.formState.isDirty) {
+      hydratingRef.current = true;
       form.reset(query.data as ProfileFormValues);
+      hydratingRef.current = false;
+      lastCommittedRef.current = JSON.stringify(form.getValues());
       // Trigger validation so the required-field banner shows on first paint
       // for profiles that arrived with missing required fields.
       void form.trigger();
@@ -105,6 +122,7 @@ export function useProfileForm(options?: UseProfileFormOptions) {
           search: values.search,
           apply_answers: values.apply_answers,
         });
+        lastCommittedRef.current = JSON.stringify(values);
         announceSaved();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -122,6 +140,21 @@ export function useProfileForm(options?: UseProfileFormOptions) {
     [announceSaved, pushToast, save, setSaveStatus],
   );
 
+  // commitSave (and the other per-render identities the watch callback needs)
+  // read through refs so the subscription effects below can stay mount-once.
+  // The old watch effect listed commitSave in its deps — commitSave is rebuilt
+  // whenever useMutation's result changes identity, so the subscription tore
+  // down and re-registered on most commits. RHF delivers emissions only to
+  // subscribers live at dispatch time: the teardown windows silently dropped
+  // events (reproduced in vitest, where even an append edit never reached the
+  // callback). Subscribe once; read the moving parts through refs.
+  const commitSaveRef = useRef(commitSave);
+  commitSaveRef.current = commitSave;
+  const saveBlockedReasonRef = useRef(saveBlockedReason);
+  saveBlockedReasonRef.current = saveBlockedReason;
+  const pushToastRef = useRef(pushToast);
+  pushToastRef.current = pushToast;
+
   // Watch all fields; debounce commits. When saves are blocked (unreadable
   // profile.yml on disk), never schedule a commit — a save would replace the
   // user's hand-edited file with the form's empty values. Toast the reason
@@ -129,26 +162,29 @@ export function useProfileForm(options?: UseProfileFormOptions) {
   const blockedToastShownRef = useRef(false);
   useEffect(() => {
     const sub = form.watch(values => {
-      if (saveBlockedReason) {
+      // Hydration reset in progress — not a user edit.
+      if (hydratingRef.current) return;
+      // Nothing hydrated yet — a save now would write empty defaults.
+      if (lastCommittedRef.current === null) return;
+      const blocked = saveBlockedReasonRef.current;
+      if (blocked) {
         if (!blockedToastShownRef.current) {
           blockedToastShownRef.current = true;
-          pushToast?.('danger', saveBlockedReason);
+          pushToastRef.current?.('danger', blocked);
         }
         return;
       }
+      // Phantom emission (values identical to the last hydrated/committed
+      // state — e.g. RHF's useFieldArray post-render echo): nothing to save.
+      if (JSON.stringify(values) === lastCommittedRef.current) return;
       pendingValuesRef.current = values as ProfileFormValues;
       if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
       pendingTimerRef.current = setTimeout(() => {
-        void commitSave(values as ProfileFormValues);
+        void commitSaveRef.current(values as ProfileFormValues);
       }, DEBOUNCE_MS);
     });
     return () => sub.unsubscribe();
-  }, [form, commitSave, saveBlockedReason, pushToast]);
-
-  // commitSave read through a ref so the unmount-flush effect below can stay
-  // mount-once ([] deps) without capturing a stale closure.
-  const commitSaveRef = useRef(commitSave);
-  commitSaveRef.current = commitSave;
+  }, [form]);
 
   // beforeunload guard — warn if a save is queued.
   useEffect(() => {
