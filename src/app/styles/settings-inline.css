@@ -223,11 +223,24 @@
   margin-top: var(--space-3);
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-5);
+  align-items: center;
+  /* Stats grouped left, actions right on a wide row; when the actions wrap to
+     their own line they left-align cleanly (space-between with one item per
+     line = flex-start) instead of floating right off a margin-left:auto. And
+     align-items:center keeps the actions on the stats' baseline rather than
+     dropping to the stretched row's vertical middle. */
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
+}
+.scan-status__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
 }
 .scan-status__item {
   display: flex;
@@ -251,13 +264,14 @@
   font-size: 13.5px;
   color: var(--text);
 }
-/* Queue actions (screen pending / clear queue) — pushed to the right of the
-   stats on desktop, wrap below them when the panel is narrow. */
+/* Queue actions (screen pending / clear queue) — the parent's
+   justify-content:space-between pushes them to the right of the stats on a wide
+   row; when they wrap they left-align under the stats (no margin-left:auto to
+   float them right). */
 .scan-status__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-left: auto;
   flex-wrap: wrap;
 }
 

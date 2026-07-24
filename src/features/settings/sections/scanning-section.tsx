@@ -249,7 +249,16 @@ export function ScanningSection({ lastRunState, queueStatus }: ScanningSectionPr
     | undefined;
   const cronFieldError = (cronError?.cron as { message?: string } | undefined)?.message;
 
-  const lastRunLine = lastRunState ? formatLastRun(lastRunState) : null;
+  // ── Last scheduled-run label ──
+  // Deferred to after mount for the same reason as lastScanLabel: formatLastRun
+  // uses toLocaleString, whose Node-ICU (server) vs browser (client) output
+  // differs ("Jul 22, 10:11 AM" vs "Jul 22 at 10:11 AM") — a hydration mismatch
+  // if rendered during SSR. Server + first client render both show null; the
+  // formatted line lands one render after mount.
+  const [lastRunLine, setLastRunLine] = useState<string | null>(null);
+  useEffect(() => {
+    setLastRunLine(lastRunState ? formatLastRun(lastRunState) : null);
+  }, [lastRunState]);
 
   return (
     <section className="form-section anim-enter" id="search">
@@ -266,17 +275,19 @@ export function ScanningSection({ lastRunState, queueStatus }: ScanningSectionPr
           be screened + when the last scan ran. */}
       {queueStatus && (
         <div className="scan-status" aria-live="polite">
-          <div className="scan-status__item">
-            <span className="scan-status__num">{queueStatus.pendingCount}</span>
-            <span className="scan-status__label">
-              {queueStatus.pendingCount === 1 ? 'offer' : 'offers'} waiting for screening
-            </span>
-          </div>
-          <div className="scan-status__item">
-            <span className="scan-status__label">Last scan</span>
-            <span className="scan-status__val">
-              {lastScanLabel ?? (lastScanAt ? '…' : 'no scans yet')}
-            </span>
+          <div className="scan-status__stats">
+            <div className="scan-status__item">
+              <span className="scan-status__num">{queueStatus.pendingCount}</span>
+              <span className="scan-status__label">
+                {queueStatus.pendingCount === 1 ? 'offer' : 'offers'} waiting for screening
+              </span>
+            </div>
+            <div className="scan-status__item">
+              <span className="scan-status__label">Last scan</span>
+              <span className="scan-status__val">
+                {lastScanLabel ?? (lastScanAt ? '…' : 'no scans yet')}
+              </span>
+            </div>
           </div>
           <div className="scan-status__actions">
             <Button

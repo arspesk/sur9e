@@ -815,7 +815,11 @@ button {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  /* No gap in icon-only mode: the text label is font-size:0, so a gap here
+     would reserve empty space to the icon's right and shove it off-centre.
+     Restored alongside the visible label at ≥1025px below. */
+  gap: 0;
   transition: color var(--dur-quick) var(--ease-firm);
 }
 /* At desktop (≥1025px) restore the inline text label next to each icon
@@ -825,6 +829,7 @@ button {
   .view-switcher a {
     font-size: 13px;
     padding: 0 12px;
+    gap: 6px;
   }
 }
 .view-switcher a:hover {
@@ -2358,7 +2363,9 @@ input[type="range"]::-moz-range-track {
   color: var(--text);
 }
 
-/* .job-status* CSS removed — superseded by loading-modal.css. */
+/* .job-status* CSS removed — superseded by the loading-modal deck, which
+   has since been removed too; job progress now lives in the chat jobs
+   strip (chat.css). */
 @media (prefers-reduced-motion: reduce) {
   /* U1 — modals + bottom sheets do full slide-up transforms by default;
      for users with motion sensitivity that's vestibular-unfriendly. The
@@ -2699,54 +2706,67 @@ input[type="range"]::-moz-range-track {
   font-size: 12px;
 }
 
-/* ── TOAST HOST ── Fixed column above the job deck. --corner-deck-clearance
-   is published by LoadingModalHost (0px when no jobs) so toasts stack above
-   the deck instead of overlapping it. z stays at --z-toast (110, clears
-   dialogs); the deck sits at --z-deck (85, below dropdowns + dialogs) — see spec §2. */
+/* ── TOAST HOST ── Fixed column bottom-right. z stays at --z-toast (110,
+   clears dialogs). The job deck that used to share this corner has been
+   removed (--z-deck is gone); on desktop, toasts now lift to clear the
+   open chat card instead — see the body[data-chat-open] rules below. */
 .toast-host {
   position: fixed;
   right: 24px;
-  bottom: calc(24px + var(--corner-deck-clearance, 0px));
+  bottom: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: var(--z-toast);
   pointer-events: none;
 }
-/* Lift above the batch-action bar together with the deck (the deck's own
-   rule lives in loading-modal.css). */
+/* Lift above the floating .action-bar (report page toolbar). */
 body:has(.action-bar) .toast-host {
-  bottom: calc(90px + var(--corner-deck-clearance, 0px));
+  bottom: 90px;
+}
+/* Desktop/tablet only: when the chat card is open, lift toasts to clear
+   its top edge with a 12px gap. The card sits at bottom 24px with
+   height: min(620px, calc(100dvh - 48px)) (.chat-card in chat.css) — mirror
+   that exact clamp here so on a short-but-wide window (≥641px wide, <668px
+   tall) the toast tracks the shrunken card top instead of lifting a fixed
+   620px and sliding off the top edge. ≤640px the chat card is full-screen
+   and toasts already render above it (--z-toast 110 > --z-chat-mobile 108),
+   so no lift is needed there. Same selector specificity as the two rules
+   above; placed after them so it wins. */
+@media (min-width: 641px) {
+  body[data-chat-open] .toast-host {
+    bottom: calc(24px + min(620px, calc(100dvh - 48px)) + 12px);
+  }
+  /* When the report action-bar is also present, .chat-card moves to
+     bottom: 90px (chat.css) instead of 24px — the card is still the
+     taller obstacle, so it (not the action-bar's own 90px toast offset
+     above) is what toasts need to clear. Higher specificity than
+     body:has(.action-bar) .toast-host above, so it wins outright. */
+  body[data-chat-open]:has(.action-bar) .toast-host {
+    bottom: calc(90px + min(620px, calc(100dvh - 48px)) + 12px);
+  }
 }
 /* 640px (canonical), not 768px — the bottom-bar/action-bar offsets below
-   reference bars that only render ≤640px (see loading-modal.css). */
+   reference bars that only render ≤640px. */
 @media (max-width: 640px) {
   .toast-host {
     left: 12px;
     right: 12px;
-    /* Mobile base matches loading-modal.css ≤640px: deck sits at
-       calc(24px + env(safe-area-inset-bottom, 0px)).
-       Toasts use the same base so the stack stays glued. */
-    bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+    /* Mobile base: 24px + safe-area inset, the same floor the chat bubble
+       and bottom bars use. */
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   }
   body:has(.action-bar) .toast-host {
-    bottom: calc(138px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+    bottom: calc(138px + env(safe-area-inset-bottom, 0px));
   }
   body:has(.bottom-bar):not(:has(.action-bar)) .toast-host {
-    bottom: calc(76px + env(safe-area-inset-bottom, 0px) + var(--corner-deck-clearance, 0px));
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
   /* Batch-action bar open (rows selected): lift toasts above the bar
      (bottom 64+8px, ~50px tall) so they stop covering its Change-status /
-     Evaluate / Delete buttons. Mirrors the deck rule in loading-modal.css. */
+     Evaluate / Delete buttons. */
   body:has(.batch-action-bar.on) .toast-host {
-    bottom: calc(
-      64px +
-      8px +
-      50px +
-      8px +
-      env(safe-area-inset-bottom, 0px) +
-      var(--corner-deck-clearance, 0px)
-    );
+    bottom: calc(64px + 8px + 50px + 8px + env(safe-area-inset-bottom, 0px));
   }
 }
 
