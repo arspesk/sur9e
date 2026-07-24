@@ -932,6 +932,11 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Expand + close are a pair at the right edge: the first one takes the auto
+   margin that pushes the group right, the second just needs a hair of gap. */
+.chat-header__expand + .chat-header__close {
+  margin-left: 2px;
+}
 .chat-model-chip {
   display: inline-flex;
   align-items: center;

@@ -1,0 +1,187 @@
+/* /chat — full-screen chat: thread sidebar + conversation column.
+   Reuses chat.css component classes (.chat-composer, .chat-transcript,
+   .chat-suggestions, .chat-empty, …); this file only lays out the page
+   shell, so the bubble card and this page can never drift visually. */
+
+.chat-page {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+}
+
+/* ─── Thread sidebar ─── */
+
+.chat-threads {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.chat-threads__new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-paper);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 0;
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+.chat-threads__new:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-threads__new:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.chat-threads__group {
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--meta);
+  margin: var(--space-2) 4px 4px;
+}
+
+.chat-threads__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.chat-threads__row[data-active] .chat-threads__open {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.chat-threads__open {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-threads__open:hover {
+  background: var(--surface);
+}
+
+.chat-threads__kebab {
+  border: 0;
+  background: none;
+  color: var(--meta);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.chat-threads__row:hover .chat-threads__kebab,
+.chat-threads__kebab:focus-visible,
+.chat-threads__kebab[data-open] {
+  visibility: visible;
+}
+
+.chat-threads__rename {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  background: var(--bg-paper);
+  color: var(--text);
+}
+
+.chat-threads__empty {
+  font-size: 12px;
+  color: var(--meta);
+  padding: 4px 8px;
+  margin: 0;
+}
+
+.chat-threads__archived {
+  margin-top: var(--space-2);
+}
+.chat-threads__archived-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.chat-threads__archived-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* ─── Conversation column ─── */
+
+.chat-page__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-page__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.chat-page__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.chat-page__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+.chat-page__body > * {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.chat-page__composer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+}
+.chat-page__composer > * {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+/* Mobile: /chat is normally reached via the bubble (already a full-screen
+   takeover ≤640px), but a deep link should still work — drop the sidebar
+   and leave room for the bottom nav. */
+@media (max-width: 640px) {
+  .chat-page {
+    grid-template-columns: 1fr;
+  }
+  .chat-threads {
+    display: none;
+  }
+  .chat-page__composer {
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  }
+}

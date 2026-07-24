@@ -1,0 +1,269 @@
+/* Home tab (/) — chat hero, agenda digest, follow-ups, pending offers.
+   Layout only; the composer/suggestion chips inside the hero are chat.css
+   components reused as-is. */
+
+.home {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+/* ─── Agenda digest cards ─── */
+
+.agenda-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.agenda-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-3);
+}
+.agenda-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ghosted content icon: oversized, rotated, bleeding past the card edge,
+   in brand accent. Texture, not chrome — it must never compete with the
+   count or the CTA. */
+.agenda-card__wm {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  color: var(--accent);
+  opacity: 0.1;
+  width: 88px;
+  height: 88px;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-10deg);
+  transition: opacity var(--dur-smooth) var(--ease-soft);
+}
+.agenda-card__wm svg {
+  width: 100%;
+  height: 100%;
+}
+.agenda-card:hover .agenda-card__wm {
+  opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-card__wm {
+    transition: none;
+  }
+}
+
+.agenda-card__count {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.agenda-card__label {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 1px;
+}
+.agenda-card__cta {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agenda-card__cta a,
+.agenda-card__cta button {
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+}
+.agenda-card__cta a:hover,
+.agenda-card__cta button:hover {
+  text-decoration: underline;
+}
+
+/* ─── Hero ─── */
+
+.home-hero {
+  text-align: center;
+  padding-top: var(--space-5);
+}
+.home-hero__greeting {
+  font-family: var(--font-general-sans);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-4);
+  text-wrap: balance;
+}
+.home-hero__composer {
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: left;
+}
+.home-hero__chips {
+  max-width: 640px;
+  margin: var(--space-3) auto 0;
+}
+/* The bubble stacks its starters full-width in a narrow card; the hero has
+   room, so they read better as a centered row of pills. Scoped to the hero
+   so the bubble's own layout is untouched. */
+.home-hero__chips .chat-suggestions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.home-hero__chips .chat-suggestion-chip {
+  width: auto;
+}
+
+/* ─── Sections (follow-ups, pending offers) ─── */
+
+.home-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.home-section {
+  margin-top: var(--space-6);
+  min-width: 0;
+}
+.home-section__label {
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.home-section__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-paper);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+}
+.home-row__company {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.home-row__company--link {
+  text-decoration: none;
+  color: var(--text);
+}
+.home-row__company--link:hover {
+  color: var(--accent-text);
+}
+.home-row__role {
+  color: var(--text-muted);
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-row__score {
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.home-row__score[data-tier="high"] {
+  color: var(--score-high);
+}
+.home-row__score[data-tier="mid"] {
+  color: var(--score-mid);
+}
+.home-row__score[data-tier="low"] {
+  color: var(--score-low);
+}
+
+.home-row__pill {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+.home-row__pill[data-urgency="overdue"] {
+  background: var(--st-danger-soft);
+  color: var(--st-danger);
+}
+.home-row__pill[data-urgency="urgent"] {
+  background: var(--st-warn-soft);
+  color: var(--st-warn);
+}
+.home-row__pill[data-urgency="waiting"] {
+  background: var(--st-neutral-soft);
+  color: var(--text-muted);
+}
+
+.home-row__btn {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-paper);
+  color: var(--text-2);
+  padding: 5px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.home-row__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.home-row__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.home-row__btn--primary {
+  background: var(--accent-cta);
+  border-color: var(--accent-cta);
+  color: var(--accent-on);
+}
+.home-row__btn--primary:hover:not(:disabled) {
+  background: var(--accent-cta-hover);
+  border-color: var(--accent-cta-hover);
+  color: var(--accent-on);
+}
+
+@media (max-width: 900px) {
+  .home-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .home {
+    padding-bottom: var(--space-9);
+  }
+  .agenda-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .home-row {
+    flex-wrap: wrap;
+  }
+  .home-hero__greeting {
+    font-size: 22px;
+  }
+}
