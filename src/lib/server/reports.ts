@@ -130,6 +130,42 @@ export function serializeFrontmatter(frontmatter: ReportFrontmatter, body: strin
   return `---\n${yamlText}---\n\n${body.replace(/^\n+/, '')}`;
 }
 
+/**
+ * Surgically apply a single find/replace edit to a report's BODY, leaving the
+ * frontmatter untouched. Mirrors the Edit-tool contract: `oldText` must match
+ * the body EXACTLY and UNIQUELY. Returns the re-serialized markdown on success,
+ * or an error string when the file has no frontmatter, or the match is missing
+ * (0) or ambiguous (>1). Pure + framework-neutral (no fs, no revalidate) so it
+ * unit-tests directly and is reusable by both the confirm resolver and the
+ * terminal apply path.
+ *
+ * `newText` is spliced in literally — a `$`-bearing replacement (`$1`, `$&`)
+ * is NOT interpreted (the replace uses a function replacer).
+ */
+export function applyReportBodyEdit(
+  currentMarkdown: string,
+  oldText: string,
+  newText: string,
+): { markdown: string } | { error: string } {
+  if (!oldText) return { error: 'text to replace not found' };
+  let parsed: { frontmatter: ReportFrontmatter; body: string };
+  try {
+    parsed = parseFrontmatter(currentMarkdown);
+  } catch {
+    return { error: 'report is not in frontmatter format' };
+  }
+  const { frontmatter, body } = parsed;
+  const count = body.split(oldText).length - 1;
+  if (count === 0) return { error: 'text to replace not found' };
+  if (count > 1) {
+    return {
+      error: `old_text matches ${count} places — add surrounding context to make it unique`,
+    };
+  }
+  const nextBody = body.replace(oldText, () => newText);
+  return { markdown: serializeFrontmatter(frontmatter, nextBody) };
+}
+
 export function saveReport(opts: {
   filePath: string;
   // Accept the schema's input shape so callers don't have to pre-fill
