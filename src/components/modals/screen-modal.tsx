@@ -4,15 +4,15 @@
 // from the report's Apply CLI handoff (apply-modal). The user picks a depth:
 //   - Quick screen      → startJobAction('screen', { url })
 //   - Full evaluation   → startJobAction('screen-evaluate', { url })
-// Either way: validate the URL prefix, spawn the job, close; the shared
-// loading-modal owns polling + terminal state display (deck card).
+// Either way: validate the URL prefix, spawn the job, close; the chat jobs
+// strip owns polling + terminal state display.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLoadingModalStore } from '@/components/loading-modal/loading-modal-store';
 import { Button, IconButton, Input, Label } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
 import { jobEstimateLabel } from '@/lib/job-types';
 import { startJobAction } from '@/server/actions/jobs';
@@ -22,8 +22,8 @@ export function ScreenModal() {
   const { close } = useModalStore();
   const queryClient = useQueryClient();
   const pushToast = useToastStore(s => s.push);
-  const startJob = useLoadingModalStore(s => s.startJob);
-  const waitForTerminal = useLoadingModalStore(s => s.waitForTerminal);
+  const startJob = useChatJobsStore(s => s.startJob);
+  const waitForTerminal = useChatJobsStore(s => s.waitForTerminal);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,10 +78,10 @@ export function ScreenModal() {
         const snap = await waitForTerminal(result.id);
         if (snap.status === 'done') {
           // Special-case outcome warnings (legacy lines 2140-2148): these
-          // carry information the done-card does NOT convey — the job
+          // carry information the done strip row does NOT convey — the job
           // "succeeded" but produced nothing useful. They stay; only the
-          // generic success/failure toasts are suppressed (the card shows
-          // terminal state — spec 2026-06-05-corner-notifications).
+          // generic success/failure toasts are suppressed (the strip row
+          // shows terminal state — spec 2026-06-05-corner-notifications).
           const out = snap.output || '';
           if (/worker exited 0 but didn't write/.test(out)) {
             pushToast(
@@ -94,7 +94,7 @@ export function ScreenModal() {
             queryClient.invalidateQueries({ queryKey: ['applications'] });
           }
         }
-        // No generic error toast — the deck card shows the error state.
+        // No generic error toast — the strip row shows the error state.
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         throw err;

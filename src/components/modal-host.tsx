@@ -49,8 +49,8 @@ export function ModalHost() {
 
   // Close any open confirmation modal when the route changes (back/forward
   // included) — the store is global, so without this a modal opened on one
-  // page survives navigation and floats over the next page. The loading-modal
-  // deck is intentionally NOT affected (separate store; cross-page by design).
+  // page survives navigation and floats over the next page. The chat jobs
+  // feed is intentionally NOT affected (separate store; cross-page by design).
   const pathname = usePathname();
   const prevPathname = useRef(pathname);
   useEffect(() => {

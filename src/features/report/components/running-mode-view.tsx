@@ -45,9 +45,9 @@ export function RunningModeView({ node }: NodeViewProps) {
   // the uncontrolled editor re-syncs from the file — the section appears and
   // the card is gone. We deliberately do NOT delete the node + let the editor
   // save: the open doc is stale (it never holds the job's out-of-band append),
-  // so re-serializing it would clobber the freshly-written section. Mirrors
-  // loading-modal.tsx, which also does a full navigation after a job because a
-  // router/query refresh can't remount the uncontrolled editor.
+  // so re-serializing it would clobber the freshly-written section. Same
+  // reason the chat jobs strip (chat-jobs-slot.tsx) does a full navigation
+  // after a job: a router/query refresh can't remount the uncontrolled editor.
   //
   // The reload is UNCONDITIONAL (not gated on whether a comment was found): the
   // comment is often already gone from the live `.md` — e.g. a prior autosave

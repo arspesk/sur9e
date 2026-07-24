@@ -1,18 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLoadingModalStore } from '@/components/loading-modal/loading-modal-store';
 import { useToastStore } from '@/components/toast/toast-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { useJobAction } from '@/hooks/use-job-action';
 
 /**
  * Tests target the public contract of useJobAction:
  *   - Calls the server action startJobAction({ kind, params })
- *   - Calls loadingModalStore.startJob(id, kind, num?)
+ *   - Calls chatJobsStore.startJob(id, kind, num?)
  *   - Awaits waitForTerminal(id) and reacts to its resolution
- *   - NO toast on terminal done/error — the deck card is the notification
+ *   - NO toast on terminal done/error — the chat jobs strip is the notification
  *     (spec 2026-06-05-corner-notifications)
- *   - Toasts only on spawn failure (no card exists yet)
+ *   - Toasts only on spawn failure (no job row exists yet)
  *
  * We mock the server-action module so the test stays a pure unit and
  * doesn't try to actually spawn a job. Snapshot writes drive the modal.
@@ -34,9 +34,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
 function resetStores() {
   useToastStore.setState({ toasts: [] });
   // Reset deck store by dismissing all tracked jobs
-  const s = useLoadingModalStore.getState();
+  const s = useChatJobsStore.getState();
   for (const id of [...s.order]) s.dismiss(id);
-  useLoadingModalStore.setState({ _resolvers: new Map() });
+  useChatJobsStore.setState({ _resolvers: new Map() });
 }
 
 function jobRecord(id: string) {
@@ -71,7 +71,7 @@ describe('useJobAction', () => {
 
     await new Promise(r => setTimeout(r, 10));
     await act(async () => {
-      useLoadingModalStore.getState().setSnapshot('job-1', { status: 'done', output: '' });
+      useChatJobsStore.getState().setSnapshot('job-1', { status: 'done', output: '' });
     });
     const final = await runPromise;
 
@@ -90,7 +90,7 @@ describe('useJobAction', () => {
     const runPromise = result.current.run({ num: 2 });
     await new Promise(r => setTimeout(r, 10));
     await act(async () => {
-      useLoadingModalStore
+      useChatJobsStore
         .getState()
         .setSnapshot('job-err', { status: 'error', error: 'something blew up' });
     });
@@ -124,7 +124,7 @@ describe('useJobAction', () => {
     const runPromise = result.current.run({ num: 4 });
     await new Promise(r => setTimeout(r, 10));
     await act(async () => {
-      useLoadingModalStore.getState().dismiss('job-abort');
+      useChatJobsStore.getState().dismiss('job-abort');
     });
     const final = await runPromise;
 

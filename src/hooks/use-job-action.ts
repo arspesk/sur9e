@@ -4,7 +4,7 @@
  * hooks/use-job-action.ts
  *
  * Shared kick-off hook for any background job that follows the legacy
- * "startJobAction → loadingModal.startJob(id, type) → waitForTerminal →
+ * "startJobAction → chatJobsStore.startJob(id, type) → waitForTerminal →
  * optional refresh" pattern. Consolidates what used to live as eight
  * separate window.runXXX() helpers (run-evaluate.js, run-tailor-cv.js,
  * run-cover-letter.js, run-research.js, run-interview-process.js,
@@ -12,18 +12,18 @@
  *
  * The hook returns a `run(params, opts?)` function that:
  *   1. POSTs to /api/jobs/<type> with the given JSON params
- *   2. Opens the cross-page loading-modal anchored to the spawned job id
- *      (the modal owns polling at POLL_MS=2000 — see loading-modal.tsx)
+ *   2. Registers the job in the chat jobs store (ChatJobsRuntime owns
+ *      polling at POLL_MS=2000 — see src/features/chat/use-chat-job-poll.ts)
  *   3. Awaits the modal's `waitForTerminal(id)` Promise — resolves with
  *      the terminal JobSnapshot when status becomes 'done' or 'error',
  *      rejects with AbortError if the user dismisses mid-flight
  *   4. On 'done': invalidates the ['applications'] query if `refreshOnDone`
- *      is set — NO toast; the deck card is the completion notification
+ *      is set — NO toast; the chat jobs strip is the completion notification
  *   5. On 'error': returns `snapshot.error || failMsg` — NO toast; the card
  *      shows the error state
  *   6. Returns `{ done, error?, cancelled? }` matching the legacy contract
  *
- * The loading-modal derives titles from `kind` + `num` ("Generating evaluate
+ * The strip derives titles from `kind` + `num` ("Generating evaluate
  * for offer #42"). `opts.onDone` fires after a successful job — used by the
  * report viewer to reload the page so flag-driven UI (button hides, TOC
  * entry appears) updates.
@@ -31,8 +31,8 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import { useLoadingModalStore } from '@/components/loading-modal/loading-modal-store';
 import { useToastStore } from '@/components/toast/toast-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { JOB_TYPES_BY_TYPE } from '@/lib/job-types';
 import type { JobType } from '@/lib/server/jobs';
 import { startJobAction } from '@/server/actions/jobs';
@@ -58,8 +58,8 @@ export interface JobActionRunOpts {
 export function useJobAction(type: string) {
   const queryClient = useQueryClient();
   const pushToast = useToastStore(s => s.push);
-  const startJob = useLoadingModalStore(s => s.startJob);
-  const waitForTerminal = useLoadingModalStore(s => s.waitForTerminal);
+  const startJob = useChatJobsStore(s => s.startJob);
+  const waitForTerminal = useChatJobsStore(s => s.waitForTerminal);
 
   const run = useCallback(
     async (
@@ -105,8 +105,9 @@ export function useJobAction(type: string) {
         return { done: 0, error: msg };
       }
 
-      // 2. Open the loading modal — it owns polling. Title is derived from
-      //    kind + num in the card; opts.title is no longer forwarded.
+      // 2. Register the job in the chat jobs store — ChatJobsRuntime owns
+      //    polling. Title is derived from kind + num in the strip; opts.title
+      //    is no longer forwarded.
       startJob(jobId, type, typeof params.num === 'number' ? params.num : undefined);
 
       // 3. Await terminal state.
@@ -141,9 +142,9 @@ export function useJobAction(type: string) {
         return { done: 1 };
       }
 
-      // No toast on job error — the deck card shows the error state with
-      // actions (spec 2026-06-05-corner-notifications). failMsg survives
-      // as the returned error fallback for callers.
+      // No toast on job error — the chat jobs strip shows the error state
+      // with actions (spec 2026-06-05-corner-notifications). failMsg
+      // survives as the returned error fallback for callers.
       const errMsg = snapshot.error || meta.failMsg;
       return { done: 0, error: errMsg };
     },

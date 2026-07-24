@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLoadingModalStore } from '@/components/loading-modal/loading-modal-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { useJobDiscovery } from '@/hooks/use-job-discovery';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -14,7 +14,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function resetStore() {
-  useLoadingModalStore.setState({ jobs: {}, order: [] });
+  useChatJobsStore.setState({ jobs: {}, order: [] });
 }
 
 beforeEach(resetStore);
@@ -37,9 +37,9 @@ describe('useJobDiscovery', () => {
     );
     renderHook(() => useJobDiscovery(), { wrapper });
     await waitFor(() => {
-      expect(useLoadingModalStore.getState().jobs['sched-scan-1']).toBeDefined();
+      expect(useChatJobsStore.getState().jobs['sched-scan-1']).toBeDefined();
     });
-    expect(useLoadingModalStore.getState().jobs['sched-scan-1'].kind).toBe('scan');
+    expect(useChatJobsStore.getState().jobs['sched-scan-1'].kind).toBe('scan');
   });
 
   it('forwards num for offer-scoped jobs so the card titles "… for offer #N"', async () => {
@@ -54,18 +54,18 @@ describe('useJobDiscovery', () => {
     );
     renderHook(() => useJobDiscovery(), { wrapper });
     await waitFor(() => {
-      expect(useLoadingModalStore.getState().jobs['cli-eval-42']).toBeDefined();
+      expect(useChatJobsStore.getState().jobs['cli-eval-42']).toBeDefined();
     });
-    const entry = useLoadingModalStore.getState().jobs['cli-eval-42'];
+    const entry = useChatJobsStore.getState().jobs['cli-eval-42'];
     expect(entry.kind).toBe('evaluate');
     expect(entry.num).toBe(42);
   });
 
   it('does not re-startJob an already-tracked id (no front-yank on every poll)', async () => {
     // Pre-track the job with a non-front position to detect reordering.
-    useLoadingModalStore.getState().startJob('sched-scan-1', 'scan');
-    useLoadingModalStore.getState().startJob('other-job', 'evaluate');
-    const orderBefore = [...useLoadingModalStore.getState().order];
+    useChatJobsStore.getState().startJob('sched-scan-1', 'scan');
+    useChatJobsStore.getState().startJob('other-job', 'evaluate');
+    const orderBefore = [...useChatJobsStore.getState().order];
     expect(orderBefore).toEqual(['sched-scan-1', 'other-job']);
 
     vi.stubGlobal(
@@ -82,7 +82,7 @@ describe('useJobDiscovery', () => {
       expect(vi.mocked(fetch)).toHaveBeenCalled();
     });
     // Order unchanged — the tracked id was skipped, not re-attached.
-    expect(useLoadingModalStore.getState().order).toEqual(orderBefore);
+    expect(useChatJobsStore.getState().order).toEqual(orderBefore);
   });
 
   it('a failed poll surfaces no cards and does not throw', async () => {
@@ -91,6 +91,6 @@ describe('useJobDiscovery', () => {
     await waitFor(() => {
       expect(vi.mocked(fetch)).toHaveBeenCalled();
     });
-    expect(Object.keys(useLoadingModalStore.getState().jobs)).toHaveLength(0);
+    expect(Object.keys(useChatJobsStore.getState().jobs)).toHaveLength(0);
   });
 });

@@ -59,7 +59,7 @@ export interface GeneratorRun {
 
 /**
  * @param mode job type / mode id (e.g. 'tailor-cv', 'research') — used for
- *   both the loading-modal kind and the cost-runtime lookup in the caller.
+ *   both the chat job kind and the cost-runtime lookup in the caller.
  */
 export function useGeneratorRun(mode: string): GeneratorRun {
   const { context, close } = useModalStore();

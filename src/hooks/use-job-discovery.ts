@@ -1,7 +1,7 @@
 'use client';
 
-// Discovery poll: surface ACTIVE jobs this tab doesn't track as deck cards.
-// The loading-modal store only learns about jobs via startJob (client
+// Discovery poll: surface ACTIVE jobs this tab doesn't track as chat strip rows.
+// The chat jobs store only learns about jobs via startJob (client
 // actions + sessionStorage re-attach), so anything started elsewhere — the
 // scan scheduler, the CLI/API, another open tab — ran with no card until
 // this poll picks it up. Covers every job kind: system jobs (scan,
@@ -14,7 +14,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useLoadingModalStore } from '@/components/loading-modal/loading-modal-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { JOB_TYPES } from '@/lib/job-types';
 
 const ALL_JOB_TYPES = JOB_TYPES.map(t => t.type);
@@ -30,8 +30,8 @@ async function fetchActiveJobs(): Promise<ActiveJobs> {
   return (await res.json()) as ActiveJobs;
 }
 
-/** Mounted once (LoadingModalHost). Adds a deck card for any active job
- *  this tab doesn't track yet; the deck's own snapshot polling takes over
+/** Mounted once (ChatJobsRuntime). Adds a strip row for any active job this
+ *  tab doesn't track yet; the runtime's own snapshot polling takes over
  *  from there. */
 export function useJobDiscovery(): void {
   const { data } = useQuery({
@@ -43,7 +43,7 @@ export function useJobDiscovery(): void {
 
   useEffect(() => {
     if (!data) return;
-    const store = useLoadingModalStore.getState();
+    const store = useChatJobsStore.getState();
     for (const type of ALL_JOB_TYPES) {
       for (const job of data[type] ?? []) {
         if (!store.jobs[job.id]) store.startJob(job.id, type, job.num);
