@@ -34,10 +34,12 @@ import { getActivePills, parseURL, serializeURL } from '@/features/table/table-u
 import { stripView, withView } from '@/features/table/view-url';
 import { useApplications } from '@/hooks/use-applications';
 import { useJobAction } from '@/hooks/use-job-action';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { useModalStore } from '@/stores/modal-store';
 import { Board } from './board';
 import { BoardSkeleton } from './board-skeleton';
+import { COLUMNS } from './board-types';
 
 interface PipelinePageInnerProps {
   initialData?: ApplicationsResponse;
@@ -134,6 +136,21 @@ function PipelinePageInner({ initialData }: PipelinePageInnerProps) {
   // Whether any filter is active (score/status/archetype/date/loc/q) — drives
   // the per-column empty copy: "match your filters" vs the neutral "yet".
   const filtersActive = useMemo(() => getActivePills(filters).length > 0, [filters]);
+
+  // On-screen awareness (Part 1): publish the board's per-column counts (after
+  // filters/sort) so the chat assistant knows the pipeline shape on screen.
+  const pageContext = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of filteredRows) {
+      const k = (r.status || '').toLowerCase();
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const bits = COLUMNS.filter(c => (counts.get(c.key) ?? 0) > 0).map(
+      c => `${c.label} ${counts.get(c.key)}`,
+    );
+    return bits.length ? `pipeline board — ${bits.join(', ')}` : 'pipeline board — no offers';
+  }, [filteredRows]);
+  useSetPageContext(pageContext);
 
   const openFilterPanel = useCallback(() => setFilterPanelOpen(true), []);
   const closeFilterPanel = useCallback(() => setFilterPanelOpen(false), []);

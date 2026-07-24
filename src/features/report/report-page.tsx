@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef } from 'react';
 import { IconButton } from '@/components/primitives';
 import { Topbar } from '@/components/shell/topbar';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import { useReport } from '@/hooks/use-report';
 import { useOverflowMenuStore } from '@/stores/overflow-menu-store';
 import { useReportTocStore } from '@/stores/report-toc-store';
@@ -91,6 +92,23 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
   const crumbCompany = query.data?.company || '—';
   const num = query.data?.num;
   const company = query.data?.company ?? '';
+
+  // On-screen awareness (Part 1): publish which offer this report is for +
+  // its headline facts. Null until the entry loads → the send-path falls back
+  // to the pathname rather than reporting a half-empty summary.
+  const role = query.data?.role;
+  const score = r?.score;
+  const state = r?.state;
+  const pageContext = useMemo(() => {
+    if (num == null) return null;
+    let s = `report for offer #${num}`;
+    if (company) s += ` ${company}`;
+    if (role) s += `, ${role}`;
+    if (score != null) s += `, score ${score}`;
+    if (state) s += `, state ${state}`;
+    return s;
+  }, [num, company, role, score, state]);
+  useSetPageContext(pageContext);
 
   // Reactive aria-expanded for the overflow menu trigger (fix #18).
   const overflowMenuOpen = useOverflowMenuStore(s => s.open?.num === num && s.open !== null);

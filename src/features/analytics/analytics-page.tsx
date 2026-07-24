@@ -8,6 +8,7 @@ import { Topbar } from '@/components/shell/topbar';
 import type { ApplicationsResponse } from '@/features/table/table-types';
 import { type UsageResponse, useUsage } from '@/hooks/use-analytics';
 import { useApplications } from '@/hooks/use-applications';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import { type StatusLogResponse, useStatusLog } from '@/hooks/use-status-log';
 import {
   aggregateUsageByMode,
@@ -23,6 +24,7 @@ import {
   PROVIDER_IDS,
   type ProviderFilter,
   type ProviderId,
+  presetLabel,
   presetToRange,
   previousRange,
 } from '@/lib/analytics/compute';
@@ -214,6 +216,15 @@ export function AnalyticsPage({ initialData }: AnalyticsPageProps = {}) {
   const appliedDelta = derived.funnelPrev
     ? fmtDelta(derived.funnelCurr.applied, derived.funnelPrev.applied)
     : { text: '', kind: '' as const };
+
+  // On-screen awareness (Part 1): publish the analytics view + the active date
+  // range (the user's current focus). String dep — the effect only re-runs on
+  // an actual range change.
+  useSetPageContext(
+    `analytics — ${
+      range.preset === 'custom' ? `${range.start} to ${range.end}` : presetLabel(range.preset)
+    }`,
+  );
 
   return (
     <>

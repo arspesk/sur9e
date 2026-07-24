@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { SaveStateText } from '@/components/save-state-text';
 import { Topbar } from '@/components/shell/topbar';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import type { ProfileState } from '@/hooks/use-profile';
 // Type-only import from a server-only module — erased at compile time, so
 // the 'server-only' guard never executes in the client bundle (same pattern
@@ -58,6 +59,10 @@ export function ProfilePage({ initialData, loadError }: ProfilePageProps = {}) {
   // toggles #tocSheet open. List items derive from SECTIONS so the mobile
   // sheet stays in sync with the desktop TOC indicator.
   useSectionSheet(SECTIONS);
+
+  // On-screen awareness (Part 1). Active section is scroll-spy DOM state (no
+  // store to read), so we publish just the page name.
+  useSetPageContext('profile');
 
   return (
     <>

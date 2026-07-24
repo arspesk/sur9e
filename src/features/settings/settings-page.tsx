@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { SaveStateText } from '@/components/save-state-text';
 import { ThemeSwitch } from '@/components/shell/theme-switch';
 import { Topbar } from '@/components/shell/topbar';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import type { SettingsState } from '@/hooks/use-settings';
 import type { PortalsShape } from '@/lib/schemas/portals';
 import type { ScheduleState } from '@/lib/server/jobs/schedule-logic';
@@ -67,6 +68,10 @@ export function SettingsPage({
   // toggles #tocSheet open. List items derive from SECTIONS so the mobile
   // sheet stays in sync with the desktop TOC indicator.
   useSectionSheet(SECTIONS);
+
+  // On-screen awareness (Part 1). Active section is scroll-spy DOM state (no
+  // store to read), so we publish just the page name.
+  useSetPageContext('settings');
 
   return (
     <>
