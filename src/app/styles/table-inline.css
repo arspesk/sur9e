@@ -413,33 +413,22 @@ table.offers th.col-kebab {
   }
 }
 /* ── Responsive (tablet) ──
-   ≤1024px: also drop fixed % widths and let the table size to content.
-   We keep Status + Score + Comp + Date visible. */
+   ≤1024px: show EVERY column — the same set desktop renders — and let the
+   contained .table-wrap scroll horizontally. Full columns + horizontal
+   scroll is the clear, accurate read for a tablet.
+
+   This tier used to HIDE Seniority/Location/Mode/Archetype and collapse to
+   `table-layout: auto; min-width: 0` to dodge a runaway scroll — but that
+   traded away four columns of real data. Instead we keep the desktop fixed
+   layout and restore the min-width floor sized to the REAL all-columns
+   content (the same 1320px sum the desktop floor uses — NOT an arbitrary
+   huge value), so columns keep readable widths instead of cramping and the
+   overflow scrolls inside the contained viewport. Phone (≤640px, below)
+   overrides this to the card list. */
 @media (max-width: 1024px) {
-  /* Hide by class (position-independent — covers th + td regardless of
-     column order). */
-  .offers .col-seniority,
-  .offers .col-loc,
-  .offers .col-mode,
-  .offers .col-arch {
-    display: none;
-  }
-  .offers .col-co,
-  .offers .col-role,
-  .offers .col-status,
-  .offers .col-score,
-  .offers .col-comp,
-  .offers .col-date,
-  .offers .col-posted {
-    width: auto;
-  }
   table.offers {
-    table-layout: auto;
-    /* Drop the 1320px desktop floor — at tablet most columns are hidden, so
-       the floor stretched the few remaining columns into a table far wider
-       than the viewport (runaway horizontal scroll / empty space on the
-       right). Let the auto layout size the table to the visible content. */
-    min-width: 0;
+    table-layout: fixed;
+    min-width: 1320px;
   }
 }
 .offers-row {
@@ -506,18 +495,26 @@ table.offers th.col-kebab {
 
 /* ── Responsive (phone): table collapses to card list ── */
 @media (max-width: 640px) {
-  /* Hide thead and the # / date columns entirely (card layout renders its
-     own date line). */
-  .offers thead {
-    display: none;
-  }
-  .offers .col-date,
-  .offers .col-posted,
+  /* Hide the thead + the row-number column. The date columns are NOT hidden
+     here — they render as a labelled text line inside the card (below). */
+  .offers thead,
   .offers tbody td.col-num {
     display: none;
   }
 
-  /* Each row becomes a card */
+  /* Each row becomes a card. The card is a flex-WRAP container so per-cell
+     `order` can regroup the cells into stacked visual rows even though their
+     DOM order is fixed (by the table column set + the column drift-guard) and
+     interleaves them — e.g. Comp belongs to the chip row but sits AFTER
+     Seniority/Mode/Archetype in the DOM. Visual groups, top to bottom:
+       order 1  Company                              (full-width line)
+       order 2  Role                                 (full-width line)
+       order 3  Status · Score · Comp                (chip row)
+       order 5  Seniority · Mode · Archetype · Location (editable meta row)
+       order 7  Posted · Added                       (date line)
+     Company + Role break onto their own lines via flex-basis:100%; the two
+     zero-height, full-width ::before/::after items (order 4 + 6) force the
+     line breaks between the chip / meta / date groups. */
   .offers,
   .offers tbody,
   .offers tr {
@@ -531,6 +528,11 @@ table.offers th.col-kebab {
   }
   .offers tbody tr {
     position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-paper);
@@ -541,8 +543,27 @@ table.offers th.col-kebab {
   .offers tbody tr:hover {
     background: var(--bg-paper);
   }
+  /* Zero-height, full-width flex items that force the line breaks between the
+     chip row (order 3: Status·Score·Comp·Location) and the enum meta row
+     (order 5: Seniority·Mode·Archetype), and between that meta row and the
+     date rows (order 7/8). The two date cells are flex:0 0 100% so they'd
+     self-break onto their own lines anyway; ::after just gives the meta→dates
+     gap the same rhythm as chip→meta. Excluded from the inert virtualizer
+     spacer rows (:not(.virt-spacer)) so they add no height there. */
+  .offers tbody tr:not(.virt-spacer)::before,
+  .offers tbody tr:not(.virt-spacer)::after {
+    content: "";
+    flex-basis: 100%;
+    height: 0;
+  }
+  .offers tbody tr:not(.virt-spacer)::before {
+    order: 4;
+  }
+  .offers tbody tr:not(.virt-spacer)::after {
+    order: 6;
+  }
 
-  /* Checkbox: pinned top-left of card */
+  /* Checkbox: pinned top-left of card (out of flex flow) */
   .offers tbody td.col-select {
     position: absolute;
     top: 14px;
@@ -550,7 +571,7 @@ table.offers th.col-kebab {
     width: auto;
     padding: 0;
   }
-  /* Kebab: pinned top-right of card */
+  /* Kebab: pinned top-right of card (out of flex flow) */
   .offers tbody td.col-kebab {
     position: absolute;
     top: 10px;
@@ -573,40 +594,43 @@ table.offers th.col-kebab {
     overflow: visible;
     text-overflow: clip;
   }
-  /* Company (col 2): card title */
+  /* Company (col 2): card title — full-width line */
   .offers tbody td.col-co {
+    order: 1;
+    flex: 0 0 100%;
     font-family: var(--font-display);
     font-size: 16px;
     font-weight: 600;
     color: var(--text);
-    margin-bottom: 2px;
   }
-  /* Role (col 3): card subtitle */
+  /* Role (col 3): card subtitle — full-width line. Negative top margin tightens
+     the title/subtitle pair against the card's 6px row-gap. */
   .offers tbody td.col-role {
+    order: 2;
+    flex: 0 0 100%;
+    margin-top: -2px;
     font-size: 13px;
     color: var(--text-3);
-    margin-bottom: 10px;
   }
-  /* Status / Score / Comp: chip row (inline-block so they sit side-by-side).
-     vertical-align: middle so the smaller status pill + larger score numeral
-     share a common centre line instead of sitting on the text baseline. */
+  /* Status / Score / Comp: chip row (order 3). The card's align-items:center +
+     column-gap line them up and space them (no per-cell margins / vertical-
+     align needed now the row is a flexbox). Location also lives on this row
+     (order 3, styled with the enum cells below so it keeps its label); the
+     card's flex-wrap lets a long Location value wrap to a second line within
+     this group without overflowing 375px. */
   .offers tbody td.col-status,
   .offers tbody td.col-score,
   .offers tbody td.col-comp {
-    display: inline-block;
-    width: auto;
-    margin-right: 8px;
-    margin-top: 4px;
+    order: 3;
     font-size: 12px;
     white-space: nowrap;
-    vertical-align: middle;
   }
   /* Kill the fog-of-war clip-fade in card mode. It belongs to the column
-     (table) layout; here the cells are inline-block + auto-width and aren't
-     truly truncated. The touch tap-target ::before (pointer:coarse, inset
-     -6px) adds ~5px of phantom scrollWidth that trips use-cell-clip-fade's
-     .is-clipped, so the mask faded the status pill's right edge to transparent
-     (looked cut off). Source order beats the base td.is-clipped rule. */
+     (table) layout; here the cells are auto-width and aren't truly truncated.
+     The touch tap-target ::before (pointer:coarse, inset -6px) adds ~5px of
+     phantom scrollWidth that trips use-cell-clip-fade's .is-clipped, so the
+     mask faded the status pill's right edge to transparent (looked cut off).
+     Source order beats the base td.is-clipped rule. */
   table.offers td.is-clipped {
     mask-image: none;
     -webkit-mask-image: none;
@@ -629,14 +653,16 @@ table.offers th.col-kebab {
   .offers tbody td.col-status .pill.drawer-status-trigger {
     padding-right: 22px;
   }
-  /* Touch hit-area floor for the trimmed pill — it's an interactive popover
-     trigger (StatusPill, 32px tall after chrome.css's ≤640px min-height
-     bump). Grow the tap box to ≥44px via an invisible overlay so the visual
-     chip stays dense. ::before, NOT ::after — ::after is the trigger's
-     chevron (chrome.css .drawer-status-trigger::after). Vertical neighbours
-     (role subtitle above, comp text below) are non-interactive; the ring it
-     steals from the card's row-tap is the standard inset-target trade-off.
-     Coarse pointers only — mouse users keep the exact pixel target. */
+  /* Touch hit-area floor for the trimmed STATUS pill only — it's an
+     interactive popover trigger (StatusPill, 32px tall after chrome.css's
+     ≤640px min-height bump). Grow the tap box to ≥44px via an invisible
+     overlay so the visual chip stays dense. ::before, NOT ::after — ::after is
+     the trigger's chevron (chrome.css .drawer-status-trigger::after). Scoped to
+     col-status because its flex neighbours in the chip row (score numeral,
+     comp) don't collide with the ±6px overlay; the editable meta pills below
+     deliberately get NO such overlay (they sit next to each other, so an
+     overlay would overlap a neighbour and swallow its tap). Coarse pointers
+     only — mouse users keep the exact pixel target. */
   @media (pointer: coarse) {
     .offers tbody td.col-status .pill {
       position: relative;
@@ -650,13 +676,83 @@ table.offers th.col-kebab {
       bottom: -6px;
     }
   }
-  /* Hide Seniority + Location + Mode + Archetype on phone too (card layout
-     surfaces only Status/Score/Comp as the chip row). */
+
+  /* ── Editable cells (Seniority / Mode / Archetype / Location) ──
+     The SAME interactive cells as desktop — Seniority/Mode/Archetype are
+     click-to-edit EnumPill dropdowns, Location is an inline-edit — un-hidden
+     here so they stay tappable/editable on mobile (consistent chips across
+     every view). Each td is a small flex box holding its column label
+     (::before, since the thead is hidden) then the pill, so a cell reads
+     "Seniority [Mid ▾]". An empty enum shows its tappable "—" placeholder, so
+     "Seniority —" is still fully settable — nothing is filtered out. Kept
+     interactive: EnumPill/InlineTextEdit render <button>/<input>, which the
+     row-tap handler (handleRowClick) already excludes from opening the drawer,
+     exactly like the status pill; and there is deliberately NO inset tap-
+     overlay here (see the col-status note above). min-width:0 lets a long
+     Location value wrap instead of overflowing the card.
+
+     Shared box styling for all four; `order` then splits them into two visual
+     rows — Location rides the chip row (order 3), the three enums form their
+     own row (order 5). */
   .offers tbody td.col-seniority,
-  .offers tbody td.col-loc,
+  .offers tbody td.col-mode,
+  .offers tbody td.col-arch,
+  .offers tbody td.col-loc {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 12px;
+  }
+  .offers tbody td.col-seniority,
   .offers tbody td.col-mode,
   .offers tbody td.col-arch {
-    display: none;
+    order: 5;
+  }
+  .offers tbody td.col-loc {
+    order: 3;
+  }
+  /* ── Date row ──
+     Posted and Added — labelled, NON-editable text — share ONE row below the
+     enum chips (auto width + the card's column-gap; the order-6 break above
+     drops them onto their own line, and order 7/8 keeps Posted before Added).
+     Posted shows "Posted —" when the source reported no posting date. */
+  .offers tbody td.col-posted,
+  .offers tbody td.col-date {
+    flex: 0 0 auto;
+    /* Kill the global `table.offers td.col-date { padding-left: 10px }` (same
+       0,2,2 specificity, so this later rule wins) — otherwise the dates sit
+       indented from the chips/enums above them in the card. */
+    padding-left: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .offers tbody td.col-posted {
+    order: 7;
+  }
+  .offers tbody td.col-date {
+    order: 8;
+  }
+  /* Card-context labels ONLY on the two date rows (Posted/Added): two bare
+     dates are indistinguishable without them. The chips (Seniority/Mode/
+     Archetype) and Location carry NO label — the pill values are self-evident
+     and labels read as clutter. (The chip cells keep their inert data-label
+     attributes; only these ::before rules render them.) */
+  .offers tbody td.col-posted::before,
+  .offers tbody td.col-date::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
   }
 }
 
@@ -990,9 +1086,12 @@ table.offers tbody tr.virt-spacer td {
   border: 0;
 }
 @media (max-width: 640px) {
-  /* Card mode turns rows into bordered, padded blocks — reset all of that
-     on the spacers so they contribute height and nothing else. */
+  /* Card mode turns rows into bordered, padded FLEX blocks — reset all of that
+     on the spacers (back to a plain block) so they contribute height and
+     nothing else. The break ::before/::after are already excluded via
+     :not(.virt-spacer). */
   .offers tbody tr.virt-spacer {
+    display: block;
     border: 0;
     border-radius: 0;
     padding: 0;

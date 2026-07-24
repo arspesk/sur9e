@@ -100,6 +100,36 @@ function rankOrEnd(order: string[], value: string | undefined): number {
   return i === -1 ? order.length : i;
 }
 
+// On-screen awareness (Part 1): a concise, human-readable summary of the
+// offers-table view — total offers, the active sort, any non-default filters,
+// and the current selection. Pure (no DOM/React) so the chat send-path gets a
+// stable string and the builder stays unit-testable.
+export function describeOffersContext(
+  filters: TableFilterState,
+  totalCount: number,
+  selectedCount: number,
+): string {
+  const parts = [`offers table — ${totalCount} offers`];
+  parts.push(`sorted by ${filters.sort.key} ${filters.sort.dir}`);
+  const bits: string[] = [];
+  if (filters.q) bits.push(`search "${filters.q}"`);
+  if (filters.status.length) bits.push(`status ${filters.status.join('/')}`);
+  if (filters.archetype.length) bits.push(`archetype ${filters.archetype.join('/')}`);
+  if (filters.seniority.length) bits.push(`seniority ${filters.seniority.join('/')}`);
+  if (filters.work_mode.length) bits.push(`work mode ${filters.work_mode.join('/')}`);
+  if (filters.score.min !== DEFAULTS.score.min || filters.score.max !== DEFAULTS.score.max) {
+    bits.push(`score ${filters.score.min}–${filters.score.max}`);
+  }
+  if (filters.comp.min !== DEFAULTS.comp.min || filters.comp.max !== DEFAULTS.comp.max) {
+    const hi = filters.comp.max >= COMP_MAX ? `${COMP_MAX}K+` : `${filters.comp.max}K`;
+    bits.push(`comp ${filters.comp.min}K–${hi}`);
+  }
+  if (filters.date !== DEFAULTS.date) bits.push(`date ${filters.date}`);
+  if (bits.length) parts.push(`filtered to ${bits.join(', ')}`);
+  if (selectedCount > 0) parts.push(`${selectedCount} selected`);
+  return parts.join(', ');
+}
+
 export function applyFilters(rows: ApplicationRow[], state: TableFilterState, now = new Date()) {
   const query = (state.q || '').toLowerCase();
   return rows.filter(row => {

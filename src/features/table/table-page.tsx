@@ -17,6 +17,7 @@ import { IconButton } from '@/components/primitives';
 import { Topbar } from '@/components/shell/topbar';
 import { useApplications } from '@/hooks/use-applications';
 import { useJobAction } from '@/hooks/use-job-action';
+import { useSetPageContext } from '@/hooks/use-page-context';
 import type { OnboardingMissing } from '@/lib/server/onboarding-status';
 import { useModalStore } from '@/stores/modal-store';
 import { useSelectionStore } from '@/stores/selection-store';
@@ -30,7 +31,12 @@ import { OffersDrawer } from './offers-drawer';
 import { OffersTable } from './offers-table';
 import { TableActions } from './table-actions';
 import { tableBootScript } from './table-boot';
-import { applyFilters, applySort, type TableFilterState } from './table-filtering';
+import {
+  applyFilters,
+  applySort,
+  describeOffersContext,
+  type TableFilterState,
+} from './table-filtering';
 import { TableFilters } from './table-filters';
 import { SkeletonRow } from './table-loading';
 import type { ApplicationRow, ApplicationsResponse } from './table-types';
@@ -217,6 +223,17 @@ function TablePageInner({ initialData, setupMissing }: TablePageInnerProps) {
   const allRowNums = rows.map(r => r.num);
   const allSelected = allRowNums.length > 0 && allRowNums.every(n => selected.has(n));
   const someSelected = selected.size > 0 && !allSelected;
+
+  // On-screen awareness (Part 1): publish a concise summary of the table view
+  // — total offers, the active sort, any filters, and the current selection —
+  // so the chat assistant knows what the user is looking at. (Builder is a
+  // pure, unit-tested helper in table-filtering.ts.)
+  const selectedCount = selected.size;
+  const pageContext = useMemo(
+    () => describeOffersContext(filters, totalCount, selectedCount),
+    [filters, totalCount, selectedCount],
+  );
+  useSetPageContext(pageContext);
 
   function handleSelectAll(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.checked) setAll(allRowNums);

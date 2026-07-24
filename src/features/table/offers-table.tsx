@@ -298,8 +298,11 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
               })()}
             </td>
             {/* Order after Score: dropdown fields (seniority, mode, archetype)
-                → inline-edit fields (comp, location) → date. */}
-            <td suppressHydrationWarning className="col-seniority">
+                → inline-edit fields (comp, location) → date. The data-label on
+                the editable + date cells is surfaced only in the ≤640px card
+                layout (via a CSS ::before), where the column header is hidden —
+                e.g. "Seniority [Mid ▾]". */}
+            <td suppressHydrationWarning className="col-seniority" data-label="Seniority">
               <EnumPill
                 num={row.num}
                 field="seniority"
@@ -308,7 +311,7 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
                 placeholder="—"
               />
             </td>
-            <td suppressHydrationWarning className="col-mode">
+            <td suppressHydrationWarning className="col-mode" data-label="Mode">
               <EnumPill
                 num={row.num}
                 field="work_mode"
@@ -317,7 +320,7 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
                 placeholder="—"
               />
             </td>
-            <td suppressHydrationWarning className="col-arch">
+            <td suppressHydrationWarning className="col-arch" data-label="Archetype">
               <EnumPill
                 num={row.num}
                 field="archetype"
@@ -335,7 +338,7 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
                 placeholder="—"
               />
             </td>
-            <td suppressHydrationWarning className="col-loc">
+            <td suppressHydrationWarning className="col-loc" data-label="Location">
               <InlineTextEdit
                 num={row.num}
                 field="location"
@@ -347,10 +350,10 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
             {/* Posting date and added (scan) date are separate sortable
                 columns — see OFFERS_TABLE_COLUMNS. Posted leads ('—' when
                 the source never reported one); Added follows. */}
-            <td suppressHydrationWarning className="col-posted">
+            <td suppressHydrationWarning className="col-posted" data-label="Posted">
               {row.posted ? fmtDate(row.posted) : '—'}
             </td>
-            <td suppressHydrationWarning className="col-date">
+            <td suppressHydrationWarning className="col-date" data-label="Added">
               {fmtDate(row.date)}
             </td>
             <td
