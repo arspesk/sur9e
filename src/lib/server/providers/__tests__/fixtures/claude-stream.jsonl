@@ -1,5 +1,6 @@
-{"type":"system","subtype":"init","tools":["WebFetch","Bash"],"model":"claude-sonnet-4-6"}
+{"type":"system","subtype":"init","tools":["WebFetch","Bash"],"model":"claude-sonnet-4-6","session_id":"98ca-abc"}
 {"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Let me check the URL."}]}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://example.com/jobs/42"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01WF8dK8","name":"WebFetch","input":{"url":"https://example.com/jobs/42"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01WF8dK8","content":"<html>...</html>","is_error":false}]}}
 {"type":"assistant","message":{"content":[{"type":"text","text":"Done — see artifacts/reports/042-example-2026-05-24.md"}]}}
-{"type":"result","subtype":"success","cost_usd":0.0173,"usage":{"input_tokens":4231,"output_tokens":582},"model":"claude-sonnet-4-6"}
+{"type":"result","subtype":"success","cost_usd":0.0173,"total_cost_usd":0.0173,"usage":{"input_tokens":4231,"output_tokens":582},"model":"claude-sonnet-4-6"}

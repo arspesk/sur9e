@@ -1,5 +1,10 @@
-{"type":"thread.started","thread_id":"thr_abc123"}
-{"type":"item.completed","item":{"type":"reasoning","summary":"Loading the URL"}}
-{"type":"item.completed","item":{"type":"tool_use","name":"shell","input":{"command":"curl https://example.com"}}}
-{"type":"item.completed","item":{"type":"message","content":"Saved artifact to artifacts/reports/."}}
-{"type":"turn.completed","usage":{"input_tokens":3120,"output_tokens":540},"model":"gpt-5.5"}
+{"type":"thread.started","thread_id":"019f90eb-3690-7821"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget."}}
+{"type":"item.completed","item":{"id":"item_1","type":"reasoning","text":"Loading the URL and checking the page."}}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"curl https://example.com","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"curl https://example.com","aggregated_output":"<html>","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_3","type":"mcp_tool_call","server":"sur9e-app","tool":"get_report","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_3","type":"mcp_tool_call","server":"sur9e-app","tool":"get_report","status":"completed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"agent_message","text":"Saved artifact to artifacts/reports/."}}
+{"type":"turn.completed","usage":{"input_tokens":3120,"cached_input_tokens":0,"output_tokens":540,"reasoning_output_tokens":12}}

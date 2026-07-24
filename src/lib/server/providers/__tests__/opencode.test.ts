@@ -1,8 +1,7 @@
 // src/lib/server/providers/__tests__/opencode.test.ts
 //
-// Tests for the OpenCode adapter. OpenCode's `opencode run`
-// command emits plain text — no `--json` flag, no NDJSON event stream. The
-// adapter therefore:
+// Tests for the OpenCode adapter. Headless `opencode run` emits plain text,
+// so the adapter:
 //
 //   - Fails LOUD on every BuildHeadlessOpts field that implies a structured
 //     stream (outputFormat !== 'text', pipeToParser: true, tools, etc.) rather
@@ -10,8 +9,9 @@
 //     where the caller thinks they configured a tool allow-list but OpenCode
 //     happily uses anything in its config file.
 //
-//   - Classifies plain-text stdout lines into 'stage' (default) vs 'tool'
-//     (lines that look like "Tool call:" / "Tool result:").
+//   - Parses the CHAT stream (`opencode run --format json`) into unified
+//     events: reasoning → 'thinking', tool_use parts → 'tool' (start/done/error
+//     keyed by callID), text → 'stage'/reply, step_finish → 'tokens'.
 //
 //   - Estimates token usage via tiktoken at job close — exported separately as
 //     the accumulated stdout text. The `estimated: true` flag warns analytics
@@ -97,24 +97,43 @@ describe('opencode provider', () => {
   });
 
   describe('parseStreamLine', () => {
-    it('produces stage/tool events for plain stdout lines', () => {
-      const lines = readFileSync(join(__dirname, 'fixtures/opencode-stream.txt'), 'utf-8')
+    it('maps the --format json event stream: reasoning→thinking, tool_use→tool, text→stage, step_finish→tokens', () => {
+      const lines = readFileSync(join(__dirname, 'fixtures/opencode-stream.jsonl'), 'utf-8')
         .split('\n')
         .filter(Boolean);
       const events = lines.map(l => opencode.parseStreamLine(l)).filter(Boolean);
-      expect(events.length).toBe(lines.length);
       const kinds = events.map(e => e!.kind);
-      expect(kinds.every(k => k === 'stage' || k === 'tool')).toBe(true);
-      // Tool lines (those starting with "Tool call:" or "Tool result:") classify as 'tool'
-      const toolCount = events.filter(e => e!.kind === 'tool').length;
-      expect(toolCount).toBeGreaterThanOrEqual(2);
+      expect(kinds).toContain('thinking'); // reasoning part
+      expect(kinds).toContain('tool'); // tool_use part
+      expect(kinds).toContain('stage'); // text part (reply text)
+      expect(kinds).toContain('tokens'); // step_finish
+      // step_start is lifecycle noise → dropped.
+      expect(events.length).toBeLessThan(lines.length);
     });
-    it('returns null for empty lines', () => {
+    it('emits a tool DONE (with the callID) for a completed tool part', () => {
+      const ev = opencode.parseStreamLine(
+        '{"type":"tool_use","part":{"type":"tool","tool":"bash","callID":"call_7","state":{"status":"completed","input":{"command":"echo hi"}}}}',
+      );
+      expect(ev).toMatchObject({ kind: 'tool', toolStatus: 'done', toolId: 'call_7' });
+      expect(ev!.message).toContain('bash');
+    });
+    it('emits a tool START for a running tool part and ERROR for a failed one', () => {
+      const running = opencode.parseStreamLine(
+        '{"type":"tool_use","part":{"type":"tool","tool":"bash","callID":"c1","state":{"status":"running","input":{}}}}',
+      );
+      const errored = opencode.parseStreamLine(
+        '{"type":"tool_use","part":{"type":"tool","tool":"bash","callID":"c2","state":{"status":"error","input":{}}}}',
+      );
+      expect(running).toMatchObject({ kind: 'tool', toolStatus: 'start', toolId: 'c1' });
+      expect(errored).toMatchObject({ kind: 'tool', toolStatus: 'error', toolId: 'c2' });
+    });
+    it('returns null for empty lines and non-JSON log lines', () => {
       expect(opencode.parseStreamLine('')).toBeNull();
       expect(opencode.parseStreamLine('   ')).toBeNull();
+      expect(opencode.parseStreamLine('INFO  some plain log line')).toBeNull();
     });
-    it('truncates long lines to 200 chars', () => {
-      const long = 'a'.repeat(500);
+    it('truncates long reasoning/text to 200 chars', () => {
+      const long = JSON.stringify({ type: 'reasoning', part: { text: 'a'.repeat(500) } });
       const ev = opencode.parseStreamLine(long);
       expect(ev?.message.length).toBeLessThanOrEqual(200);
     });

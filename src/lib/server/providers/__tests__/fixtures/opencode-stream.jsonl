@@ -1,0 +1,5 @@
+{"type":"step_start","part":{"id":"prt_1","type":"step-start"}}
+{"type":"reasoning","part":{"id":"prt_2","type":"reasoning","text":"The user wants me to run a bash command and then say done."}}
+{"type":"tool_use","part":{"type":"tool","tool":"bash","callID":"call_00_BEC5","state":{"status":"completed","input":{"command":"echo hi123","description":"Echo hi123"},"output":"hi123\n"}}}
+{"type":"text","part":{"id":"prt_3","type":"text","text":"done"}}
+{"type":"step_finish","part":{"id":"prt_4","type":"step-finish","tokens":{"input":30902,"output":64,"reasoning":15}}}

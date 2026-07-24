@@ -7,13 +7,15 @@
 // Key shape differences vs. claude.ts and codex.ts:
 //
 //   - Headless subcommand is `opencode run "<prompt>"` (positional prompt).
-//   - **No --json flag on `run`**: emits plain text on stdout, full stop.
-//     Structured event streams exist only via OpenCode's HTTP server mode,
-//     which is out of scope for the spawn-and-tail adapter contract. All
-//     `BuildHeadlessOpts` fields that imply a structured stream
-//     (outputFormat !== 'text', pipeToParser: true) therefore throw rather
-//     than silently degrade — a caller who set `outputFormat: 'json'` and
-//     got plain text instead would silently break downstream JSON.parse.
+//   - **Headless `run` stays plain-text**: `buildHeadlessArgs` deliberately
+//     emits plain stdout (token telemetry is estimated via tiktoken at job
+//     close), so every `BuildHeadlessOpts` field that implies a structured
+//     stream (outputFormat !== 'text', pipeToParser: true) throws rather than
+//     silently degrade. The interactive CHAT path is different: `buildChatArgs`
+//     passes `opencode run --format json --thinking` (opencode ≥ 1.x), which
+//     streams structured NDJSON parts (step_start / reasoning / tool_use /
+//     text / step_finish) — that's what powers the chat transcript's thinking
+//     blocks + tool chips. See `parseStreamLine`, which parses those parts.
 //   - **No token telemetry on stdout**: we estimate via tiktoken (js-tiktoken,
 //     Wasm-free port) on `{promptText, accumulatedStdoutText, model}` at job
 // (token estimation lives in batch/lib/usage.mjs — uniform tiktoken path)
@@ -45,10 +47,46 @@
 
 import 'server-only';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getEncoding } from 'js-tiktoken';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
+import type { UnifiedStreamEvent } from '../../schemas/providers';
+import { readTurnMcpConfig } from '../chat/mcp-config';
 import { escapeForBash } from './shell';
 import type { ExitClassification, Provider } from './types';
+
+// Read-only chat config (buildChatArgs only) — see the long comment there.
+// A minimal opencode config object expressing "no filesystem/shell mutation,
+// no subagent spawn, reads + web tools OK". Written fresh per chat turn to
+// os.tmpdir() and pointed at via OPENCODE_CONFIG so the project's own
+// opencode.json (which carries the "mcp" playwright server block) is never
+// read from disk and rewritten, only ever merged with.
+function buildReadOnlyChatConfig(): Record<string, unknown> {
+  return {
+    $schema: 'https://opencode.ai/config.json',
+    permission: {
+      // "edit" gates the edit, write, AND apply_patch tools together —
+      // confirmed via opencode's own docs (docs/tools: "The write tool is
+      // controlled by the edit permission, which covers all file
+      // modifications (edit, write, apply_patch)"). One key, three tools.
+      edit: 'deny',
+      bash: 'deny',
+      // Subagents (the "task" tool) can carry their own permission
+      // overrides, so a subagent spawned mid-chat could reintroduce
+      // write/bash access. Denied for the same reason claude.ts's
+      // CHAT_DISALLOWED_TOOLS includes "Task".
+      task: 'deny',
+      read: 'allow',
+      grep: 'allow',
+      glob: 'allow',
+      webfetch: 'allow',
+      websearch: 'allow',
+    },
+  };
+}
 
 // Used when `opencode models` command isn't reachable (binary not installed,
 // CLI version doesn't ship the subcommand, timeout, etc.). Curated list of
@@ -143,19 +181,175 @@ const opencode: Provider = {
     };
   },
 
+  buildChatArgs({ promptFile, model, resumeSessionId, mcpConfigPath }) {
+    // TODO(chat-resume, gated by probeChatCapabilities — see
+    // providers/chat-capabilities.ts): wire the session flag once the probe
+    // reports it. Until then the probe returns resume:false for opencode
+    // and the turn runner always takes the resend path.
+    if (resumeSessionId) {
+      throw new Error(
+        'OpenCode adapter: chat resume is not wired yet — probeChatCapabilities gates resume off for opencode, so callers must not pass resumeSessionId.',
+      );
+    }
+    // Chat needs a non-interactive, read-only run (spec §3.7 — chat never
+    // gets Bash/Write/Edit; mutations go through confirm-gated MCP actions
+    // only). `opencode run` has NO per-invocation CLI flag for this: `--pure`
+    // only disables external plugins, not tool access, and (unlike claude's
+    // --allowedTools/--disallowedTools or codex's --sandbox read-only)
+    // opencode has no `--tools`/`--permission` flag on `run` at all — the
+    // module doc comment above ("No per-call tool restriction") already
+    // established this for buildHeadlessArgs, and it's equally true here.
+    //
+    // The only place opencode exposes tool restriction is its CONFIG file
+    // (opencode.json), via a `permission` block — confirmed against the
+    // live https://opencode.ai/config.json schema and opencode's own docs
+    // (docs/permissions, docs/tools, docs/config) on 2026-07-19. `"deny"`
+    // (not `"ask"`) is required: `"ask"` prompts for interactive approval,
+    // which would hang `opencode run` — there's no TTY in this spawn to
+    // answer it — while `"deny"` blocks the tool call outright per
+    // docs/permissions ("deny to block the action entirely").
+    //
+    // Per-invocation config path: the OPENCODE_CONFIG env var (confirmed at
+    // https://opencode.ai/docs/config — "Set the OPENCODE_CONFIG environment
+    // variable to specify a custom path for the OpenCode configuration
+    // file"). We write a throwaway config to os.tmpdir() per turn and point
+    // OPENCODE_CONFIG at it, rather than writing/clobbering this repo's own
+    // opencode.json (which carries the "mcp" playwright server block and
+    // must not be touched by a chat turn). Docs/config also states
+    // OPENCODE_CONFIG "is loaded in the precedence order between global and
+    // project configurations" — i.e. it's deep-merged in, and the project's
+    // own opencode.json has the HIGHEST precedence of the three. This
+    // repo's opencode.json currently defines no `permission` key, so there
+    // is nothing to conflict with today; if that ever changes, a
+    // project-level `permission.edit`/`permission.bash` override could win
+    // over this temp config and silently widen chat back past read-only —
+    // worth a lint/doctor check if opencode.json ever grows a permission
+    // block.
+    //
+    // RESIDUAL (needs a live turn): the config MERGE + OPENCODE_CONFIG loading
+    // are verified via `opencode debug config` (opencode 1.17), but whether a
+    // denied edit/bash/task call fails the tool cleanly (vs. hanging the run)
+    // has not been exercised against a live turn.
+    const config = buildReadOnlyChatConfig();
+
+    // Turn-scoped MCP wiring — the opencode analogue of claude's `--mcp-config
+    // --strict-mcp-config`. opencode's per-invocation config mechanism is the
+    // OPENCODE_CONFIG env var (same file we're already writing for the
+    // read-only permission block), and its config schema carries an `mcp`
+    // block. We register the `sur9e-app` server here WITH this turn's id in its
+    // `environment`, lifted straight out of the claude-format config the turn
+    // runner already wrote (readTurnMcpConfig). That turn id is what makes the
+    // action routes emit a confirm card (cli/mcp-app-server.mjs appFetch →
+    // x-sur9e-turn header → confirms.ts) instead of falling back to
+    // terminal-mode approval with no card.
+    //
+    // The project's own opencode.json ALSO registers `sur9e-app` (without a
+    // turn id) and has the highest merge precedence, but verified against
+    // opencode 1.17 that same-named `mcp` servers deep-merge their
+    // `environment` sub-objects across config layers — so this turn's
+    // SUR9E_CHAT_TURN_ID (present only in OPENCODE_CONFIG) survives the merge
+    // rather than being wiped by the project block. opencode also
+    // schema-validates each config file's `mcp.<name>` block independently, so
+    // the block must be COMPLETE (type/command/enabled) — a partial override
+    // is rejected; hence we re-state command/enabled, not just environment.
+    if (mcpConfigPath) {
+      const turn = readTurnMcpConfig(mcpConfigPath);
+      if (turn) {
+        config.mcp = {
+          'sur9e-app': {
+            type: 'local',
+            command: [turn.command, ...turn.args],
+            enabled: true,
+            environment: turn.env,
+          },
+        };
+      }
+    }
+
+    const configPath = join(tmpdir(), `sur9e-chat-readonly-${randomUUID()}.json`);
+    writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    // `--format json` (opencode ≥ 1.x) streams structured NDJSON parts
+    // (step_start / reasoning / tool_use / text / step_finish) instead of the
+    // formatted TUI text `run` prints by default. That's what lets the chat
+    // transcript render thinking blocks + tool chips for opencode turns (the
+    // plain-text output carried no reliable tool/reasoning markers). `--thinking`
+    // opts the reasoning parts into the stream. See parseStreamLine below.
+    const cmdline = `opencode run --pure --format json --thinking -m ${escapeForBash(model)} "$(cat ${escapeForBash(promptFile)})"`;
+    return {
+      cmd: '/bin/bash',
+      args: ['-c', cmdline],
+      env: { OPENCODE_CONFIG: configPath },
+    };
+  },
+
+  extractSessionId(_streamLine) {
+    return null; // plain-text stdout carries no session id
+  },
+
+  detectResumeFailure(_stdout, _stderr) {
+    return false; // no resume attempts yet → nothing to detect
+  },
+
   parseStreamLine(line) {
     if (!line.trim()) return null;
-    const ts = new Date().toISOString();
-    // Lightweight heuristic: OpenCode's plain-text stdout uses "Tool call:"
-    // and "Tool result:" prefixes for tool-related lines. Everything else
-    // is a stage update (model load, run lifecycle, free-form messages,
-    // file writes). Truncate to 200 chars to match the cap used by
-    // claude.ts/codex.ts so UI rendering stays bounded.
-    const lower = line.toLowerCase();
-    if (lower.startsWith('tool call:') || lower.startsWith('tool result:')) {
-      return { kind: 'tool', message: line.slice(0, 200), ts };
+    // Chat turns run `opencode run --format json` (see buildChatArgs), which
+    // emits one JSON object per streamed message part (verified live against
+    // opencode 1.17):
+    //   { type: 'reasoning',  part: { text } }                    — thinking
+    //   { type: 'text',       part: { text } }                    — reply text
+    //   { type: 'tool_use',   part: { tool, callID, state: {…} } } — a tool call
+    //   { type: 'step_start' | 'step_finish', part: { tokens } }  — lifecycle
+    // A tool part's `state.status` ('pending'|'running'|'completed'|'error')
+    // gives the lifecycle; `callID` pairs the open/close. `opencode run`
+    // (non-interactive) emits each part once at completion, so a tool commonly
+    // arrives already 'completed' — foldEvents materialises a resolved chip
+    // when a close event has no matching open call.
+    let obj: any;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      // Non-JSON (stray log lines with --print-logs, etc.) — ignore.
+      return null;
     }
-    return { kind: 'stage', message: line.slice(0, 200), ts };
+    const ts = new Date().toISOString();
+    const part = obj?.part ?? {};
+    switch (obj?.type) {
+      case 'reasoning':
+        return { kind: 'thinking', message: String(part.text ?? '').slice(0, 200), ts };
+      case 'text':
+        // Reply text — the chat layer extracts full-fidelity text separately
+        // and suppresses this duplicate stage (see mapChatLine).
+        return { kind: 'stage', message: String(part.text ?? '').slice(0, 200), ts };
+      case 'tool_use': {
+        const name = String(part.tool ?? 'tool');
+        const id = typeof part.callID === 'string' ? part.callID : undefined;
+        const input = part.state?.input ?? {};
+        const detail = String(
+          input.command ?? input.filePath ?? input.description ?? input.pattern ?? '',
+        );
+        const message = detail ? `${name}: ${detail.slice(0, 120)}` : name;
+        const status = part.state?.status;
+        const toolStatus = status === 'completed' ? 'done' : status === 'error' ? 'error' : 'start';
+        return { kind: 'tool', toolStatus, toolId: id, message, ts };
+      }
+      case 'step_finish': {
+        const tk = part.tokens ?? {};
+        const tokens: UnifiedStreamEvent['tokens'] = {
+          in: Number(tk.input ?? 0),
+          out: Number(tk.output ?? 0),
+          model: '',
+          estimated: false,
+        };
+        return {
+          kind: 'tokens',
+          message: `step_finish: ${tokens.in} in / ${tokens.out} out`,
+          tokens,
+          ts,
+        };
+      }
+      default:
+        return null;
+    }
   },
 
   async listModels() {

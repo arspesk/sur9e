@@ -204,7 +204,7 @@ describe('claude provider', () => {
   });
 
   describe('parseStreamLine', () => {
-    it('classifies init / thinking / tool_use / text / result events', () => {
+    it('classifies thinking / tool_use / tool_result / text / result events', () => {
       const lines = readFileSync(join(__dirname, 'fixtures/claude-stream.jsonl'), 'utf-8')
         .split('\n')
         .filter(Boolean);
@@ -224,6 +224,42 @@ describe('claude provider', () => {
         out: 582,
         model: 'claude-sonnet-4-6',
         estimated: false,
+      });
+    });
+    it('drops the system/init handshake (never a transcript stage)', () => {
+      const init = JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-opus-4-8',
+        session_id: 's',
+      });
+      expect(claudeProvider.parseStreamLine(init)).toBeNull();
+    });
+    it('emits a tool START (with id) for tool_use and a matching DONE for tool_result', () => {
+      const use = JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'toolu_9', name: 'WebFetch', input: {} }] },
+      });
+      const result = JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_9', is_error: false }] },
+      });
+      const start = claudeProvider.parseStreamLine(use);
+      const done = claudeProvider.parseStreamLine(result);
+      expect(start).toMatchObject({ kind: 'tool', toolStatus: 'start', toolId: 'toolu_9' });
+      // The close event carries only the id (never the name) — that's exactly
+      // why foldEvents pairs open↔close by id.
+      expect(done).toMatchObject({ kind: 'tool', toolStatus: 'done', toolId: 'toolu_9' });
+    });
+    it('maps an errored tool_result to a tool ERROR event', () => {
+      const result = JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_9', is_error: true }] },
+      });
+      expect(claudeProvider.parseStreamLine(result)).toMatchObject({
+        kind: 'tool',
+        toolStatus: 'error',
+        toolId: 'toolu_9',
       });
     });
     it('returns null for unparseable lines', () => {

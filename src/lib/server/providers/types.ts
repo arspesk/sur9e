@@ -110,6 +110,29 @@ export type BuildInteractiveOpts = {
   promptFilePath: string; // tmp file path the helper has already written
 };
 
+/**
+ * Options for `Provider.buildChatArgs` — the headless streaming invocation
+ * for one chat turn (design spec §3.1). Unlike BuildHeadlessOpts the prompt
+ * arrives as a FILE (turn prompts can embed a full reseed transcript; argv
+ * length is bounded, tmp files are not): the command substitutes it in via
+ * `"$(cat '<promptFile>')"`. The turn runner sets at most one of
+ * resumeSessionId / sessionId: resumeSessionId continues a provider-native
+ * session, sessionId names a fresh one so the runner can store the id even
+ * if the CLI never echoes it back.
+ */
+export type BuildChatArgsOpts = {
+  /** Absolute path to a tmp file holding the full turn prompt. Path is shell-escaped via escapeForBash at the sink, so caller does not need to pre-sanitize. */
+  promptFile: string;
+  /** Model id — already validated through ProviderModelRef by runtime resolution. */
+  model: string;
+  /** Provider-native session id to resume. Omit for a fresh session. */
+  resumeSessionId?: string;
+  /** Caller-chosen id for a FRESH session (claude --session-id). Ignored when resuming. */
+  sessionId?: string;
+  /** MCP config file to attach (claude --mcp-config). Wired by the MCP actions plan. */
+  mcpConfigPath?: string;
+};
+
 export type SpawnArgs = {
   cmd: string;
   args: string[];
@@ -135,6 +158,21 @@ export type Provider = {
 
   buildHeadlessArgs(opts: BuildHeadlessOpts): SpawnArgs;
   buildInteractiveLaunch(opts: BuildInteractiveOpts): SpawnArgs;
+
+  buildChatArgs(opts: BuildChatArgsOpts): SpawnArgs;
+
+  /**
+   * Parse a provider session id out of one stdout line (claude: the
+   * stream-json init event's session_id). Null when the line carries none.
+   */
+  extractSessionId(streamLine: string): string | null;
+
+  /**
+   * True when a finished run failed BECAUSE the resumed session no longer
+   * exists on the provider side (→ the turn runner reseeds). Must stay
+   * false for ordinary failures — a rate-limit must not trigger a reseed.
+   */
+  detectResumeFailure(stdout: string, stderr: string): boolean;
 
   parseStreamLine(line: string): UnifiedStreamEvent | null;
 

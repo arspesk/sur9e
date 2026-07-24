@@ -81,24 +81,140 @@ describe('codex provider', () => {
     });
   });
 
+  describe('buildChatArgs (constrained chat assistant)', () => {
+    // Writes a turn MCP config (the claude-format file the turn runner emits)
+    // so buildChatArgs can lift the turn-id env out of it via readTurnMcpConfig.
+    function writeTurnConfig(turnId: string, appUrl: string): string {
+      const dir = mkdtempSync(join(tmpdir(), 'sur9e-codex-chat-'));
+      const path = join(dir, 'turn.json');
+      writeFileSync(
+        path,
+        JSON.stringify({
+          mcpServers: {
+            'sur9e-app': {
+              command: 'node',
+              args: ['/repo/cli/mcp-app-server.mjs'],
+              env: { SUR9E_APP_URL: appUrl, SUR9E_CHAT_TURN_ID: turnId, SUR9E_ROOT: '/repo' },
+            },
+          },
+        }),
+      );
+      return path;
+    }
+
+    it('runs read-only + auto-approves the sur9e-app MCP server + disables the skill hijack (never the autonomous bypass)', () => {
+      const { cmd, args, env } = codex.buildChatArgs({
+        promptFile: '/tmp/prompt.md',
+        model: 'gpt-5.4-mini',
+      });
+      expect(cmd).toBe('/bin/bash');
+      const cmdline = args[1];
+      expect(cmdline).toContain('codex exec');
+      expect(cmdline).toContain('--json');
+      // Read-only filesystem posture — NOT the autonomous flag (which would let
+      // a chat turn mutate the repo).
+      expect(cmdline).toContain('--sandbox read-only');
+      expect(cmdline).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+      // Stops the AGENTS.md hijack.
+      expect(cmdline).toContain('project_doc_max_bytes=0');
+      // THE MCP-cancellation fix: pre-approve the sur9e-app server's tool calls
+      // so they run under the sandbox in non-interactive exec instead of coming
+      // back "user cancelled MCP tool call".
+      expect(cmdline).toContain('mcp_servers.sur9e-app.default_tools_approval_mode="approve"');
+      // Tools-only: both exec surfaces are disabled so the model can never shell
+      // out to explore the repo (skill files, mode files); the `sur9e` router
+      // skill is also kept out of context.
+      expect(cmdline).toContain('--disable shell_tool');
+      expect(cmdline).toContain('--disable unified_exec');
+      expect(cmdline).toContain('--disable skill_search');
+      expect(env).toMatchObject({ CODEX_QUIET_MODE: '1' });
+    });
+
+    it('injects the turn id + app url into the sur9e-app MCP server env (confirm-card wiring)', () => {
+      const mcpConfigPath = writeTurnConfig('turn-abc-123', 'http://localhost:3100');
+      const { args } = codex.buildChatArgs({
+        promptFile: '/tmp/prompt.md',
+        model: 'gpt-5.4-mini',
+        mcpConfigPath,
+      });
+      const cmdline = args[1];
+      expect(cmdline).toContain('mcp_servers.sur9e-app.env.SUR9E_CHAT_TURN_ID="turn-abc-123"');
+      expect(cmdline).toContain('mcp_servers.sur9e-app.env.SUR9E_APP_URL="http://localhost:3100"');
+      // The auto-approve override rides alongside the per-turn env overrides.
+      expect(cmdline).toContain('mcp_servers.sur9e-app.default_tools_approval_mode="approve"');
+    });
+
+    it('throws when handed a resumeSessionId (resume is gated off for codex)', () => {
+      expect(() =>
+        codex.buildChatArgs({
+          promptFile: '/tmp/prompt.md',
+          model: 'gpt-5.4-mini',
+          resumeSessionId: 'sess-1',
+        }),
+      ).toThrow(/resume/i);
+    });
+  });
+
   describe('parseStreamLine', () => {
-    it('maps thread.started, item.completed reasoning/tool_use/message, and turn.completed', () => {
+    it('maps the real 0.142 thread-event stream: reasoning→thinking, item tool lifecycle, agent_message→stage, turn.completed→tokens', () => {
       const lines = readFileSync(join(__dirname, 'fixtures/codex-stream.jsonl'), 'utf-8')
         .split('\n')
         .filter(Boolean);
       const events = lines.map(l => codex.parseStreamLine(l)).filter(Boolean);
       const kinds = events.map(e => e!.kind);
-      expect(kinds).toContain('stage'); // thread.started
-      expect(kinds).toContain('thinking'); // reasoning
-      expect(kinds).toContain('tool'); // tool_use
+      expect(kinds).toContain('thinking'); // reasoning item
+      expect(kinds).toContain('tool'); // command_execution + mcp_tool_call
+      expect(kinds).toContain('stage'); // agent_message (reply text)
       expect(kinds).toContain('tokens'); // turn.completed
       const tokens = events.find(e => e!.kind === 'tokens');
-      expect(tokens?.tokens).toMatchObject({
-        in: 3120,
-        out: 540,
-        model: 'gpt-5.5',
-        estimated: false,
-      });
+      // codex's usage block carries no model id — left empty so the caller
+      // falls back to the selected model.
+      expect(tokens?.tokens).toMatchObject({ in: 3120, out: 540, model: '', estimated: false });
+    });
+
+    it('drops infra handshakes and plugin-error items (never a transcript stage)', () => {
+      expect(codex.parseStreamLine('{"type":"thread.started","thread_id":"t1"}')).toBeNull();
+      expect(codex.parseStreamLine('{"type":"turn.started"}')).toBeNull();
+      expect(
+        codex.parseStreamLine(
+          '{"type":"item.completed","item":{"id":"i","type":"error","message":"plugin hook noise"}}',
+        ),
+      ).toBeNull();
+    });
+
+    it('emits paired tool START/DONE (with the item id) for command_execution', () => {
+      const started = codex.parseStreamLine(
+        '{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"curl x","status":"in_progress"}}',
+      );
+      const completed = codex.parseStreamLine(
+        '{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"curl x","exit_code":0,"status":"completed"}}',
+      );
+      expect(started).toMatchObject({ kind: 'tool', toolStatus: 'start', toolId: 'item_2' });
+      expect(completed).toMatchObject({ kind: 'tool', toolStatus: 'done', toolId: 'item_2' });
+      expect(started!.message).toContain('shell');
+    });
+
+    it('marks a non-zero-exit command_execution as a tool ERROR', () => {
+      const failed = codex.parseStreamLine(
+        '{"type":"item.completed","item":{"id":"item_9","type":"command_execution","command":"false","exit_code":1,"status":"failed"}}',
+      );
+      expect(failed).toMatchObject({ kind: 'tool', toolStatus: 'error', toolId: 'item_9' });
+    });
+
+    it('names an mcp_tool_call chip <server>.<tool>', () => {
+      const started = codex.parseStreamLine(
+        '{"type":"item.started","item":{"id":"m1","type":"mcp_tool_call","server":"sur9e-app","tool":"get_report","status":"in_progress"}}',
+      );
+      expect(started).toMatchObject({ kind: 'tool', toolStatus: 'start', toolId: 'm1' });
+      expect(started!.message).toContain('sur9e-app.get_report');
+    });
+
+    it('reads reasoning text from the item.text field', () => {
+      const ev = codex.parseStreamLine(
+        '{"type":"item.completed","item":{"id":"r1","type":"reasoning","text":"weighing options"}}',
+      );
+      expect(ev).toMatchObject({ kind: 'thinking' });
+      expect(ev!.message).toContain('weighing options');
     });
 
     it('returns null for unparseable lines', () => {
@@ -212,8 +328,11 @@ describe('codex provider', () => {
       expect(ids).toContain('gpt-5.5');
       expect(ids).toContain('gpt-5.4');
       expect(ids).toContain('gpt-5.4-mini');
-      expect(ids).toContain('gpt-5.3-codex');
-      expect(ids).toContain('gpt-5.2');
+      // The fallback only lists ids codex 0.142 actually runs. gpt-5.3-codex /
+      // gpt-5.2 were REMOVED — codex rejects them ("Model metadata not found"),
+      // which surfaced as "That model isn't available" for cache-less users.
+      expect(ids).not.toContain('gpt-5.3-codex');
+      expect(ids).not.toContain('gpt-5.2');
       // No duplicates:
       expect(new Set(ids).size).toBe(ids.length);
     });

@@ -226,6 +226,13 @@ export const __testing = {
   },
 };
 
+// Chat spawns run WITHOUT --dangerously-skip-permissions: the allowlist
+// grants exactly the read-only set + the sur9e-app MCP tools, and the
+// denylist hard-blocks mutation tools (spec §3.7 — chat never gets
+// Bash/Write/Edit; mutations go through confirm-gated MCP actions only).
+const CHAT_ALLOWED_TOOLS = 'Read,Glob,Grep,WebFetch,WebSearch,mcp__sur9e-app__*';
+const CHAT_DISALLOWED_TOOLS = 'Bash,Write,Edit,NotebookEdit,Task';
+
 const claude: Provider = {
   id: 'claude',
   displayName: 'Claude Code',
@@ -293,6 +300,83 @@ const claude: Provider = {
     };
   },
 
+  buildChatArgs({ promptFile, model, resumeSessionId, sessionId, mcpConfigPath }) {
+    // resumeSessionId/sessionId are UUIDs minted by claude itself or by
+    // crypto.randomUUID() in the turn runner — never user text. They're
+    // still routed through escapeForBash as defense in depth (matching
+    // buildHeadlessArgs's treatment of prompt/promptFile above), and
+    // extractSessionId below gates any claude-emitted id through a strict
+    // charset regex before it's ever stored or replayed here.
+    const parts: string[] = [
+      `--model ${escapeForBash(model)}`,
+      '--output-format stream-json',
+      '--verbose',
+    ];
+    if (resumeSessionId) parts.push(`--resume ${escapeForBash(resumeSessionId)}`);
+    else if (sessionId) parts.push(`--session-id ${escapeForBash(sessionId)}`);
+    // --strict-mcp-config makes the turn use ONLY this turn-scoped config and
+    // ignore the project/user .mcp.json. Without it, the CLI (spawned with
+    // cwd=repo root) also auto-loads the project .mcp.json, which registers a
+    // second `sur9e-app` server WITHOUT the turn id (terminal mode) for
+    // terminal agents — and undocumented merge precedence could let that one
+    // win, silently dropping the turn id so the action layer skips the confirm
+    // card. Pin the turn-scoped server so web-chat spend/writes always gate.
+    if (mcpConfigPath) {
+      parts.push(`--mcp-config ${escapeForBash(mcpConfigPath)}`);
+      parts.push('--strict-mcp-config');
+    }
+    parts.push(`--allowedTools "${CHAT_ALLOWED_TOOLS}"`);
+    parts.push(`--disallowedTools "${CHAT_DISALLOWED_TOOLS}"`);
+    // Feed the prompt on stdin, NOT as a `"$(cat …)"` positional arg. When a
+    // chat turn attaches an MCP server (--mcp-config), claude reads a positional
+    // `-p` prompt racily against MCP-server startup and intermittently fails
+    // with "Input must be provided … when using --print". Stdin redirection is
+    // unambiguous — claude consumes the whole file then hits EOF and proceeds.
+    // (Headless jobs never saw this: they attach no MCP server.)
+    const cmdline = `claude -p ${parts.join(' ')} < ${escapeForBash(promptFile)}`;
+    return { cmd: '/bin/bash', args: ['-c', cmdline] };
+  },
+
+  extractSessionId(streamLine) {
+    if (!streamLine.trim()) return null;
+    try {
+      const obj = JSON.parse(streamLine);
+      if (obj?.type === 'system' && obj?.subtype === 'init' && typeof obj.session_id === 'string') {
+        // Gate against a malformed/hostile id before it ever becomes a
+        // session handle (e.g. spliced into a future --resume flag). Claude
+        // itself only ever emits UUIDs, so this should never reject a real
+        // session id — it's a backstop, not the primary defense (the splice
+        // points in buildChatArgs also route ids through escapeForBash).
+        if (!/^[A-Za-z0-9._-]{1,128}$/.test(obj.session_id)) return null;
+        return obj.session_id;
+      }
+    } catch {
+      // not a JSON line
+    }
+    return null;
+  },
+
+  detectResumeFailure(stdout, stderr) {
+    // Two independent signals, either suffices: the CLI's prose error on
+    // stdout OR stderr, and the structured result event that errored before
+    // completing a single turn (is_error with num_turns 0 — a mid-run error
+    // has num_turns > 0 and must NOT reseed).
+    const prose = /no conversation found with session id/i;
+    if (prose.test(stdout) || prose.test(stderr)) return true;
+    for (const line of stdout.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (obj?.type === 'result' && obj?.is_error === true && Number(obj?.num_turns) === 0) {
+          return true;
+        }
+      } catch {
+        // skip non-JSON lines
+      }
+    }
+    return false;
+  },
+
   parseStreamLine(line) {
     if (!line.trim()) return null;
     // Claude's --output-format stream-json schema is external and untyped;
@@ -305,8 +389,11 @@ const claude: Provider = {
       return null;
     }
     const ts = new Date().toISOString();
+    // `system/init` is pure infrastructure (session id + model handshake), not
+    // model output — surfacing it as a stage leaked an "init — model=…" line
+    // into the chat transcript. Drop it.
     if (obj.type === 'system' && obj.subtype === 'init') {
-      return { kind: 'stage', message: `init — model=${obj.model ?? '?'}`, ts };
+      return null;
     }
     if (obj.type === 'assistant' && obj.message?.content) {
       for (const p of obj.message.content) {
@@ -317,12 +404,32 @@ const claude: Provider = {
           const summary = p.input?.url || p.input?.command || p.input?.file_path || '';
           return {
             kind: 'tool',
+            toolStatus: 'start',
+            toolId: typeof p.id === 'string' ? p.id : undefined,
             message: `${p.name}${summary ? `: ${String(summary).slice(0, 120)}` : ''}`,
             ts,
           };
         }
         if (p.type === 'text') {
           return { kind: 'stage', message: String(p.text ?? '').slice(0, 200), ts };
+        }
+      }
+    }
+    // A tool's RESULT comes back on the next `user` message as a `tool_result`
+    // part carrying the originating `tool_use_id` (never the tool's name). Emit
+    // the closing tool event keyed by that id so the folder can resolve the
+    // matching running chip — without this, every Claude tool chip spun
+    // forever. `is_error` distinguishes a failed call (✕) from a clean one (✓).
+    if (obj.type === 'user' && Array.isArray(obj.message?.content)) {
+      for (const p of obj.message.content) {
+        if (p?.type === 'tool_result') {
+          return {
+            kind: 'tool',
+            toolStatus: p.is_error === true ? 'error' : 'done',
+            toolId: typeof p.tool_use_id === 'string' ? p.tool_use_id : undefined,
+            message: '',
+            ts,
+          };
         }
       }
     }
