@@ -1,8 +1,8 @@
 // lib/funny-prompts.ts
 //
-// Rotating "AI is …" prompts shown while a generator mode runs. Shared by
-// the in-editor runningMode card (running-mode-view.tsx) and the
-// loading-modal deck (loading-modal.tsx). Keys are generator-mode ids.
+// Rotating "AI is …" prompts shown while a generator mode runs in the
+// in-editor runningMode card (running-mode-view.tsx). Keys are
+// generator-mode ids.
 
 export const FUNNY_PROMPTS: Record<string, string[]> = {
   evaluate: [
