@@ -5,6 +5,12 @@
       "type": "local",
       "command": ["npx", "-y", "@playwright/mcp@latest", "--headless", "--isolated"],
       "enabled": true
+    },
+    "sur9e-app": {
+      "type": "local",
+      "command": ["node", "cli/mcp-app-server.mjs"],
+      "enabled": true,
+      "environment": { "SUR9E_APP_URL": "http://localhost:3000" }
     }
   }
 }

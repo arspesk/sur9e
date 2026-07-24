@@ -11,3 +11,13 @@ web_search = "live"
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest", "--headless", "--isolated"]
+
+# sur9e's own action layer: tracker/report/pipeline/profile reads plus
+# confirm-gated job starts and status writes, served over HTTP by the
+# local web app (start it with `npm run web`; tools explain when it is
+# down). Started without SUR9E_CHAT_TURN_ID, so spend/write tools ask
+# for approval in the terminal conversation.
+[mcp_servers.sur9e-app]
+command = "node"
+args = ["cli/mcp-app-server.mjs"]
+env = { SUR9E_APP_URL = "http://localhost:3000" }
