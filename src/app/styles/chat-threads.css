@@ -19,13 +19,16 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  /* Raised surface with a real edge on BOTH sides: the workspace rail is also
-     --surface, so without the left border the two columns read as one flat
-     white bar. --bg on the conversation side does the rest. */
-  background: var(--surface);
+  /* Recessed, deliberately: the conversation column now carries --surface so
+     the full-screen chat matches the bubble card, and the workspace rail is
+     --surface too. A third --surface column between them would read as one
+     flat white bar (the original complaint). Sitting a tier back on
+     --surface-2 makes the depth order legible: rail · list · conversation.
+     Borders on both sides keep the edges crisp in dark, where the two tiers
+     are only a few points apart. */
+  background: var(--surface-2);
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
-  box-shadow: var(--shadow);
   padding: var(--space-2);
   /* The list scrolls internally; the head + collapse toggle stay pinned. */
   overflow: hidden;

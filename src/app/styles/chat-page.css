@@ -21,6 +21,11 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* Same ground as the bubble card (.chat-card in chat.css): the conversation
+     is a lifted surface, not the page canvas. Without this the full-screen
+     chat sat on --bg and read noticeably darker than the bubble in dark
+     theme (#0a0a0b vs #1c1c1f) — same content, two different rooms. */
+  background: var(--surface);
 }
 
 .chat-page__header {
