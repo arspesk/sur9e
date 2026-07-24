@@ -41,6 +41,18 @@ export type ProviderModelRef = z.infer<typeof ProviderModelRef>;
 export const UnifiedStreamEvent = z.object({
   kind: z.enum(['stage', 'tool', 'thinking', 'tokens', 'error', 'final']),
   message: z.string(),
+  // Tool lifecycle (kind === 'tool' only). `toolStatus` lets a provider's
+  // stream parser signal whether a tool line OPENED a call ('start') or CLOSED
+  // one ('done'/'error') — every CLI emits both a begin and an end event
+  // (claude tool_use → tool_result, codex item.started → item.completed,
+  // opencode tool_use part status running → completed). Absent → treated as
+  // 'start' by consumers (back-compat). `toolId` carries the provider's own
+  // call id (claude tool_use_id, codex item.id, opencode callID) so the
+  // transcript folder can pair a close event to the exact open call it
+  // finishes — resolving the running spinner to ✓/✕ even when the close event
+  // no longer carries the tool's name (claude tool_result lines don't).
+  toolStatus: z.enum(['start', 'done', 'error']).optional(),
+  toolId: z.string().optional(),
   tokens: z
     .object({
       in: z.number().int().nonnegative(),
