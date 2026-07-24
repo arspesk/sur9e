@@ -85,10 +85,15 @@
    already tracking, so it leads and everything else follows.
    Only plays on mount: switching threads is a router.replace on the same
    route, so nothing remounts and nothing re-animates. */
-@keyframes chat-page-composer-in {
+@keyframes chat-page-composer-expand {
   from {
-    transform: translateY(-18px) scale(0.985);
-    opacity: 0;
+    /* Roughly the hero composer's resting place: about a third down the
+       viewport and a touch narrower than the docked width. */
+    transform: translateY(-32vh) scaleX(0.92);
+    opacity: 0.6;
+  }
+  60% {
+    opacity: 1;
   }
   to {
     transform: none;
@@ -107,16 +112,26 @@
 .chat-page__composer {
   border-top: 1px solid var(--border);
   padding: var(--space-3) var(--space-4);
-  animation: chat-page-composer-in var(--dur-sheet) var(--ease-entrance) both;
 }
+/* The composer is the element the eye is already tracking when you arrive from
+   Home or the bubble, so it leads: it enters from roughly where you left it
+   (Home's hero sits about a third down the page, the bubble in the corner),
+   slightly narrower, and settles into its docked width. Real element
+   continuity would need the View Transitions API — see next.config.ts for why
+   that isn't available here — so this is a deliberate approximation, tuned so
+   the travel reads as the input expanding rather than a page swap. */
+.chat-page__composer {
+  /* --dur-sheet is the app's slide-into-place duration (side-peek, sheets,
+     dialogs); this is the same gesture class. */
+  animation: chat-page-composer-expand var(--dur-sheet) var(--ease-entrance) both;
+  transform-origin: 50% 0;
+}
+.chat-page__threads-anim,
 .chat-page__header,
 .chat-page__body {
   animation: chat-page-chrome-in var(--dur-base) var(--ease-entrance) both;
-}
-/* Chrome trails the composer slightly so the two reads as one gesture. */
-.chat-page__header,
-.chat-page__body {
-  animation-delay: 40ms;
+  /* Chrome trails the composer so the two read as one gesture. */
+  animation-delay: 70ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

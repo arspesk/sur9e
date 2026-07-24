@@ -94,17 +94,21 @@ export function PendingOffersSection({ offers }: { offers: PendingOffer[] }) {
 
   // No "Open report" item — the company name is already the link to it.
   function kebabItems(o: PendingOffer): KebabItem[] {
+    // A screened row can still be applied to directly — evaluating first is the
+    // recommended path, not a required one.
+    const markApplied: KebabItem = {
+      label: 'Mark applied',
+      icon: <BadgeCheck {...ICON} />,
+      disabled: updateStatus.isPending,
+      onClick: () => setStatus(o, 'applied'),
+    };
     const items: KebabItem[] =
       o.status === 'screened'
-        ? [{ label: 'Evaluate', icon: <Sparkles {...ICON} />, onClick: () => evaluate(o) }]
-        : [
-            {
-              label: 'Mark applied',
-              icon: <BadgeCheck {...ICON} />,
-              disabled: updateStatus.isPending,
-              onClick: () => setStatus(o, 'applied'),
-            },
-          ];
+        ? [
+            { label: 'Evaluate', icon: <Sparkles {...ICON} />, onClick: () => evaluate(o) },
+            markApplied,
+          ]
+        : [markApplied];
     items.push({
       label: 'Discard',
       icon: <Trash2 {...ICON} />,

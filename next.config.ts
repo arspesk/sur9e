@@ -44,6 +44,13 @@ const nextConfig: NextConfig = {
   // route definitions to `.next/types/` so <Link href> / router.push /
   // redirect() reject unknown routes at typecheck time.
   typedRoutes: true,
+  // NOT enabling experimental.viewTransition. It only switches on React's
+  // <ViewTransition> component, which react@19.2 stable does not export (it
+  // ships in experimental builds only) — so the flag alone never calls
+  // document.startViewTransition and the navigation stays a hard cut.
+  // Verified 2026-07-24: flag on + matching view-transition-names on both
+  // composers = zero transitions fired. The Home→/chat "expand" is therefore
+  // done with CSS in chat-page.css. Revisit if React promotes the API.
   // DEFERRED: Next 16.2.6 merged `experimental.ppr` into a new
   // top-level `cacheComponents` API with different semantics. The original
   // PPR rollout (per-route `experimental_ppr` opt-in) is no longer valid —

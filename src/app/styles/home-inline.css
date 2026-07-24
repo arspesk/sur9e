@@ -132,6 +132,31 @@
   margin-inline: auto;
   text-align: left;
 }
+/* The composer's "/" and "@" dropdowns are anchored upward (bottom: 100%) in
+   chat.css, which is right for the bubble — its composer sits at the foot of a
+   600px card. The hero's composer sits near the TOP of the page, so upward runs
+   the list off-screen. Flip both downward here, and cap the height against the
+   viewport so a long offer list scrolls instead of spilling past the fold. */
+.home-hero__composer .chat-slash,
+.home-hero__composer .chat-mention {
+  bottom: auto;
+  /* The anchor is .chat-composer, whose 8px bottom padding sits between its
+     padding box and the visible .chat-composer__box — so a plain 100% opens a
+     gap under the input. Pull that padding back and leave a deliberate 4px. */
+  top: calc(100% - var(--space-2) + 4px);
+  /* Align to the visible box's edges (composer padding is --space-3), not the
+     padding box, so the list and the input share one vertical rhythm. */
+  left: var(--space-3);
+  right: var(--space-3);
+  max-height: min(260px, calc(100vh - 320px));
+  /* chat.css gives these z-index 1–2, which is enough inside the bubble card.
+     Here they open over the agenda cards, which are positioned (for their
+     ghosted icon) and later in the DOM, so they would paint straight through
+     the list. --z-page-modal keeps it above page content but below the rail,
+     drawer and chat deck. */
+  z-index: var(--z-page-modal);
+}
+
 .home-hero__chips {
   max-width: 640px;
   margin: var(--space-3) auto 0;

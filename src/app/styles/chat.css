@@ -83,13 +83,22 @@
     background-position: -200% 0;
   }
 }
+/* An icon, not a text glyph: sized in px, and NOT rotated on expand — the
+   wrap glyph is directional, so flipping it just reads as broken. Open state
+   is signalled by weight instead. */
 .chat-thinking__caret {
-  font-size: 9px;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
   color: var(--text-3);
-  transition: transform var(--dur-snappy);
+  opacity: 0.7;
+  transition:
+    opacity var(--dur-snappy),
+    color var(--dur-snappy);
 }
 .chat-thinking__toggle[aria-expanded="true"] .chat-thinking__caret {
-  transform: rotate(180deg);
+  color: var(--text-2);
+  opacity: 1;
 }
 .chat-thinking__body {
   margin-top: 4px;
