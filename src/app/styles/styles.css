@@ -1836,21 +1836,6 @@ details.mode-block + details.mode-block {
   }
 }
 
-/* While a background job is ACTIVELY running, the loading-modal
-   (#loading-modal, fixed bottom-right with hairline progress) becomes the
-   visual focus. Dim + disable the action bar so it doesn't fight for
-   attention or accept stray clicks while the user should be watching
-   progress.
-   Only dim while running — once the modal hits 'done' or 'error' state
-   (progress-fill picks up .is-done / .is-error), the page must be
-   interactive again so the user can click Sections, Download, etc. */
-body:has(#loading-modal:not([hidden]) .loading-modal__progress-fill:not(.is-done):not(.is-error))
-.action-bar {
-  opacity: 0.45;
-  pointer-events: none;
-  transition: opacity var(--dur-quick) ease;
-}
-
 /* Legacy report-kebab CSS rules removed. The report kebab now
    renders through the shared KebabActionsMenu primitive
    (components/domain/kebab-actions-menu.tsx) and reuses the .actions-menu

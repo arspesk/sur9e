@@ -1,8 +1,9 @@
 /* Toast item styles. Tones match the ToastTone union in
    components/toast/toast-store.ts ('info' | 'success' | 'warning' |
-   'danger'). The container (fixed bottom-right host) is styled inline
-   in components/toast/toaster.tsx. Tokens are always defined app-wide
-   (globals.css imports tokens.css), so no var() fallbacks. */
+   'danger'). The container (.toast-host, fixed bottom-right column) is
+   styled in chrome.css; the open-chat lift lives there too. Tokens are
+   always defined app-wide (globals.css imports tokens.css), so no var()
+   fallbacks. */
 
 .toast {
   padding: 12px 16px;

@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 import { DeleteConfirmModal } from '@/components/delete-confirm-modal';
-import { LoadingModalHost } from '@/components/loading-modal/loading-modal';
 import { ModalHost } from '@/components/modal-host';
 import { ChromeEffects } from '@/components/shell/chrome-effects';
 import { MobileNav } from '@/components/shell/mobile-nav';
@@ -10,6 +9,7 @@ import { RailNav } from '@/components/shell/rail-nav';
 import { RailStyles, ThemeScript } from '@/components/shell/theme-script';
 import { StatusPopoverHost } from '@/components/status-popover-host';
 import { Toaster } from '@/components/toast/toaster';
+import { ChatHost } from '@/features/chat/chat-host';
 import { Providers } from './providers';
 import './globals.css';
 import './styles/report-hero.css';
@@ -114,10 +114,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </div>
           <MobileNav />
           <Toaster />
-          <LoadingModalHost />
           <DeleteConfirmModal />
           <ModalHost />
           <StatusPopoverHost />
+          <ChatHost />
         </Providers>
       </body>
     </html>

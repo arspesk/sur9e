@@ -4,7 +4,6 @@
 @import "./styles/chrome.css";
 @import "./styles/styles.css";
 @import "./styles/board-drawer.css";
-@import "./styles/loading-modal.css";
 @import "./styles/table-inline.css";
 @import "./styles/settings-inline.css";
 @import "./styles/toc-rail.css";
@@ -14,6 +13,7 @@
 @import "./styles/tiptap-editor.css";
 @import "./styles/pipeline-inline.css";
 @import "./styles/toast.css";
+@import "./styles/chat.css";
 
 /* Wire next/font/google CSS variables into the design-token layer.
    These declarations come after chrome.css so they win in the cascade

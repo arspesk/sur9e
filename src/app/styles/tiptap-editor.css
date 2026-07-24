@@ -850,13 +850,29 @@ html:has(.be-prose) {
   align-items: center;
   gap: 2px;
   user-select: none;
-  z-index: 2;
+  /* Sits above the report-body content it annotates, but deliberately BELOW
+     --z-chat (85): the handle has no ancestor that forms a stacking context
+     (.report-body / .report-wrap / .main / .app are all z:auto), so its
+     z-index competes directly in the root context with the fixed chat card
+     (85) and its portaled model menu (90). Keeping it at --z-editor-handle
+     (30) means a hovered block's [+]/⠿ gutter never paints over the open
+     chat. Click-opened editor menus (slash/color/language) stay at
+     --z-editor-menu — only this hover affordance is lowered. */
+  z-index: var(--z-editor-handle);
   /* Hidden until the DragHandle plugin attaches to a hovered block — at
      which point it writes inline `top:` / `left:` styles. Without this
      guard the [+] [⠿] gutter renders at viewport (0,0) on first paint
      and visually leaks into the topbar/breadcrumb area, reported by the
      user against /report/[num]. */
   visibility: hidden;
+}
+/* Belt-and-suspenders over the lowered z-index above: while the chat card is
+   open (body[data-chat-open], set by ChatHost), hide the editor's floating
+   handle entirely. The report sits unreachable behind the chat, so there's
+   nothing to drag — and this kills any stacking-context edge case where the
+   z-index alone wouldn't keep the handle under the chat. */
+body[data-chat-open] .be-handle {
+  display: none !important;
 }
 .be-handle[style*="left:"] {
   visibility: visible;
