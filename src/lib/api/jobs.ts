@@ -1,7 +1,8 @@
 import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
+import type { JobType } from '@/lib/schemas/jobs';
 import { findByNum } from '@/lib/server/applications';
-import { createJob } from '@/lib/server/jobs';
+import { startJob } from '@/lib/server/jobs';
 import { rejectCrossOrigin } from '@/lib/server/same-origin';
 
 export async function startJobByNum(type: string, request: Request) {
@@ -20,14 +21,22 @@ export async function startJobByNum(type: string, request: Request) {
     const params: Record<string, unknown> = { num };
     if (typeof body?.platform === 'string' && body.platform) params.platform = body.platform;
     if (typeof body?.model === 'string' && body.model) params.model = body.model;
-    const job = createJob(ROOT, type, params);
+    // Route through startJob (not createJob directly) so the REST/modal path
+    // shares the chat path's guards — most importantly the per-offer duplicate
+    // block, so a double-click on "Generate cover letter" can't spawn two
+    // token-spending runs on the same offer. A conflict/setup payload (both
+    // carry `conflict: true`) surfaces as 409 with the actionable message.
+    const result = startJob(ROOT, { kind: type as JobType, params });
+    if ('conflict' in result) {
+      return Response.json(result, { status: 409 });
+    }
     // Every generator-mode spawn route returns `markdown: ''` so the
     // mode-completion contract is satisfied at spawn time. The body chunk
     // actually materializes later via the job's terminal JobSnapshot — this
     // spawn response can't carry it because the job runs asynchronously.
     // TODO: wire mode templates to emit a markdown chunk into the
     // snapshot, then forward it through useJobAction → onDone({ markdown }).
-    return Response.json({ ...job, markdown: '' }, { status: 202 });
+    return Response.json({ ...result, markdown: '' }, { status: 202 });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : `Failed to start ${type}`);
   }

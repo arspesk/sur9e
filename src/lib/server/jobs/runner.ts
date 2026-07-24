@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { type JobRecord } from '../../schemas/jobs';
 import { ProviderId } from '../../schemas/providers';
+import { cleanErrorLine, stripTerminalNoise } from '../../terminal-noise';
 import { atomicWrite } from '../atomic-write';
 import {
   getProvider,
@@ -151,22 +152,43 @@ function resolveReportNumByUrl(rootPath: string, url: string): number | null {
 
 /**
  * Human-readable failure cause for a non-zero exit. Workers print their
- * actionable cause to stderr as an 'ERROR: …' line (e.g. batch/screen.mjs:
- * 'ERROR: …/cv.md missing'); surface the LAST such line as the persisted
- * error — it becomes the failed card's subtitle — instead of the opaque
- * 'exit 1'. Falls back to 'exit N' when no marker is present. Capped to one
- * subtitle-sized line; the full text stays in the captured logs.
+ * actionable cause in one of two shapes:
+ *   - batch/screen.mjs (and the CLI arg guards) emit 'ERROR: …' lines
+ *     (e.g. 'ERROR: …/cv.md missing');
+ *   - batch/mode-runner.mjs emits '❌ …' lines for every failure branch
+ *     (runtime/input/LLM-run/parse/write), e.g.
+ *     '❌ output parse failed on retry: no <<<SUR9E_OUTPUT>>> sentinel…'.
+ * Surface the LAST such line as the persisted error — it becomes the failed
+ * card's subtitle — instead of the opaque 'exit 1'. ANSI escapes are stripped
+ * and leaked `<<<SUR9E_*>>>` sentinel tokens scrubbed (via cleanErrorLine) so
+ * the subtitle is a clean human sentence, never a raw terminal dump. Falls
+ * back to 'exit N' when no marker is present. Capped to one subtitle-sized
+ * line; the full text stays in the captured logs.
  */
 export function workerErrorFromOutput(output: string, code: number | null): string {
-  const line = output
+  // A null exit code = the worker was killed by a signal (OOM / crash / an
+  // external kill), not a normal non-zero exit. Say so plainly instead of the
+  // opaque "exit null".
+  const codeLabel = code === null ? 'interrupted' : `exit ${code}`;
+  const noMarkerFallback =
+    code === null ? 'The job was interrupted before it finished.' : `exit ${code}`;
+  // Strip terminal noise first so a cause line rendered mid-stream (or carrying
+  // color codes) matches on its ERROR:/❌ prefix and doesn't leak escapes.
+  const line = stripTerminalNoise(output)
     .split('\n')
     .reverse()
-    .find(l => l.trim().startsWith('ERROR:'));
-  if (!line) return `exit ${code}`;
-  const msg = line.trim().replace(/^ERROR:\s*/, '');
-  if (!msg) return `exit ${code}`;
-  const capped = msg.length > 200 ? `${msg.slice(0, 199)}…` : msg;
-  return `${capped} (exit ${code})`;
+    .find(l => {
+      const t = l.trim();
+      return t.startsWith('ERROR:') || t.startsWith('❌');
+    });
+  if (!line) return noMarkerFallback;
+  const stripped = line
+    .trim()
+    .replace(/^ERROR:\s*/, '')
+    .replace(/^❌️?\s*/, '');
+  const msg = cleanErrorLine(stripped);
+  if (!msg) return noMarkerFallback;
+  return `${msg} (${codeLabel})`;
 }
 
 /**
@@ -321,6 +343,14 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
     childEnv.SUR9E_OVERRIDE_PLATFORM = runOverride.platform;
     childEnv.SUR9E_OVERRIDE_MODEL = runOverride.model;
   }
+  // Optional free-text steer for a regeneration ("redo this with X in mind").
+  // Forwarded via env (never interpolated into the bash command string) so an
+  // arbitrary guidance string can't break out of the shell; mode-runner.mjs
+  // reads SUR9E_GUIDANCE and appends it to the assembled mode prompt.
+  const guidance = (job.params as Record<string, unknown> | undefined)?.guidance;
+  if (typeof guidance === 'string' && guidance.trim()) {
+    childEnv.SUR9E_GUIDANCE = guidance;
+  }
   const child = spawn(built.cmd, built.args, {
     cwd: rootPath,
     env: childEnv,
@@ -352,12 +382,19 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
     }, 500);
   }
   function append(chunk: string): void {
-    if (current.output.length + chunk.length > MAX_OUTPUT_BYTES) {
+    // Sanitize BEFORE persisting so the stored record — read by the client
+    // log view AND scanned here for [USAGE]/[FALLBACK]/ERROR/❌ markers — is
+    // free of ANSI/OSC terminal noise (the tee'd provider stream is escape-
+    // laden). Stripping per-chunk can miss an escape split across a chunk
+    // boundary; the client's sanitizeJobLogLines re-strips the reassembled
+    // output as a second line of defense.
+    const clean = stripTerminalNoise(chunk);
+    if (current.output.length + clean.length > MAX_OUTPUT_BYTES) {
       // Truncate from the head: keep the tail (most useful for "what just happened").
-      const overflow = current.output.length + chunk.length - MAX_OUTPUT_BYTES;
-      current = { ...current, output: current.output.slice(overflow) + chunk };
+      const overflow = current.output.length + clean.length - MAX_OUTPUT_BYTES;
+      current = { ...current, output: current.output.slice(overflow) + clean };
     } else {
-      current = { ...current, output: current.output + chunk };
+      current = { ...current, output: current.output + clean };
     }
     pending = true;
     schedulePersist();

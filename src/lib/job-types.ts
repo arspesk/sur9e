@@ -1,8 +1,8 @@
 /* lib/job-types.ts
  *
  * Single source of truth for background job-type metadata. Both the
- * cross-page loading modal and the Offers Add menu read from JOB_TYPES so
- * labels, toast messages, and "in flight" copy don't drift apart.
+ * chat jobs feed (bubble + strip) and the Offers Add menu read from JOB_TYPES
+ * so labels, toast messages, and "in flight" copy don't drift apart.
  *
  * Verbatim port of legacy public/job-types.js — field names, ordering, and
  * copy preserved 1:1. Adding a new bulk action only takes a registry entry
