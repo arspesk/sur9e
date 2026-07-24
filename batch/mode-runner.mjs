@@ -59,7 +59,20 @@ export async function runMode(spec, ctx, deps) {
     return 1;
   }
 
-  const prompt = spec.buildPrompt(ctx, inputs);
+  let prompt = spec.buildPrompt(ctx, inputs);
+
+  // Optional per-run steer forwarded by the job runner (params.guidance →
+  // SUR9E_GUIDANCE env). Appended as a clearly-fenced instruction block so a
+  // regeneration can be nudged ("focus on the comp risk") without editing any
+  // mode file. String-only + length-capped; never affects the sentinel
+  // contract or the Node-owned identity fields.
+  const guidance = (process.env.SUR9E_GUIDANCE ?? "").trim();
+  if (guidance) {
+    const clipped = guidance.slice(0, 2000);
+    prompt += `\n\n==================== ADDITIONAL USER GUIDANCE FOR THIS RUN ====================\nThe user asked for this run to be steered as follows. Honor it where it does not conflict with the mode contract or the output/sentinel format above:\n${clipped}`;
+    log(`↳ applying user guidance (${clipped.length} chars)`);
+  }
+
 
   function persistRunLog(result, attempt) {
     // Persist the raw worker response next to screen.mjs's per-URL logs —

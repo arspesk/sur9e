@@ -74,6 +74,40 @@ describe('runMode', () => {
   });
 });
 
+describe('runMode guidance injection (SUR9E_GUIDANCE)', () => {
+  it('appends the guidance block to the assembled prompt when the env is set', async () => {
+    const prev = process.env.SUR9E_GUIDANCE;
+    process.env.SUR9E_GUIDANCE = 'focus on the comp risk';
+    try {
+      const deps = stubDeps();
+      const spec = { ...okSpec, buildPrompt: vi.fn(() => 'BASE PROMPT') };
+      const root = mkdtempSync(join(tmpdir(), 'mr-guide-'));
+      await runMode(spec, { rootPath: root, num: 7 }, deps);
+      const promptArg = deps.runLLM.mock.calls[0][2];
+      expect(promptArg).toContain('BASE PROMPT');
+      expect(promptArg).toContain('ADDITIONAL USER GUIDANCE FOR THIS RUN');
+      expect(promptArg).toContain('focus on the comp risk');
+    } finally {
+      if (prev === undefined) delete process.env.SUR9E_GUIDANCE;
+      else process.env.SUR9E_GUIDANCE = prev;
+    }
+  });
+
+  it('leaves the prompt untouched when no guidance env is set', async () => {
+    const prev = process.env.SUR9E_GUIDANCE;
+    delete process.env.SUR9E_GUIDANCE;
+    try {
+      const deps = stubDeps();
+      const spec = { ...okSpec, buildPrompt: vi.fn(() => 'BASE PROMPT') };
+      const root = mkdtempSync(join(tmpdir(), 'mr-noguide-'));
+      await runMode(spec, { rootPath: root, num: 7 }, deps);
+      expect(deps.runLLM.mock.calls[0][2]).toBe('BASE PROMPT');
+    } finally {
+      if (prev !== undefined) process.env.SUR9E_GUIDANCE = prev;
+    }
+  });
+});
+
 describe('runMode parse-failure retry', () => {
   it('retries the LLM run once when parse throws, succeeds on second attempt', async () => {
     let calls = 0;
