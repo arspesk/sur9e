@@ -4,11 +4,14 @@
 // per card is brand accent at 10% opacity, rotated -10deg, bleeding past the
 // card edge (styled by .agenda-card__wm in home-inline.css).
 
-import { Activity, BadgeCheck, Clock, type LucideIcon, Mailbox } from 'lucide-react';
+import { Activity, ArrowRight, BadgeCheck, Clock, type LucideIcon, Mailbox } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/primitives';
 import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { useChatStore } from '@/stores/chat-store';
+
+// Sized by CSS (.agenda-card__cta svg) so the two CTA arrows stay identical.
+const CTA_ARROW = { strokeWidth: 2.25, 'aria-hidden': true } as const;
 
 interface AgendaCardProps {
   icon: LucideIcon;
@@ -65,7 +68,11 @@ export function AgendaCards({
         icon={BadgeCheck}
         count={screeningPending}
         label={screeningPending === 1 ? 'URL to screen' : 'URLs to screen'}
-        cta={<Link href="/settings">Screen now →</Link>}
+        cta={
+          <Link href="/settings">
+            Screen now <ArrowRight {...CTA_ARROW} />
+          </Link>
+        }
       />
       <AgendaCard
         icon={Activity}
@@ -73,7 +80,7 @@ export function AgendaCards({
         label={jobsRunning === 1 ? 'job running' : 'jobs running'}
         cta={
           <button type="button" onClick={openChat}>
-            View →
+            View <ArrowRight {...CTA_ARROW} />
           </button>
         }
       />

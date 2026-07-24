@@ -48,6 +48,7 @@ export default function Page() {
           score: e.score,
           status: e.status,
           reportPath: e.reportPath,
+          companyLogo: e.summary?.company_logo || null,
         })),
       )}
     />

@@ -8,8 +8,9 @@
 import 'server-only';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadApplications, normalizeStatus } from './applications';
+import { loadApplications, loadApplicationsWithSummary, normalizeStatus } from './applications';
 import { atomicWrite } from './atomic-write';
+import { loadStatusLog } from './status-log';
 
 export const CADENCE = {
   applied_first: 7,
@@ -41,12 +42,19 @@ export interface FollowupEntry {
   status: string;
   score: string;
   notes: string;
-  daysSinceApplication: number;
+  /** Date the row actually reached its current stage (applied/responded/
+   * interview), from the status log — NOT the tracker's evaluation date.
+   * null when nothing ever recorded the transition. */
+  appliedDate: string | null;
+  /** null when appliedDate is unknown — the row is shown as waiting rather
+   * than inventing an age for it. */
+  daysSinceApplication: number | null;
   daysSinceLastFollowup: number | null;
   followupCount: number;
   urgency: Urgency;
   nextFollowupDate: string | null;
   reportPath: string | null;
+  companyLogo: string | null;
 }
 
 export interface FollowupState {
@@ -98,6 +106,33 @@ export function parseFollowupsTable(content: string): FollowupLogRow[] {
     });
   }
   return rows;
+}
+
+/** When each num last reached a given status, per the status log.
+ *
+ * Only `source: 'app'` transitions carry a real transition time — a
+ * 'reconciled' row is when a CLI/out-of-band change was *noticed*, which is an
+ * upper bound, not the event. App-sourced wins; reconciled is the fallback so
+ * pre-existing rows still get something better than the evaluation date.
+ * Last write wins: an offer that went applied → discarded → applied restarts
+ * its cadence, which is what the user means by "I applied again".
+ */
+export function appliedDatesFromLog(
+  log: Array<{ num: number; to: string; at: string; source: string }>,
+  status: string,
+): Map<number, string> {
+  const preferred = new Map<number, string>();
+  const fallback = new Map<number, string>();
+  for (const t of log) {
+    if (t.to !== status) continue;
+    const day = t.at.slice(0, 10);
+    if (t.source === 'app') preferred.set(t.num, day);
+    else fallback.set(t.num, day);
+  }
+  for (const [num, day] of fallback) {
+    if (!preferred.has(num)) preferred.set(num, day);
+  }
+  return preferred;
 }
 
 /** Verbatim port of the CLI's computeUrgency. */
@@ -172,7 +207,9 @@ const URGENCY_ORDER: Record<Urgency, number> = { urgent: 0, overdue: 1, waiting:
 
 /** Cadence state for every actionable tracker row, urgency-sorted. */
 export function loadFollowupState(rootPath: string): FollowupState {
-  const apps = loadApplications(rootPath);
+  // WithSummary (not loadApplications) so rows carry the report's company
+  // logo; both share the same cached tracker read.
+  const apps = loadApplicationsWithSummary(rootPath);
   const followupsPath = join(rootPath, 'data/follow-ups.md');
   const logged = existsSync(followupsPath)
     ? parseFollowupsTable(readFileSync(followupsPath, 'utf-8'))
@@ -185,20 +222,30 @@ export function loadFollowupState(rootPath: string): FollowupState {
     byApp.set(row.appNum, list);
   }
 
+  // Cadence counts from when the row actually reached its stage, not from the
+  // tracker's evaluation date — counting from the latter reported every row as
+  // weeks overdue the moment it was applied to.
+  const log = loadStatusLog(rootPath);
+  const stageDates = new Map<string, Map<number, string>>();
+  for (const status of ACTIONABLE_STATUSES) {
+    stageDates.set(status, appliedDatesFromLog(log, status));
+  }
+
   const now = todayUtc();
   const entries: FollowupEntry[] = [];
   for (const app of apps) {
     const status = normalizeStatus(app.status);
     if (!ACTIONABLE_STATUSES.has(status)) continue;
-    const appDate = parseDate(app.date);
-    if (!appDate) continue;
+
+    const stageDay = stageDates.get(status)?.get(app.num) ?? null;
+    const stageDate = stageDay ? parseDate(stageDay) : null;
 
     const appFollowups = (byApp.get(app.num) ?? []).sort((a, b) => (a.date > b.date ? -1 : 1));
     const followupCount = appFollowups.length;
     const lastFollowupDate = appFollowups[0]?.date ?? null;
     const lastDate = lastFollowupDate ? parseDate(lastFollowupDate) : null;
     const daysSinceLastFollowup = lastDate ? daysBetween(lastDate, now) : null;
-    const daysSinceApplication = daysBetween(appDate, now);
+    const daysSinceApplication = stageDate ? daysBetween(stageDate, now) : null;
 
     entries.push({
       num: app.num,
@@ -208,12 +255,21 @@ export function loadFollowupState(rootPath: string): FollowupState {
       status,
       score: app.score,
       notes: app.notes,
+      appliedDate: stageDay,
       daysSinceApplication,
       daysSinceLastFollowup,
       followupCount,
-      urgency: computeUrgency(status, daysSinceApplication, daysSinceLastFollowup, followupCount),
-      nextFollowupDate: computeNextFollowupDate(status, app.date, lastFollowupDate, followupCount),
+      // No recorded transition → nothing is known about how long this has been
+      // waiting, so it stays 'waiting' instead of claiming an age it can't know.
+      urgency:
+        daysSinceApplication == null
+          ? 'waiting'
+          : computeUrgency(status, daysSinceApplication, daysSinceLastFollowup, followupCount),
+      nextFollowupDate: stageDay
+        ? computeNextFollowupDate(status, stageDay, lastFollowupDate, followupCount)
+        : null,
       reportPath: app.reportPath,
+      companyLogo: app.summary?.company_logo || null,
     });
   }
 

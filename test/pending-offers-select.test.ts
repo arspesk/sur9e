@@ -8,6 +8,7 @@ const row = (num: number, status: string, score: string) => ({
   score,
   status,
   reportPath: null,
+  companyLogo: null,
 });
 
 describe('selectPendingOffers', () => {

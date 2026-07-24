@@ -10,126 +10,6 @@
   min-height: 0;
 }
 
-/* ─── Thread sidebar ─── */
-
-.chat-threads {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-right: 1px solid var(--border);
-  background: var(--surface-2);
-  padding: var(--space-3);
-  overflow-y: auto;
-}
-
-.chat-threads__new {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-paper);
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 8px 0;
-  margin-bottom: var(--space-2);
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-soft);
-}
-.chat-threads__new:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.chat-threads__new:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-.chat-threads__group {
-  font-family: var(--font-ibm-plex-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--meta);
-  margin: var(--space-2) 4px 4px;
-}
-
-.chat-threads__row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.chat-threads__row[data-active] .chat-threads__open {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 500;
-}
-
-.chat-threads__open {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  font-size: 13px;
-  color: var(--text-2);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: 6px 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.chat-threads__open:hover {
-  background: var(--surface);
-}
-
-.chat-threads__kebab {
-  border: 0;
-  background: none;
-  color: var(--meta);
-  border-radius: var(--radius-sm);
-  padding: 4px 6px;
-  cursor: pointer;
-  visibility: hidden;
-}
-.chat-threads__row:hover .chat-threads__kebab,
-.chat-threads__kebab:focus-visible,
-.chat-threads__kebab[data-open] {
-  visibility: visible;
-}
-
-.chat-threads__rename {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
-  background: var(--bg-paper);
-  color: var(--text);
-}
-
-.chat-threads__empty {
-  font-size: 12px;
-  color: var(--meta);
-  padding: 4px 8px;
-  margin: 0;
-}
-
-.chat-threads__archived {
-  margin-top: var(--space-2);
-}
-.chat-threads__archived-summary {
-  cursor: pointer;
-  list-style: none;
-}
-.chat-threads__archived-summary::-webkit-details-marker {
-  display: none;
-}
-
 /* ─── Conversation column ─── */
 
 .chat-page__main {
@@ -143,28 +23,108 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Fixed chrome: the transcript below is what scrolls, never this row. */
+  flex-shrink: 0;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
 }
+/* Same contract as .chat-header__title in chat.css: take the free space and
+   truncate, so a long thread title can never widen or wrap the header row. */
 .chat-page__title {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Background-jobs strip (.chat-jobs, styled in chat.css) sits between the
+   header and the body as a full-width block — exactly as in the bubble, where
+   it is a block child of the column-flex .chat-header. As a direct flex item
+   here it must not shrink: it owns a border-bottom, a 100%-wide progress bar
+   and an ellipsised title that all need a definite full width, and its
+   terminal states (error line, action row, logs pane) grow it downward. */
+.chat-page__main > .chat-jobs {
+  flex-shrink: 0;
+}
+
+/* Mirrors .chat-card__body in chat.css: a flex column whose height is handed
+   down to .chat-transcript, which is the real scroller (chat.css gives it
+   flex: 1; min-height: 0; overflow-y: auto). This element must NEVER scroll —
+   with overflow-y: auto here the transcript's flex: 1 goes inert, it grows to
+   content height, and its scrollRef stops being a scrolling element, which
+   kills auto-follow-the-stream, the pin-the-sent-message jump, onScroll and
+   the jump-to-bottom button. Padding lives on the children (.chat-transcript
+   and .chat-empty both bring their own), not here. */
 .chat-page__body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .chat-page__body > * {
   max-width: 720px;
   margin-inline: auto;
 }
+/* Capping the scroller itself is harmless, but the auto inline margins above
+   are not: auto cross-axis margins suppress flex stretch, so the transcript
+   would shrink-wrap its content instead of filling the column. Pin the width
+   explicitly and it fills the capped column while staying the scroller. */
+.chat-page__body > .chat-transcript {
+  width: 100%;
+}
+
+/* ─── Arrival ───
+   Coming from Home (or the bubble's expand button), the composer the user was
+   just typing in should look like it travelled here and settled, rather than
+   the page hard-cutting. The composer rises into its docked position while the
+   surrounding chrome fades up behind it — the input is the element the eye is
+   already tracking, so it leads and everything else follows.
+   Only plays on mount: switching threads is a router.replace on the same
+   route, so nothing remounts and nothing re-animates. */
+@keyframes chat-page-composer-in {
+  from {
+    transform: translateY(-18px) scale(0.985);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes chat-page-chrome-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 .chat-page__composer {
   border-top: 1px solid var(--border);
   padding: var(--space-3) var(--space-4);
+  animation: chat-page-composer-in var(--dur-sheet) var(--ease-entrance) both;
+}
+.chat-page__header,
+.chat-page__body {
+  animation: chat-page-chrome-in var(--dur-base) var(--ease-entrance) both;
+}
+/* Chrome trails the composer slightly so the two reads as one gesture. */
+.chat-page__header,
+.chat-page__body {
+  animation-delay: 40ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-page__composer,
+  .chat-page__header,
+  .chat-page__body {
+    animation: none;
+  }
 }
 .chat-page__composer > * {
   max-width: 720px;
@@ -177,9 +137,6 @@
 @media (max-width: 640px) {
   .chat-page {
     grid-template-columns: 1fr;
-  }
-  .chat-threads {
-    display: none;
   }
   .chat-page__composer {
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));

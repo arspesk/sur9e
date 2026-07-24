@@ -9,6 +9,7 @@ export interface PendingOfferSource {
   score: string;
   status: string;
   reportPath: string | null;
+  companyLogo: string | null;
 }
 
 export interface PendingOffer extends PendingOfferSource {

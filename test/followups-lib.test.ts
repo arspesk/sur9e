@@ -20,7 +20,11 @@ const TRACKER_HEADER = `# Applications Tracker
 | # | Date | Company | Role | Score | Status | PDF | Report | Notes |
 |---|------|---------|------|-------|--------|-----|--------|-------|`;
 
-function makeRoot(trackerRows: string[], followupsContent?: string): string {
+function makeRoot(
+  trackerRows: string[],
+  followupsContent?: string,
+  statusLogLines?: string[],
+): string {
   const root = mkdtempSync(join(tmpdir(), 'sur9e-followups-'));
   mkdirSync(join(root, 'data'), { recursive: true });
   writeFileSync(
@@ -30,7 +34,17 @@ function makeRoot(trackerRows: string[], followupsContent?: string): string {
   if (followupsContent !== undefined) {
     writeFileSync(join(root, 'data/follow-ups.md'), followupsContent);
   }
+  if (statusLogLines !== undefined) {
+    writeFileSync(join(root, 'data/status-log.jsonl'), `${statusLogLines.join('\n')}\n`);
+  }
   return root;
+}
+
+/** A status-log line recording `num` reaching `to` `days` ago. */
+function transition(num: number, to: string, days: number, source = 'app'): string {
+  const at = new Date();
+  at.setUTCDate(at.getUTCDate() - days);
+  return JSON.stringify({ num, from: null, to, at: at.toISOString(), source });
 }
 
 describe('computeUrgency', () => {
@@ -82,18 +96,62 @@ describe('parseFollowupsTable', () => {
 });
 
 describe('loadFollowupState', () => {
-  it('surfaces only actionable statuses, sorted by urgency, with counts', () => {
-    const root = makeRoot([
-      `| 1 | ${isoDaysAgo(9)} | ZipRecruiter | Sales Engineer | 4.1/5 | Applied | ✅ | [1](../artifacts/reports/x.md) | - |`,
-      `| 2 | ${isoDaysAgo(2)} | Massive | TAM | 3.9/5 | Applied | ✅ | - | - |`,
-      `| 3 | ${isoDaysAgo(10)} | LangChain | GTM | 3.9/5 | Screened | ❌ | - | - |`,
-    ]);
+  it('counts cadence from the logged apply date, not the tracker date', () => {
+    // Both rows were EVALUATED 40 days ago; they were APPLIED to at very
+    // different times. Cadence must follow the apply date.
+    const root = makeRoot(
+      [
+        `| 1 | ${isoDaysAgo(40)} | ZipRecruiter | Sales Engineer | 4.1/5 | Applied | ✅ | [1](../artifacts/reports/x.md) | - |`,
+        `| 2 | ${isoDaysAgo(40)} | Massive | TAM | 3.9/5 | Applied | ✅ | - | - |`,
+        `| 3 | ${isoDaysAgo(40)} | LangChain | GTM | 3.9/5 | Screened | ❌ | - | - |`,
+      ],
+      undefined,
+      [transition(1, 'applied', 9), transition(2, 'applied', 2)],
+    );
     const state = loadFollowupState(root);
     expect(state.actionable).toBe(2); // Screened row excluded
     expect(state.overdue).toBe(1);
     expect(state.entries[0].company).toBe('ZipRecruiter'); // overdue sorts first
     expect(state.entries[0].urgency).toBe('overdue');
+    expect(state.entries[0].daysSinceApplication).toBe(9);
+    expect(state.entries[0].appliedDate).toBe(isoDaysAgo(9));
+    // Applied 2 days ago — not due until day 7, despite a 40-day-old row.
     expect(state.entries[1].urgency).toBe('waiting');
+    expect(state.entries[1].daysSinceApplication).toBe(2);
+  });
+
+  it('leaves a row waiting when nothing recorded when it was applied', () => {
+    const root = makeRoot([
+      `| 1 | ${isoDaysAgo(40)} | ZipRecruiter | Sales Engineer | 4.1/5 | Applied | ✅ | - | - |`,
+    ]);
+    const state = loadFollowupState(root);
+    expect(state.entries[0].appliedDate).toBeNull();
+    expect(state.entries[0].daysSinceApplication).toBeNull();
+    expect(state.entries[0].urgency).toBe('waiting');
+    expect(state.entries[0].nextFollowupDate).toBeNull();
+    expect(state.overdue).toBe(0);
+  });
+
+  it('prefers an app-sourced transition over a reconciled one, last write wins', () => {
+    const root = makeRoot(
+      [`| 1 | ${isoDaysAgo(40)} | ZipRecruiter | SE | 4.1/5 | Applied | ✅ | - | - |`],
+      undefined,
+      [
+        transition(1, 'applied', 30, 'reconciled'),
+        transition(1, 'applied', 20),
+        transition(1, 'applied', 8),
+      ],
+    );
+    expect(loadFollowupState(root).entries[0].appliedDate).toBe(isoDaysAgo(8));
+  });
+
+  it('falls back to a reconciled transition when no app-sourced one exists', () => {
+    const root = makeRoot(
+      [`| 1 | ${isoDaysAgo(40)} | ZipRecruiter | SE | 4.1/5 | Applied | ✅ | - | - |`],
+      undefined,
+      [transition(1, 'applied', 12, 'reconciled')],
+    );
+    expect(loadFollowupState(root).entries[0].appliedDate).toBe(isoDaysAgo(12));
   });
   it('counts logged follow-ups per app and measures from the last one', () => {
     const root = makeRoot(
@@ -102,6 +160,7 @@ describe('loadFollowupState', () => {
 |---|---|---|---|---|---|---|---|
 | 1 | 1 | ${isoDaysAgo(2)} | ZipRecruiter | SE | email | - | first nudge |
 `,
+      [transition(1, 'applied', 30)],
     );
     const state = loadFollowupState(root);
     expect(state.entries[0].followupCount).toBe(1);

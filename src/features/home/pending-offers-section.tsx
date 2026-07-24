@@ -2,18 +2,62 @@
 
 // Pending offers — screened/evaluated rows still waiting on a decision,
 // highest score first (ordering comes from selectPendingOffers on the
-// server). Screened rows hand off to the shared evaluate confirm modal,
-// which PATCHes status→evaluated and spawns the evaluation job; evaluated
-// rows get the two terminal picks, Mark applied / Discard.
+// server). Each row is a two-liner:
+//
+//   [logo] company (line 1, links to the report when there is one)
+//          role · score · status pill (line 2)            [⋮ kebab]
+//
+// Actions live in the kebab: screened rows hand off to the shared evaluate
+// confirm modal, which PATCHes status→evaluated and spawns the evaluation
+// job; evaluated rows get the terminal picks, Mark applied / Discard.
 
+import { BadgeCheck, Sparkles, Trash2 } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRef, useState } from 'react';
+import { CompanyAvatar } from '@/components/domain/company-avatar';
+import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
 import { StatusPill } from '@/components/domain/status-pill';
 import type { PendingOffer } from '@/features/home/pending-offers-select';
 import { useUpdateApplicationStatus } from '@/hooks/use-applications';
 import { scoreLevel } from '@/lib/scoring';
 import { useModalStore } from '@/stores/modal-store';
+
+const ICON = { size: 15, strokeWidth: 1.8 } as const;
+
+/** Per-row ⋮ trigger + its portaled actions menu. Own open state per row.
+ *  (Same shape as chat-threads-sidebar's RowKebab — kept local because the
+ *  two Home sections are the only other users and neither owns a shared
+ *  module.) */
+function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="home-row__kebab"
+        aria-label={`Actions for ${label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-open={open || undefined}
+        onClick={() => setOpen(o => !o)}
+      >
+        ⋮
+      </button>
+      {open && (
+        <KebabActionsMenu
+          items={items}
+          triggerRef={triggerRef}
+          onClose={() => setOpen(false)}
+          ariaLabel={`Actions for ${label}`}
+        />
+      )}
+    </>
+  );
+}
 
 // /report/[filename] resolves its segment through numFromFilename, which
 // accepts either the report filename OR a bare num — and every other link
@@ -31,6 +75,45 @@ export function PendingOffersSection({ offers }: { offers: PendingOffer[] }) {
   // Failure toasts come from useUpdateApplicationStatus's hook-level
   // onError — adding a per-call onError here would double-toast.
   const updateStatus = useUpdateApplicationStatus();
+
+  function evaluate(o: PendingOffer) {
+    openModal('evaluate', {
+      num: o.num,
+      patchToEvaluated: true,
+      // EvaluateModal fires onConfirm *before* its own status PATCH, and
+      // the action only revalidates /offers, /pipeline and /report — Home
+      // isn't in that list, so refresh from here. The pill may lag by one
+      // frame; the next refresh settles it.
+      onConfirm: () => router.refresh(),
+    });
+  }
+
+  function setStatus(o: PendingOffer, status: 'applied' | 'discarded') {
+    updateStatus.mutate({ num: o.num, status }, { onSuccess: () => router.refresh() });
+  }
+
+  // No "Open report" item — the company name is already the link to it.
+  function kebabItems(o: PendingOffer): KebabItem[] {
+    const items: KebabItem[] =
+      o.status === 'screened'
+        ? [{ label: 'Evaluate', icon: <Sparkles {...ICON} />, onClick: () => evaluate(o) }]
+        : [
+            {
+              label: 'Mark applied',
+              icon: <BadgeCheck {...ICON} />,
+              disabled: updateStatus.isPending,
+              onClick: () => setStatus(o, 'applied'),
+            },
+          ];
+    items.push({
+      label: 'Discard',
+      icon: <Trash2 {...ICON} />,
+      danger: true,
+      disabled: updateStatus.isPending,
+      onClick: () => setStatus(o, 'discarded'),
+    });
+    return items;
+  }
 
   if (offers.length === 0) {
     return (
@@ -51,71 +134,30 @@ export function PendingOffersSection({ offers }: { offers: PendingOffer[] }) {
         const score = Number.parseFloat(o.score);
         return (
           <div key={o.num} className="home-row">
+            <CompanyAvatar
+              company={o.company}
+              logoUrl={o.companyLogo ?? undefined}
+              className="cmk home-row__logo"
+            />
             <div className="home-row__text">
-              {href ? (
-                <Link href={href} className="home-row__company home-row__company--link">
-                  {o.company}
-                </Link>
-              ) : (
-                <span className="home-row__company">{o.company}</span>
-              )}
+              <span className="home-row__head">
+                {href ? (
+                  <Link href={href} className="home-row__company home-row__company--link">
+                    {o.company}
+                  </Link>
+                ) : (
+                  <span className="home-row__company">{o.company}</span>
+                )}
+                {!Number.isNaN(score) && (
+                  <span className="home-row__score" data-tier={scoreLevel(score)}>
+                    {score.toFixed(1)}
+                  </span>
+                )}
+                <StatusPill status={o.status} className="home-row__status" />
+              </span>
               <span className="home-row__role">{o.role}</span>
             </div>
-            {!Number.isNaN(score) && (
-              <span className="home-row__score" data-tier={scoreLevel(score)}>
-                {score.toFixed(1)}
-              </span>
-            )}
-            <StatusPill status={o.status} />
-            {o.status === 'screened' ? (
-              <button
-                type="button"
-                className="home-row__btn home-row__btn--primary"
-                onClick={() =>
-                  openModal('evaluate', {
-                    num: o.num,
-                    patchToEvaluated: true,
-                    // EvaluateModal fires onConfirm *before* its own
-                    // status PATCH, and the action only revalidates
-                    // /offers, /pipeline and /report — Home isn't in that
-                    // list, so refresh from here. The pill may lag by one
-                    // frame; the next refresh settles it.
-                    onConfirm: () => router.refresh(),
-                  })
-                }
-              >
-                Evaluate
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="home-row__btn home-row__btn--primary"
-                  disabled={updateStatus.isPending}
-                  onClick={() =>
-                    updateStatus.mutate(
-                      { num: o.num, status: 'applied' },
-                      { onSuccess: () => router.refresh() },
-                    )
-                  }
-                >
-                  Mark applied
-                </button>
-                <button
-                  type="button"
-                  className="home-row__btn"
-                  disabled={updateStatus.isPending}
-                  onClick={() =>
-                    updateStatus.mutate(
-                      { num: o.num, status: 'discarded' },
-                      { onSuccess: () => router.refresh() },
-                    )
-                  }
-                >
-                  Discard
-                </button>
-              </>
-            )}
+            <RowKebab label={`${o.company} offer`} items={kebabItems(o)} />
           </div>
         );
       })}

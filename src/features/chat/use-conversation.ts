@@ -59,7 +59,12 @@ export interface ConversationApi {
   regenerate: () => Promise<void>;
 }
 
-export function useConversation(opts?: { onAfterSend?: () => void }): ConversationApi {
+export function useConversation(opts?: {
+  onAfterSend?: () => void;
+  /** Send a prompt staged by another surface (see chat-store.autoSendMessage).
+   * Only the full-screen chat page opts in. */
+  consumeAutoSend?: boolean;
+}): ConversationApi {
   const activeConversationId = useChatStore(s => s.activeConversationId);
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
   const streamingTurnId = useChatStore(s => s.streamingTurnId);
@@ -218,6 +223,13 @@ export function useConversation(opts?: { onAfterSend?: () => void }): Conversati
         setStreamingTurnId(res.turnId);
         persistActiveTurn({ turnId: res.turnId, conversationId });
         turn.start(res.turnId);
+        // The server inserts the user's message row synchronously inside
+        // startTurn, so it provably exists now. Without this invalidate the
+        // session query can still hold the empty snapshot it fetched when the
+        // conversation was created a few lines above (staleTime is 5min and
+        // refetchOnMount is off once data exists) — which is why a message
+        // sent from Home stayed invisible on /chat until the reply finished.
+        queryClient.invalidateQueries({ queryKey: chatSessionKey(conversationId) });
         // The send went through — the staged selection chips belong to this
         // turn now, so clear the draft slot (a queued-flush re-entry re-reads
         // an already-empty slot, so this is safe on that path too).
@@ -250,6 +262,20 @@ export function useConversation(opts?: { onAfterSend?: () => void }): Conversati
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
+
+  // ── Auto-send handoff ──
+  // Another surface (Home's "Draft follow-up") can stage a prompt and navigate
+  // here for it to be sent on arrival. Opt-in per host — the bubble must not
+  // consume a handoff meant for the full-screen page, or the prompt would fire
+  // into whichever surface mounted first.
+  const autoSendClaimedRef = useRef(false);
+  useEffect(() => {
+    if (!opts?.consumeAutoSend || autoSendClaimedRef.current) return;
+    const text = useChatStore.getState().takeAutoSendMessage();
+    if (!text) return;
+    autoSendClaimedRef.current = true;
+    void sendRef.current(text);
+  }, [opts?.consumeAutoSend]);
 
   // ── Per-thread isolation ──
   // Live-turn view state (SSE events, optimistic echo, done/error markers)
