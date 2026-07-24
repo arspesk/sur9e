@@ -6,6 +6,54 @@ import {
   stripTerminalNoise,
 } from '../batch/lib/output-parser.mjs';
 
+// Synthetic STDOUT fixtures for the lenient-recovery paths. These previously
+// read real captured logs from batch/logs/modes/, but that directory is
+// gitignored — it holds the user's real run logs (personal data that must
+// never reach the public repo, and which CI never checks out). Inlining keeps
+// the exact structural shapes the recovery path must handle, with no real data
+// and no gitignored-file dependency.
+const FENCE = '```';
+
+// END sentinel present but the opening OUTPUT line dropped, with a **Note:**
+// preamble that recovery must strip.
+const NO_OUTPUT_SENTINEL_STDOUT = [
+  '**Note:** Here is the cover letter, ready for the PDF step.',
+  'format: letter',
+  '<!DOCTYPE html>',
+  '<html lang="en">',
+  '<head><meta charset="UTF-8" /><title>Cover Letter</title></head>',
+  '<body>',
+  '<p>Dear Hiring Team,</p>',
+  "<p>I'm excited to apply for the role.</p>",
+  '<p>Sincerely,<br />A. Candidate</p>',
+  '</body>',
+  '</html>',
+  '<<<SUR9E_END>>>',
+].join('\n');
+
+// No sentinels at all: a **Note:** preamble, then the format line and the HTML
+// each wrapped in its own markdown fence.
+const FULLY_FENCED_STDOUT = [
+  "**Note:** I've written the cover letter as a complete HTML document below.",
+  FENCE,
+  'format: letter',
+  FENCE,
+  `${FENCE}html`,
+  '<!DOCTYPE html>',
+  '<html lang="en">',
+  '<head><meta charset="UTF-8" /><title>Cover Letter</title></head>',
+  '<body>',
+  '<p>Dear Hiring Team,</p>',
+  "<p>I'm excited to apply.</p>",
+  '</body>',
+  '</html>',
+  FENCE,
+].join('\n');
+
+// The lenient recovery pdf.mjs passes: anchor the deliverable on its opening
+// `format:` line.
+const PDF_RECOVER = { recover: { startRe: /^format:\s*(letter|a4)\b/i } };
+
 describe('extractSentinelPayload', () => {
   it('returns the payload between the sentinels', () => {
     const text = `thinking…\n<<<SUR9E_OUTPUT>>>\nhello world\n<<<SUR9E_END>>>\n`;
@@ -34,6 +82,64 @@ describe('extractSentinelPayload', () => {
 
   it('throws when the payload is empty', () => {
     expect(() => extractSentinelPayload('<<<SUR9E_OUTPUT>>>\n\n<<<SUR9E_END>>>')).toThrow(/empty/i);
+  });
+});
+
+describe('extractSentinelPayload — lenient pdf recovery from degraded output', () => {
+  it('recovers the HTML when END is present but the opening OUTPUT line was dropped', () => {
+    // A run where the model emitted the closing <<<SUR9E_END>>> but omitted the
+    // opening <<<SUR9E_OUTPUT>>> (observed live with big-pickle).
+    const stdout = NO_OUTPUT_SENTINEL_STDOUT;
+    // Without recovery this is the exact failure users hit.
+    expect(() => extractSentinelPayload(stdout)).toThrow(/sentinel/i);
+
+    const payload = extractSentinelPayload(stdout, PDF_RECOVER);
+    expect(payload).toMatch(/^format:\s*letter/);
+    expect(payload).toContain('<html');
+    expect(payload).toContain('</html>');
+    // No sentinel text and no stray preamble leaked into the deliverable.
+    expect(payload).not.toContain('SUR9E_END');
+    expect(payload).not.toContain('SUR9E_OUTPUT');
+    expect(payload).not.toMatch(/\*\*Note:\*\*/);
+
+    // ...and the downstream pdf.mjs parse contract is satisfiable.
+    const html = payload.slice(payload.indexOf('\n') + 1).trim();
+    expect(/<html[\s>]/i.test(html)).toBe(true);
+  });
+
+  it('recovers the HTML from a fully code-fenced response with no sentinels at all', () => {
+    // A "**Note:**" preamble, then the format line and the HTML each wrapped in
+    // markdown fences, no sentinels at all (observed live with big-pickle).
+    const stdout = FULLY_FENCED_STDOUT;
+    expect(() => extractSentinelPayload(stdout)).toThrow(/sentinel/i);
+
+    const payload = extractSentinelPayload(stdout, PDF_RECOVER);
+    expect(payload).toMatch(/^format:\s*letter/);
+    expect(payload).toContain('<html');
+    expect(payload).toContain('</html>');
+    // Preamble and fence markers are stripped out of the deliverable.
+    expect(payload).not.toMatch(/\*\*Note:\*\*/);
+    expect(payload).not.toContain('```');
+  });
+
+  it('leaves a clean, well-formed sentinel pair untouched (no regression)', () => {
+    const html = '<!DOCTYPE html>\n<html lang="en"><body>Hi</body></html>';
+    const text = `<<<SUR9E_OUTPUT>>>\nformat: letter\n${html}\n<<<SUR9E_END>>>`;
+    // Same result with or without the recover option — the strict path wins.
+    expect(extractSentinelPayload(text)).toBe(`format: letter\n${html}`);
+    expect(extractSentinelPayload(text, PDF_RECOVER)).toBe(`format: letter\n${html}`);
+  });
+
+  it('unwraps a payload that is entirely wrapped in a markdown fence', () => {
+    const inner = 'format: a4\n<!DOCTYPE html><html><body>x</body></html>';
+    const text = `<<<SUR9E_OUTPUT>>>\n\`\`\`html\n${inner}\n\`\`\`\n<<<SUR9E_END>>>`;
+    expect(extractSentinelPayload(text, PDF_RECOVER)).toBe(inner);
+  });
+
+  it('still throws on pure garbage even with recovery enabled', () => {
+    expect(() => extractSentinelPayload('just some rambling, no deliverable', PDF_RECOVER)).toThrow(
+      /sentinel/i,
+    );
   });
 });
 

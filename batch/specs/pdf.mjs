@@ -61,15 +61,28 @@ Follow the mode contract below for CONTENT (keyword extraction, language,
 paper format, ATS rules, template placeholders). You have NO file or shell
 tools: do NOT write the HTML to disk and do NOT run generate-pdf.mjs — the
 app does both.
-ALL inputs are inlined below — do NOT search the filesystem, other projects, logs, or transcripts for inputs; do NOT read or write any file. Work only from this prompt. Your ONLY deliverable, between the sentinels:
-line 1:  format: letter   (or  format: a4  — per the mode's location rule)
-line 2+: the COMPLETE final HTML document (template with every {{…}}
-         placeholder replaced).
+ALL inputs are inlined below — do NOT search the filesystem, other projects, logs, or transcripts for inputs; do NOT read or write any file. Work only from this prompt.
 
+OUTPUT FORMAT — follow EXACTLY, or the deliverable is discarded:
+  • Output NOTHING before or after the block — no preamble, no "Note:", no
+    commentary, no explanation, no apologies.
+  • Do NOT use markdown code fences anywhere — no triple-backtick lines, not
+    around the format line and not around the HTML.
+  • The block is bounded by TWO sentinel lines. Each sits ALONE on its own
+    line, spelled verbatim, with nothing else on that line:
+      – the FIRST line of the block is exactly:  <<<SUR9E_OUTPUT>>>
+      – the LAST line of the block is exactly:   <<<SUR9E_END>>>
+    BOTH are REQUIRED — never drop the opening <<<SUR9E_OUTPUT>>> line.
+  • Inside the block, line 1 is  format: letter  (or  format: a4  — per the
+    mode's location rule); line 2+ is the COMPLETE final HTML document
+    (template with every {{…}} placeholder replaced).
+
+Reproduce this exact shape (bare sentinel lines, no fences):
 <<<SUR9E_OUTPUT>>>
 format: letter
 <!DOCTYPE html>
-…
+… complete HTML document …
+</html>
 <<<SUR9E_END>>>
 
 ==================== MODE CONTRACT (content/modes/${modeFile}) ====================
@@ -95,7 +108,15 @@ ${jdText}`;
     },
 
     parse(stdout) {
-      const payload = extractSentinelPayload(stdout);
+      // Lenient recovery is safe here because the PDF deliverable always opens
+      // with a `format: letter|a4` line — an unambiguous anchor. Some models
+      // (opencode/big-pickle) drop the opening sentinel or wrap the HTML in
+      // markdown fences; the anchor lets us strip preamble/fences and still
+      // extract the document instead of failing the whole job. Other modes do
+      // NOT pass `recover`, so they keep strict sentinel behavior.
+      const payload = extractSentinelPayload(stdout, {
+        recover: { startRe: /^format:\s*(letter|a4)\b/i },
+      });
       const nl = payload.indexOf("\n");
       const first = (nl === -1 ? payload : payload.slice(0, nl)).trim();
       const m = first.match(/^format:\s*(letter|a4)$/);
