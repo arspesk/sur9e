@@ -8,7 +8,7 @@
 // We can't auto-install Node (it's the runtime executing this script), so the
 // best onboarding help is a precise early error.
 
-const MIN_MAJOR = 20;
+const MIN_MAJOR = 24;
 const major = Number(process.versions.node.split('.')[0]);
 
 if (major < MIN_MAJOR) {
@@ -18,7 +18,7 @@ if (major < MIN_MAJOR) {
       `✗ sur9e requires Node ${MIN_MAJOR}+. You are on ${process.version}.`,
       '',
       '  Upgrade, then re-run `npm run setup`:',
-      '    • nvm:       nvm install 22 && nvm use 22',
+      '    • nvm:       nvm install 24 && nvm use 24',
       '    • Homebrew:  brew install node',
       '    • Or:        https://nodejs.org/en/download',
       '',

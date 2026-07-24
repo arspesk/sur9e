@@ -14,7 +14,9 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          # sur9e requires Node 24+ (node:sqlite in the chat store); the
+          # postinstall check-node.mjs guard hard-fails on anything lower.
+          node-version: 24
 
       - name: Install dependencies
         # `npm install` (not `npm ci`) because package-lock.json is gitignored

@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "description": "AI-powered job search pipeline built on Claude Code",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "next dev -p 3000",
