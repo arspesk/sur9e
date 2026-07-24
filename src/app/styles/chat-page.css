@@ -5,7 +5,11 @@
 
 .chat-page {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  /* Wide enough for a full AI-generated thread title ("ZipRecruiter follow-up
+     email draft") to sit on one line — at 240px nearly every title ellipsised.
+     The conversation column still gets the rest, and the panel collapses when
+     the extra width is in the way (see chat-threads.css). */
+  grid-template-columns: 296px minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
 }
