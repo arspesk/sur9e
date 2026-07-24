@@ -18,7 +18,7 @@ import {
   Sparkles,
   Target,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApplications } from '@/hooks/use-applications';
 
 export interface SuggestionOffer {
@@ -104,6 +104,14 @@ export function pickSuggestions(pool: string[], n = 3, rng: () => number = Math.
 /** The three chips shown under the empty-state copy. */
 export function ChatSuggestions({ onPick }: { onPick: (text: string) => void }) {
   const { data } = useApplications();
+  // The pick is random, so it MUST NOT run during SSR or the first client
+  // render — the server and client would choose different chips and React
+  // would throw a hydration mismatch. Harmless while this only ever mounted
+  // inside the click-opened bubble; the Home hero server-renders it. Holding
+  // the chips until after mount keeps both renders identical (nothing).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   // A fresh random three per mount (i.e. per time the empty chat appears);
   // recomputed once the offer list loads so the chips can name real offers.
   const suggestions = useMemo(() => {
@@ -115,7 +123,7 @@ export function ChatSuggestions({ onPick }: { onPick: (text: string) => void }) 
     return pickSuggestions(buildSuggestionPool(offers), 3);
   }, [data]);
 
-  if (suggestions.length === 0) return null;
+  if (!mounted || suggestions.length === 0) return null;
   return (
     <ul className="chat-suggestions" aria-label="Conversation starters">
       {suggestions.map(s => {

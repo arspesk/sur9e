@@ -14,6 +14,9 @@ import { useDrawerStore } from '@/stores/drawer-store';
 // needs a mock outside the real app-router tree, same as chat-host.test.tsx.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, refresh: () => {}, replace: () => {} }),
+  // ChatHost hides the bubble/card on /chat — any non-/chat path keeps the
+  // bubble mounted, which is what these tests exercise.
+  usePathname: () => '/offers',
 }));
 
 function renderHost() {

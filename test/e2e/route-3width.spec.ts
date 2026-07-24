@@ -39,9 +39,10 @@ interface RouteCase {
 
 const ROUTES: RouteCase[] = [
   {
+    // / is the Home control center now — it no longer redirects to /offers.
     path: '/',
-    name: '/ (redirect to /offers)',
-    identifier: page => page.locator('table.offers'),
+    name: '/ (home)',
+    identifier: page => page.locator('.home .agenda-grid'),
   },
   {
     path: '/table',

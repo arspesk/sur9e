@@ -12,6 +12,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatHeader } from '@/features/chat/chat-header';
 import { useChatStore } from '@/stores/chat-store';
 
+// The header's expand button routes to /chat, so the component needs a
+// router — there's no app-router context in a bare render().
+const pushSpy = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushSpy, refresh: () => {}, replace: () => {} }),
+  usePathname: () => '/offers',
+}));
+
 function renderHeader() {
   vi.stubGlobal(
     'fetch',

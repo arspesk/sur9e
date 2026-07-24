@@ -44,6 +44,10 @@ function revalidateApplicationSurfaces() {
   // (scan / normalize-statuses / merge-tracker / batch/scan-jobspy);
   // a tag-based cache would mask those writes until something
   // explicitly invalidated it.
+  // Home surfaces the same tracker rows (follow-up cadence, pending-offer
+  // queue, agenda counts), so a status write has to invalidate it too —
+  // otherwise Mark applied / Discard / evaluate leave a stale row behind.
+  revalidatePath('/');
   revalidatePath('/offers');
   revalidatePath('/pipeline');
   // Reports render the status pill in the hero — the dynamic segment

@@ -1,6 +1,14 @@
 'use client';
 
-import { Briefcase, ChevronLeft, LineChart, Settings, User } from 'lucide-react';
+import {
+  Briefcase,
+  ChevronLeft,
+  House,
+  LineChart,
+  MessageSquare,
+  Settings,
+  User,
+} from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -19,6 +27,7 @@ function isOffersActive(pathname: string): boolean {
 export function RailNav() {
   const pathname = usePathname();
   const offersActive = isOffersActive(pathname);
+  const chatActive = pathname === '/chat' || pathname.startsWith('/chat/');
 
   useEffect(() => {
     const app = document.querySelector('.app') as HTMLElement | null;
@@ -90,6 +99,26 @@ export function RailNav() {
       </div>
 
       <div className="rail-section-label">Workspace</div>
+      <Link
+        href="/"
+        className={pathname === '/' ? 'rail-item active' : 'rail-item'}
+        title="Home"
+        aria-current={pathname === '/' ? 'page' : undefined}
+      >
+        <House aria-hidden="true" className="rail-icon" strokeWidth={1.6} />
+        <span className="rail-label">Home</span>
+        <span className="rail-tooltip">Home</span>
+      </Link>
+      <Link
+        href="/chat"
+        className={chatActive ? 'rail-item active' : 'rail-item'}
+        title="Chat"
+        aria-current={chatActive ? 'page' : undefined}
+      >
+        <MessageSquare aria-hidden="true" className="rail-icon" strokeWidth={1.6} />
+        <span className="rail-label">Chat</span>
+        <span className="rail-tooltip">Chat</span>
+      </Link>
       <Link
         href="/offers"
         className={offersActive ? 'rail-item active' : 'rail-item'}

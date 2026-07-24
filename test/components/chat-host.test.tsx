@@ -10,6 +10,9 @@ import { useChatStore } from '@/stores/chat-store';
 // settings-form-regression.test.tsx.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, refresh: () => {}, replace: () => {} }),
+  // ChatHost hides the bubble/card on /chat — any non-/chat path keeps the
+  // bubble mounted, which is what these tests exercise.
+  usePathname: () => '/offers',
 }));
 
 function renderHost() {
