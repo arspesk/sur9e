@@ -31,6 +31,10 @@
   flex-shrink: 0;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
+  /* Same ground as the thread list (--surface, chat-threads.css) so the two
+     read as one continuous band of chrome across the top, with the
+     conversation canvas below it. */
+  background: var(--surface);
 }
 /* Same contract as .chat-header__title in chat.css: take the free space and
    truncate, so a long thread title can never widen or wrap the header row. */
@@ -52,20 +56,6 @@
    terminal states (error line, action row, logs pane) grow it downward. */
 .chat-page__main > .chat-jobs {
   flex-shrink: 0;
-  /* In the 400px bubble the jobs strip is a full-bleed bar and reads as part
-     of the card. Across a full-width page that same treatment reads as loose
-     chrome floating on the canvas, so here it becomes a contained panel: the
-     bubble's --surface ground, a real edge all round, and the same 720px
-     column the messages use so the running job lines up with the conversation
-     it belongs to. */
-  width: min(calc(100% - 2 * var(--space-4)), 720px);
-  margin: var(--space-3) auto 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  /* The panel now owns the rounded corners — clip the progress bar and the
-     logs pane to them. */
-  overflow: hidden;
 }
 
 /* Mirrors .chat-card__body in chat.css: a flex column whose height is handed
