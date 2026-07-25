@@ -354,6 +354,20 @@
   overflow-y: auto;
   padding: 4px;
 }
+/* Recency headers (Today / Yesterday / …), matching .chat-threads__group in
+   chat-threads.css so the bubble's list and the /chat sidebar group the same
+   threads with the same voice. */
+.chat-session-menu__group {
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--meta);
+  margin: var(--space-3) 6px var(--space-1);
+}
+.chat-session-menu__group:first-child {
+  margin-top: var(--space-1);
+}
 .chat-session-menu__new {
   display: flex;
   align-items: center;
@@ -945,6 +959,20 @@
    margin that pushes the group right, the second just needs a hair of gap. */
 .chat-header__expand + .chat-header__close {
   margin-left: 2px;
+}
+/* On a phone this card already IS the full-screen chat (see the inset:0
+   takeover below), and /chat bounces straight back here — so "expand" would
+   be a round trip to nowhere. Same breakpoint as that takeover. */
+@media (max-width: 640px) {
+  .chat-header__expand {
+    display: none;
+  }
+  /* display:none removes it from layout but NOT from the DOM, so the pair rule
+     above still matches and would pin the close button at 2px next to the
+     title. Hand the auto margin back so it returns to the right edge. */
+  .chat-header__expand + .chat-header__close {
+    margin-left: auto;
+  }
 }
 .chat-model-chip {
   display: inline-flex;

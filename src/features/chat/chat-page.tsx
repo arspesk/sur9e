@@ -15,12 +15,16 @@ import { ChatThreadsSidebar } from './chat-threads-sidebar';
 import { ChatTranscript } from './chat-transcript';
 import { useChatUrlSync } from './use-chat-url-sync';
 import { useConversation } from './use-conversation';
+import { useMobileChatRedirect } from './use-mobile-chat-redirect';
 
 export function ChatPage({ conversationId }: { conversationId?: string }) {
   // /chat/[id] passes the thread from the URL; bare /chat passes nothing and
   // the store keeps whatever was last open. consumeAutoSend: only this
   // full-screen surface may claim a prompt handed over from Home.
   useChatUrlSync(conversationId ?? null);
+  // Runs BEFORE useConversation so the store already holds the URL's thread
+  // when the bubble takes over on a phone.
+  const redirectingToBubble = useMobileChatRedirect();
   const convo = useConversation({ consumeAutoSend: true });
   // Header title reads the same pair the sidebar does — the sessions query plus
   // the store's active id — so both stay in sync through one cache. No polling
@@ -30,6 +34,11 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   const { data: conversations } = useChatSessions();
   const activeTitle = conversations?.find(c => c.id === activeId)?.title.trim();
   const headerTitle = activeId == null ? 'New chat' : activeTitle || 'Chat';
+
+  // Phone: the bubble is taking over and the router is on its way home.
+  // Rendering the desktop layout for that frame would flash a sidebar the
+  // width can't accommodate.
+  if (redirectingToBubble) return null;
 
   return (
     <div className="chat-page">

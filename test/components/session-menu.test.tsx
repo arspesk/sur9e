@@ -103,7 +103,10 @@ describe('SessionMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Switch chat session' }));
 
     await waitFor(() => expect(screen.getByText('Newer')).toBeInTheDocument());
-    expect(screen.getByText('Older')).toBeInTheDocument();
+    // Scoped to the row button: the list is grouped by recency now, and one of
+    // those group headers is also the word "Older", so a bare text query
+    // matches both the header and this session's title.
+    expect(screen.getByRole('button', { name: 'Older' })).toBeInTheDocument();
     // Archived sessions stay out of the recent list (no open-row button) —
     // they render only inside the collapsed Archived section as plain text.
     expect(screen.queryByRole('button', { name: 'Archived' })).not.toBeInTheDocument();

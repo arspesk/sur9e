@@ -1,7 +1,7 @@
 'use client';
 
 import { Archive, ArchiveRestore, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/behavior/popover';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
@@ -13,6 +13,7 @@ import {
 } from '@/hooks/use-chat-sessions';
 import type { Conversation } from '@/lib/schemas/chat';
 import { useChatStore } from '@/stores/chat-store';
+import { groupByRecency } from './thread-groups';
 
 const ICON = { size: 15, strokeWidth: 1.8 } as const;
 
@@ -66,14 +67,18 @@ export function SessionMenu() {
   const confirmDelete = useDeleteConfirmStore(s => s.confirm);
 
   const active = conversations?.find(c => c.id === activeId) ?? null;
+  // No cap: the bubble and the /chat sidebar must list the same threads, or a
+  // conversation reachable from one surface silently vanishes on the other.
+  // The popover is already max-height: 320px with overflow-y: auto (chat.css),
+  // so a long list scrolls rather than growing.
   const recent = (conversations ?? [])
     .filter(c => !c.archived)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 10);
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const archived = (conversations ?? [])
     .filter(c => c.archived)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 20);
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const groups = groupByRecency(recent, Date.now());
 
   function onArchive(c: Conversation, next: boolean) {
     archive.mutate(
@@ -173,74 +178,79 @@ export function SessionMenu() {
             <div className="chat-session-menu__divider" role="presentation" />
           </>
         )}
-        {recent.map(c => (
-          <div
-            key={c.id}
-            className="chat-session-menu__row"
-            data-active={c.id === activeId ? 'true' : undefined}
-          >
-            {renamingId === c.id ? (
-              <input
-                className="chat-session-menu__rename"
-                value={draftTitle}
-                autoFocus
-                aria-label="Rename chat"
-                onChange={e => setDraftTitle(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitRename();
-                  }
-                  if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    setRenamingId(null);
-                  }
-                }}
-              />
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="chat-session-menu__open"
-                  onDoubleClick={() => startRename(c)}
-                  onClick={() => {
-                    setActiveConversation(c.id);
-                    setMenuOpen(false);
-                  }}
-                >
-                  {c.title || 'Untitled chat'}
-                  {unread.includes(c.id) && (
-                    <>
-                      <span className="chat-session-dot" aria-hidden="true" />
-                      <span className="sr-only"> — new reply</span>
-                    </>
-                  )}
-                </button>
-                <SessionRowKebab
-                  label={c.title || 'chat'}
-                  items={[
-                    {
-                      label: 'Rename',
-                      icon: <Pencil {...ICON} />,
-                      onClick: () => startRename(c),
-                    },
-                    {
-                      label: 'Archive',
-                      icon: <Archive {...ICON} />,
-                      onClick: () => onArchive(c, true),
-                    },
-                    {
-                      label: 'Delete',
-                      icon: <Trash2 {...ICON} />,
-                      danger: true,
-                      onClick: () => void onDelete(c),
-                    },
-                  ]}
-                />
-              </>
-            )}
-          </div>
+        {groups.map(g => (
+          <Fragment key={g.label}>
+            <div className="chat-session-menu__group">{g.label}</div>
+            {g.items.map(c => (
+              <div
+                key={c.id}
+                className="chat-session-menu__row"
+                data-active={c.id === activeId ? 'true' : undefined}
+              >
+                {renamingId === c.id ? (
+                  <input
+                    className="chat-session-menu__rename"
+                    value={draftTitle}
+                    autoFocus
+                    aria-label="Rename chat"
+                    onChange={e => setDraftTitle(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitRename();
+                      }
+                      if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        setRenamingId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="chat-session-menu__open"
+                      onDoubleClick={() => startRename(c)}
+                      onClick={() => {
+                        setActiveConversation(c.id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {c.title || 'Untitled chat'}
+                      {unread.includes(c.id) && (
+                        <>
+                          <span className="chat-session-dot" aria-hidden="true" />
+                          <span className="sr-only"> — new reply</span>
+                        </>
+                      )}
+                    </button>
+                    <SessionRowKebab
+                      label={c.title || 'chat'}
+                      items={[
+                        {
+                          label: 'Rename',
+                          icon: <Pencil {...ICON} />,
+                          onClick: () => startRename(c),
+                        },
+                        {
+                          label: 'Archive',
+                          icon: <Archive {...ICON} />,
+                          onClick: () => onArchive(c, true),
+                        },
+                        {
+                          label: 'Delete',
+                          icon: <Trash2 {...ICON} />,
+                          danger: true,
+                          onClick: () => void onDelete(c),
+                        },
+                      ]}
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+          </Fragment>
         ))}
         {recent.length === 0 && <p className="chat-session-menu__empty">No chats yet</p>}
         {archived.length > 0 && (

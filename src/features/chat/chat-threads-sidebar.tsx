@@ -30,49 +30,13 @@ import {
 } from '@/hooks/use-chat-sessions';
 import type { Conversation } from '@/lib/schemas/chat';
 import { useChatStore } from '@/stores/chat-store';
+import { groupByRecency } from './thread-groups';
 
 const ICON = { size: 15, strokeWidth: 1.8 } as const;
 
 /** Collapsed-strip persistence — same localStorage pattern as the workspace
  * rail's `sur9e.hifi.rail` (components/shell/rail-nav.tsx). */
 const COLLAPSE_KEY = 'sur9e.chat.threads-collapsed';
-
-const DAY_MS = 86_400_000;
-
-interface ThreadGroup {
-  label: string;
-  items: Conversation[];
-}
-
-/** Bucket threads by their `updatedAt` ISO timestamp into Today / Yesterday /
- * Previous 7 days / Older, relative to the viewer's local midnight. Empty
- * buckets are dropped so a header never renders without rows. Unparseable
- * timestamps fall into "Older" rather than disappearing. */
-function groupByRecency(list: Conversation[], now: number): ThreadGroup[] {
-  const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  const todayStart = midnight.getTime();
-
-  const today: Conversation[] = [];
-  const yesterday: Conversation[] = [];
-  const week: Conversation[] = [];
-  const older: Conversation[] = [];
-
-  for (const c of list) {
-    const t = Date.parse(c.updatedAt);
-    if (!Number.isFinite(t) || t < todayStart - 7 * DAY_MS) older.push(c);
-    else if (t >= todayStart) today.push(c);
-    else if (t >= todayStart - DAY_MS) yesterday.push(c);
-    else week.push(c);
-  }
-
-  return [
-    { label: 'Today', items: today },
-    { label: 'Yesterday', items: yesterday },
-    { label: 'Previous 7 days', items: week },
-    { label: 'Older', items: older },
-  ].filter(g => g.items.length > 0);
-}
 
 /** Per-row ⋮ trigger + its portaled actions menu. Own open state per row. */
 function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
