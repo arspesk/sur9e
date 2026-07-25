@@ -10,6 +10,19 @@ describe('ThinkingBlock', () => {
     expect(toggle.hasAttribute('aria-controls')).toBe(false);
   });
 
+  it('renders nothing once settled with no thinking text', () => {
+    // An empty event still produced a chip, which opened onto blank space.
+    const { container } = render(<ThinkingBlock text="   " streaming={false} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('still shows the chip while streaming, before any text has arrived', () => {
+    // The body fills delta by delta, and the chip carries the elapsed counter
+    // in the meantime — so an empty text is expected here, not a defect.
+    render(<ThinkingBlock text="" streaming={true} />);
+    expect(screen.getByRole('button', { name: /Thinking… \d+s/ })).toBeInTheDocument();
+  });
+
   it('expanding sets aria-controls on the toggle to the body element id', () => {
     render(<ThinkingBlock text="reasoning…" streaming={false} />);
     const toggle = screen.getByRole('button', { name: 'Thinking' });

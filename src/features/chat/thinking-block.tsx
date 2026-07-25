@@ -16,6 +16,12 @@ export function ThinkingBlock({ text, streaming }: { text: string; streaming: bo
     return () => clearInterval(t);
   }, [streaming]);
 
+  // Providers sometimes emit a thinking event with no body — a chip for it
+  // opens onto blank space and reads as broken. While streaming the chip is
+  // still worth showing: it carries the elapsed counter, and the text arrives
+  // delta by delta after the event does.
+  if (!streaming && !text.trim()) return null;
+
   return (
     <div className="chat-thinking">
       <button
