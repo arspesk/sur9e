@@ -921,10 +921,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chat-header__mark {
-  color: var(--accent);
-  flex-shrink: 0;
-}
 .chat-header__close {
   display: inline-flex;
   align-items: center;

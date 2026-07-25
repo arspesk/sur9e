@@ -2,7 +2,6 @@
 
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chat-store';
-import { ChatBrandMark } from './brand-mark';
 import { ChatJobsSlot } from './chat-jobs-slot';
 import { SessionMenu } from './session-menu';
 
@@ -12,7 +11,6 @@ export function ChatHeader() {
   return (
     <div className="chat-header">
       <div className="chat-header__row">
-        <ChatBrandMark size={18} className="chat-header__mark" />
         <SessionMenu />
         {/* Expand to the full-screen chat. The active conversation carries
             over through the chat store, and an in-flight stream reattaches

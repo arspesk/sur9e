@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { useChatStore } from '@/stores/chat-store';
-import { ChatBrandMark } from './brand-mark';
 import { ChatComposer } from './chat-composer';
 import { ChatEmptyState, SetupCard } from './chat-empty-state';
 import { ChatJobsSlot } from './chat-jobs-slot';
@@ -57,7 +56,6 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
       <ChatThreadsSidebar />
       <section className="chat-page__main" aria-label="Conversation">
         <header className="chat-page__header">
-          <ChatBrandMark size={18} className="chat-header__mark" />
           <span className="chat-page__title" title={headerTitle}>
             {headerTitle}
           </span>
