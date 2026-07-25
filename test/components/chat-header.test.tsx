@@ -1,6 +1,6 @@
 // test/components/chat-header.test.tsx
 //
-// ChatHeader: brand mark + session switcher + close button, with the
+// ChatHeader: session switcher + expand + close button, with the
 // (currently empty) Plan-4 jobs slot mounted directly below the row. Session
 // switching (SessionMenu replacing the static title) lands in the next
 // task — this only covers what ChatHeader itself composes today.
@@ -11,6 +11,14 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatHeader } from '@/features/chat/chat-header';
 import { useChatStore } from '@/stores/chat-store';
+
+// The header's expand button routes to /chat, so the component needs a
+// router — there's no app-router context in a bare render().
+const pushSpy = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushSpy, refresh: () => {}, replace: () => {} }),
+  usePathname: () => '/offers',
+}));
 
 function renderHeader() {
   vi.stubGlobal(
@@ -45,9 +53,11 @@ afterEach(() => {
 });
 
 describe('ChatHeader', () => {
-  it('renders the brand mark, title, and close button', () => {
+  it('renders the title and close button, without a brand mark', () => {
     const { container } = renderHeader();
-    expect(container.querySelector('.chat-header__mark')).toBeTruthy();
+    // The mark was removed from both chat headers — the title carries the
+    // identity, and the row is tight enough that a logo only crowded it.
+    expect(container.querySelector('.chat-header__mark')).toBeNull();
     expect(screen.getByText('Chat')).toBeInTheDocument();
     // The model chip moved to the composer; the header no longer carries it.
     expect(screen.queryByRole('button', { name: /Model:/ })).toBeNull();

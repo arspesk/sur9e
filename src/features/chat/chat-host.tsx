@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useTextSelectionCapture } from '@/hooks/use-text-selection-capture';
 import { useChatStore } from '@/stores/chat-store';
@@ -22,6 +23,10 @@ export function ChatHost() {
   useTextSelectionCapture();
   const open = useChatStore(s => s.open);
   const toggleChat = useChatStore(s => s.toggleChat);
+  // /chat IS the chat — a corner bubble on top of it would be a second,
+  // competing surface for the same conversation.
+  const pathname = usePathname();
+  const onChatPage = pathname === '/chat' || pathname.startsWith('/chat/');
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
 
@@ -116,7 +121,7 @@ export function ChatHost() {
   return (
     <>
       <ChatJobsRuntime />
-      {!open && (
+      {!onChatPage && !open && (
         <ChatBubble
           ref={bubbleRef}
           open={open}
@@ -127,7 +132,7 @@ export function ChatHost() {
           onClick={toggleChat}
         />
       )}
-      {open && <ChatCard />}
+      {!onChatPage && open && <ChatCard />}
     </>
   );
 }

@@ -83,13 +83,22 @@
     background-position: -200% 0;
   }
 }
+/* An icon, not a text glyph: sized in px, and NOT rotated on expand — the
+   wrap glyph is directional, so flipping it just reads as broken. Open state
+   is signalled by weight instead. */
 .chat-thinking__caret {
-  font-size: 9px;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
   color: var(--text-3);
-  transition: transform var(--dur-snappy);
+  opacity: 0.7;
+  transition:
+    opacity var(--dur-snappy),
+    color var(--dur-snappy);
 }
 .chat-thinking__toggle[aria-expanded="true"] .chat-thinking__caret {
-  transform: rotate(180deg);
+  color: var(--text-2);
+  opacity: 1;
 }
 .chat-thinking__body {
   margin-top: 4px;
@@ -344,6 +353,20 @@
   max-height: 320px;
   overflow-y: auto;
   padding: 4px;
+}
+/* Recency headers (Today / Yesterday / …), matching .chat-threads__group in
+   chat-threads.css so the bubble's list and the /chat sidebar group the same
+   threads with the same voice. */
+.chat-session-menu__group {
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--meta);
+  margin: var(--space-3) 6px var(--space-1);
+}
+.chat-session-menu__group:first-child {
+  margin-top: var(--space-1);
 }
 .chat-session-menu__new {
   display: flex;
@@ -898,10 +921,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chat-header__mark {
-  color: var(--accent);
-  flex-shrink: 0;
-}
 .chat-header__close {
   display: inline-flex;
   align-items: center;
@@ -931,6 +950,25 @@
 .chat-header__close:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Expand + close are a pair at the right edge: the first one takes the auto
+   margin that pushes the group right, the second just needs a hair of gap. */
+.chat-header__expand + .chat-header__close {
+  margin-left: 2px;
+}
+/* On a phone this card already IS the full-screen chat (see the inset:0
+   takeover below), and /chat bounces straight back here — so "expand" would
+   be a round trip to nowhere. Same breakpoint as that takeover. */
+@media (max-width: 640px) {
+  .chat-header__expand {
+    display: none;
+  }
+  /* display:none removes it from layout but NOT from the DOM, so the pair rule
+     above still matches and would pin the close button at 2px next to the
+     title. Hand the auto margin back so it returns to the right edge. */
+  .chat-header__expand + .chat-header__close {
+    margin-left: auto;
+  }
 }
 .chat-model-chip {
   display: inline-flex;

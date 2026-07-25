@@ -1,0 +1,196 @@
+/* /chat — full-screen chat: thread sidebar + conversation column.
+   Reuses chat.css component classes (.chat-composer, .chat-transcript,
+   .chat-suggestions, .chat-empty, …); this file only lays out the page
+   shell, so the bubble card and this page can never drift visually. */
+
+.chat-page {
+  display: grid;
+  /* Wide enough for a full AI-generated thread title ("ZipRecruiter follow-up
+     email draft") to sit on one line — at 240px nearly every title ellipsised.
+     The conversation column still gets the rest, and the panel collapses when
+     the extra width is in the way (see chat-threads.css). */
+  grid-template-columns: 296px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+}
+
+/* ─── Conversation column ─── */
+
+.chat-page__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-page__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Fixed chrome: the transcript below is what scrolls, never this row. */
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  /* Same ground as the thread list (--surface, chat-threads.css) so the two
+     read as one continuous band of chrome across the top, with the
+     conversation canvas below it. */
+  background: var(--surface);
+}
+/* Same contract as .chat-header__title in chat.css: take the free space and
+   truncate, so a long thread title can never widen or wrap the header row. */
+.chat-page__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Background-jobs strip (.chat-jobs, styled in chat.css) sits between the
+   header and the body as a full-width block — exactly as in the bubble, where
+   it is a block child of the column-flex .chat-header. As a direct flex item
+   here it must not shrink: it owns a border-bottom, a 100%-wide progress bar
+   and an ellipsised title that all need a definite full width, and its
+   terminal states (error line, action row, logs pane) grow it downward. */
+.chat-page__main > .chat-jobs {
+  flex-shrink: 0;
+}
+
+/* Mirrors .chat-card__body in chat.css: a flex column whose height is handed
+   down to .chat-transcript, which is the real scroller (chat.css gives it
+   flex: 1; min-height: 0; overflow-y: auto). This element must NEVER scroll —
+   with overflow-y: auto here the transcript's flex: 1 goes inert, it grows to
+   content height, and its scrollRef stops being a scrolling element, which
+   kills auto-follow-the-stream, the pin-the-sent-message jump, onScroll and
+   the jump-to-bottom button. Padding lives on the children (.chat-transcript
+   and .chat-empty both bring their own), not here. */
+.chat-page__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat-page__body > * {
+  max-width: 720px;
+  margin-inline: auto;
+}
+/* Capping the scroller itself is harmless, but the auto inline margins above
+   are not: auto cross-axis margins suppress flex stretch, so the transcript
+   would shrink-wrap its content instead of filling the column. Pin the width
+   explicitly and it fills the capped column while staying the scroller. */
+.chat-page__body > .chat-transcript {
+  width: 100%;
+}
+
+/* ─── Arrival ───
+   The page enters from the direction the user actually came from, which is why
+   chat-store records the door (chatEntryOrigin). The two journeys are not the
+   same shape and must not share one animation:
+
+   · from Home — the hero composer sits mid-page, so its counterpart GLIDES
+     down into the dock. Straight travel on the standard soft curve, chosen in
+     the transition lab (option A + "soft"). The travel is deliberately ~120px
+     rather than the true ~600px: covering the real distance in a readable time
+     would need nearly a second, and doing it faster is what made the earlier
+     version read as a jump-cut.
+   · from the bubble — the card is already a bottom-right corner object whose
+     composer is already at the bottom. Replaying a downward glide would move it
+     from somewhere it never was, so the conversation GROWS out of that corner
+     instead.
+
+   Cold loads and rail clicks get no directional motion — there is no prior
+   position to move from. Only plays on mount: switching threads is a
+   router.replace on the same route, so nothing remounts. */
+@keyframes chat-page-composer-glide {
+  from {
+    transform: translateY(-120px);
+    opacity: 0;
+  }
+  /* Solid for most of the travel: fading throughout leaves the eye nothing
+     stable to track, which was half of the old "clanky" feel. */
+  35% {
+    opacity: 1;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes chat-page-corner-in {
+  from {
+    transform: scale(0.42) translate(24%, 18%);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes chat-page-chrome-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.chat-page__composer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* From Home: the composer leads, the chrome follows. */
+.chat-page[data-enter="home"] .chat-page__composer {
+  animation: chat-page-composer-glide 420ms var(--ease-soft) both;
+}
+.chat-page[data-enter="home"] .chat-page__header,
+.chat-page[data-enter="home"] .chat-page__body {
+  animation: chat-page-chrome-in var(--dur-base) var(--ease-soft) both;
+  animation-delay: 70ms;
+}
+
+/* From the bubble: the whole conversation column grows out of the corner the
+   card occupied. The thread list fades rather than scaling — it had no
+   counterpart in the bubble, so it is arriving, not moving. */
+.chat-page[data-enter="bubble"] .chat-page__main {
+  transform-origin: 100% 100%;
+  animation: chat-page-corner-in 420ms var(--ease-soft) both;
+}
+.chat-page[data-enter="bubble"] .chat-threads {
+  animation: chat-page-chrome-in var(--dur-base) var(--ease-soft) both;
+  animation-delay: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-page[data-enter] .chat-page__composer,
+  .chat-page[data-enter] .chat-page__header,
+  .chat-page[data-enter] .chat-page__body,
+  .chat-page[data-enter] .chat-page__main,
+  .chat-page[data-enter] .chat-threads {
+    animation: none;
+  }
+}
+
+.chat-page__composer > * {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+/* Mobile: /chat is normally reached via the bubble (already a full-screen
+   takeover ≤640px), but a deep link should still work — drop the sidebar
+   and leave room for the bottom nav. */
+@media (max-width: 640px) {
+  .chat-page {
+    grid-template-columns: 1fr;
+  }
+  .chat-page__composer {
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  }
+}

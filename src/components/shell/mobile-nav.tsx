@@ -17,7 +17,7 @@
  * CSS lives in app/styles/chrome.css (.bottom-bar / .bottom-bar-tab).
  */
 
-import { Briefcase, LineChart, Settings, User } from 'lucide-react';
+import { Briefcase, House, LineChart, Settings, User } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -34,6 +34,13 @@ interface MobileTab {
 }
 
 const TABS: MobileTab[] = [
+  {
+    href: '/',
+    label: 'Home',
+    dataTab: 'home',
+    activeOn: ['/'],
+    icon: <House aria-hidden="true" strokeWidth={1.8} />,
+  },
   {
     href: '/offers',
     label: 'Offers',
@@ -69,7 +76,11 @@ export function MobileNav() {
   return (
     <nav className="bottom-bar" aria-label="Mobile navigation">
       {TABS.map(tab => {
-        const isActive = tab.activeOn.some(p => pathname === p || pathname.startsWith(`${p}/`));
+        // '/' is exact-only — as a prefix it would match every route and
+        // light up the Home tab everywhere.
+        const isActive = tab.activeOn.some(
+          p => pathname === p || (p !== '/' && pathname.startsWith(`${p}/`)),
+        );
         return (
           <Link
             key={tab.href}

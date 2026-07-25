@@ -14,6 +14,9 @@
 @import "./styles/pipeline-inline.css";
 @import "./styles/toast.css";
 @import "./styles/chat.css";
+@import "./styles/chat-page.css";
+@import "./styles/chat-threads.css";
+@import "./styles/home-inline.css";
 
 /* Wire next/font/google CSS variables into the design-token layer.
    These declarations come after chrome.css so they win in the cascade

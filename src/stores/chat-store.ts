@@ -46,6 +46,23 @@ interface ChatState {
   selections: string[];
   /** Last message the user sent, keyed per conversation — Retry re-sends it. */
   lastUserMessages: Record<string, string>;
+  /** A prompt handed to the chat by another surface (e.g. Home's "Draft
+   * follow-up") to be SENT on arrival, not merely typed. Deliberately NOT the
+   * queuedMessages slot: the composer restores that one into the input, and
+   * the two consumers would race. Read-and-cleared exactly once by the
+   * conversation hook. */
+  autoSendMessage: string | null;
+  /** Which door the user came through to reach /chat, so the page can enter
+   * from where they were looking: the hero composer sits mid-page and its
+   * counterpart glides down to dock, while the bubble is a bottom-right card
+   * that grows outward. Null for a cold load or a rail click, which get no
+   * directional motion.
+   *
+   * Cleared on a short timer by the page rather than read-and-cleared, because
+   * starting a new thread rewrites /chat → /chat/[id], and those are different
+   * route segments: the page remounts mid-journey and a consume-on-first-mount
+   * would leave the second mount with nothing to animate. */
+  chatEntryOrigin: 'home' | 'bubble' | null;
   /** Backend refused with the onboarding-preflight shape → show setup card. */
   setupRequired: boolean;
   /** Per-conversation provider/model override (DRAFT_OVERRIDE_KEY pre-create). */
@@ -78,6 +95,10 @@ interface ChatState {
   removeSelection: (index: number) => void;
   /** Drop every selection — called after a successful send. */
   clearSelections: () => void;
+  setChatEntryOrigin: (origin: 'home' | 'bubble' | null) => void;
+  setAutoSendMessage: (text: string | null) => void;
+  /** Read-and-clear — only the first caller after a handoff wins. */
+  takeAutoSendMessage: () => string | null;
   setSetupRequired: (v: boolean) => void;
   setModelOverride: (key: string, pair: ModelOverride | null) => void;
   /** Move every draft-keyed slot (model override, queued, last-user) onto the
@@ -105,6 +126,8 @@ const createChatState: StateCreator<ChatState> = (set, get) => ({
   queuedAttachments: {},
   selections: [],
   lastUserMessages: {},
+  autoSendMessage: null,
+  chatEntryOrigin: null,
   setupRequired: false,
   modelOverride: {},
   minimizedByDrawer: false,
@@ -186,6 +209,13 @@ const createChatState: StateCreator<ChatState> = (set, get) => ({
     }),
   removeSelection: index => set(s => ({ selections: s.selections.filter((_, i) => i !== index) })),
   clearSelections: () => set(s => (s.selections.length ? { selections: [] } : s)),
+  setChatEntryOrigin: origin => set({ chatEntryOrigin: origin }),
+  setAutoSendMessage: text => set({ autoSendMessage: text }),
+  takeAutoSendMessage: () => {
+    const text = get().autoSendMessage;
+    if (text != null) set({ autoSendMessage: null });
+    return text;
+  },
   setSetupRequired: v => set({ setupRequired: v }),
   setModelOverride: (key, pair) =>
     set(s => {

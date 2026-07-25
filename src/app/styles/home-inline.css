@@ -1,0 +1,381 @@
+/* Home tab (/) — chat hero, agenda digest, follow-ups, pending offers.
+   Layout only; the composer/suggestion chips inside the hero are chat.css
+   components reused as-is. */
+
+.home {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+/* ─── Agenda digest cards ─── */
+
+.agenda-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.agenda-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-3);
+}
+.agenda-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ghosted content icon: oversized, rotated, bleeding past the card edge,
+   in brand accent. Texture, not chrome — it must never compete with the
+   count or the CTA. */
+.agenda-card__wm {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  color: var(--accent);
+  opacity: 0.1;
+  width: 88px;
+  height: 88px;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-10deg);
+  transition: opacity var(--dur-smooth) var(--ease-soft);
+}
+.agenda-card__wm svg {
+  width: 100%;
+  height: 100%;
+}
+.agenda-card:hover .agenda-card__wm {
+  opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-card__wm {
+    transition: none;
+  }
+}
+
+.agenda-card__count {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.agenda-card__label {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 1px;
+}
+.agenda-card__cta {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agenda-card__cta a,
+.agenda-card__cta button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+}
+/* Nudges toward the destination on hover — the only motion on these cards
+   besides the ghosted icon's opacity lift. */
+/* Matched to the optical size of the ↓ glyph the other two cards use, so the
+   four CTAs read as one row. */
+.agenda-card__cta svg {
+  width: 11px;
+  height: 11px;
+  transition: transform var(--dur-fast) var(--ease-soft);
+}
+.agenda-card__cta a:hover svg,
+.agenda-card__cta button:hover svg {
+  transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .agenda-card__cta svg {
+    transition: none;
+  }
+  .agenda-card__cta a:hover svg,
+  .agenda-card__cta button:hover svg {
+    transform: none;
+  }
+}
+.agenda-card__cta a:hover,
+.agenda-card__cta button:hover {
+  text-decoration: underline;
+}
+
+/* ─── Hero ─── */
+
+.home-hero {
+  text-align: center;
+  padding-top: var(--space-5);
+}
+.home-hero__greeting {
+  font-family: var(--font-general-sans);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-4);
+  text-wrap: balance;
+}
+.home-hero__composer {
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: left;
+}
+/* The composer's "/" and "@" dropdowns are anchored upward (bottom: 100%) in
+   chat.css, which is right for the bubble — its composer sits at the foot of a
+   600px card. The hero's composer sits near the TOP of the page, so upward runs
+   the list off-screen. Flip both downward here, and cap the height against the
+   viewport so a long offer list scrolls instead of spilling past the fold. */
+.home-hero__composer .chat-slash,
+.home-hero__composer .chat-mention {
+  bottom: auto;
+  /* The anchor is .chat-composer, whose 8px bottom padding sits between its
+     padding box and the visible .chat-composer__box — so a plain 100% opens a
+     gap under the input. Pull that padding back and leave a deliberate 4px. */
+  top: calc(100% - var(--space-2) + 4px);
+  /* Align to the visible box's edges (composer padding is --space-3), not the
+     padding box, so the list and the input share one vertical rhythm. */
+  left: var(--space-3);
+  right: var(--space-3);
+  max-height: min(260px, calc(100vh - 320px));
+  /* chat.css gives these z-index 1–2, which is enough inside the bubble card.
+     Here they open over the agenda cards, which are positioned (for their
+     ghosted icon) and later in the DOM, so they would paint straight through
+     the list. --z-page-modal keeps it above page content but below the rail,
+     drawer and chat deck. */
+  z-index: var(--z-page-modal);
+}
+
+.home-hero__chips {
+  max-width: 640px;
+  margin: var(--space-3) auto 0;
+}
+/* The bubble stacks its starters full-width in a narrow card; the hero has
+   room, so they read better as a centered row of pills. Scoped to the hero
+   so the bubble's own layout is untouched. */
+.home-hero__chips .chat-suggestions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.home-hero__chips .chat-suggestion-chip {
+  width: auto;
+}
+
+/* ─── Sections (follow-ups, pending offers) ─── */
+
+.home-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.home-section {
+  margin-top: var(--space-6);
+  min-width: 0;
+}
+/* Matches .analytics-zone-label (Pipeline / Usage) so the app has one
+   section-label voice: display face, accent-strong (the AA-safe accent at
+   this size). Size and tracking stay as they were on Home. */
+.home-section__label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent-text-strong);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.home-section__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Two-line row: [logo] [company / meta] ......... [⋮].
+   The two-column Home layout gives each section ~460px, so NOTHING here may
+   wrap — the logo and the kebab are fixed, and both text lines truncate.
+   Inline actions used to live in the row and pushed the score/pill off the
+   end; they are all in the kebab menu now. */
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-paper);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+  transition: border-color var(--dur-fast) var(--ease-soft);
+}
+.home-row:hover {
+  border-color: var(--border-strong);
+}
+
+/* CompanyAvatar tile (.cmk, 38px — the kanban size, which matches a
+   two-line row's height). Never shrinks, never a flex basis of its own. */
+.home-row__logo {
+  flex: 0 0 auto;
+}
+
+.home-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Line 1 — company plus the row's small facts (score + status, or urgency).
+   The chips sit with the company, not the role: they belong to the offer, and
+   next to the role they read as part of the job title. Company is the only
+   elastic item, so the chips keep their intrinsic width and never get pushed
+   off the end. */
+.home-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.home-row__company {
+  flex: 0 1 auto;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-row__company--link {
+  text-decoration: none;
+  color: var(--text);
+}
+.home-row__company--link:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+/* Line 2 — the role, alone, with the full row width to truncate against. */
+.home-row__role {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-row__score {
+  flex: 0 0 auto;
+  font-family: var(--font-ibm-plex-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.home-row__score[data-tier="high"] {
+  color: var(--score-high);
+}
+.home-row__score[data-tier="mid"] {
+  color: var(--score-mid);
+}
+.home-row__score[data-tier="low"] {
+  color: var(--score-low);
+}
+
+/* Shared .pill (chrome.css) dropped into the meta line — same colors, meta
+   scale. home-inline.css is imported after chrome.css, so these win. */
+.home-row__status {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  gap: 5px;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.home-row__status .dot {
+  width: 5px;
+  height: 5px;
+}
+
+.home-row__pill {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.home-row__pill[data-urgency="overdue"] {
+  background: var(--st-danger-soft);
+  color: var(--st-danger);
+}
+.home-row__pill[data-urgency="urgent"] {
+  background: var(--st-warn-soft);
+  color: var(--st-warn);
+}
+.home-row__pill[data-urgency="waiting"] {
+  background: var(--st-neutral-soft);
+  color: var(--text-muted);
+}
+
+/* ⋮ trigger — the row's only action affordance, so it stays visible
+   (no hover-reveal: it has to be reachable on touch too). */
+.home-row__kebab {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) 6px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-soft),
+    background var(--dur-fast) var(--ease-soft);
+}
+.home-row__kebab:hover,
+.home-row__kebab[data-open] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.home-row__kebab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-row,
+  .home-row__kebab {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .home-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .home {
+    padding-bottom: var(--space-9);
+  }
+  .agenda-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .home-hero__greeting {
+    font-size: 22px;
+  }
+}

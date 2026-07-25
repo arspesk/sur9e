@@ -100,6 +100,27 @@ Sur9e is one project with **two interfaces sharing the same files on disk**:
 
 The flow is a **two-stage pipeline**: new postings get a _cheap screen_ (fast model, fit/no-fit triage), and only survivors get the _deep evaluation_ (capable model — archetype fit scoring, comp analysis, legitimacy check, CV-match table). You get conviction where it matters and don't burn tokens where it doesn't.
 
+### Home — what to do next
+
+Opening sur9e lands on a control center rather than a table. It answers one question: what needs you today.
+
+- **Follow-ups due** — applications that have gone quiet, timed from the day you actually applied (read from the status log, not the day the offer was evaluated). Draft the email in chat or mark it sent, and the cadence moves on.
+- **Pending offers** — screened and evaluated roles you haven't decided on, highest score first, with evaluate / mark-applied / discard on each row.
+- **Agenda cards** — follow-ups due, offers waiting on you, URLs still to screen, jobs running.
+- **Ask anything** — the composer is the full chat, so a question about your pipeline starts right here.
+
+<div align="center">
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="public/screenshots/home-and-chat-dark.png"><img alt="sur9e Home — agenda cards, follow-ups due, pending offers, and the chat bubble" src="public/screenshots/home-and-chat-bright.png" width="800"></picture>
+
+</div>
+
+### Chat that can act
+
+Every surface carries a chat that knows what you're looking at. It reads your tracker and reports, and it can drive the app — start an evaluation, change a status, edit a report, navigate — with spend and writes behind an approval card you click.
+
+It comes in two shapes sharing one conversation: a **corner bubble** for a quick question without losing your place, and a **full-screen view** at `/chat` with your thread history beside it. Threads live in the URL, so a conversation is refreshable and linkable. On a phone the bubble _is_ the full-screen view. Attach files, `@` an offer, `/` a mode, and switch models per conversation.
+
 ### Modes
 
 Each capability is a mode — a versioned prompt file in `content/modes/` with its own default model. Ask your agent in plain language; it routes to the right mode.

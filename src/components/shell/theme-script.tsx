@@ -55,15 +55,21 @@ try {
 }
 
 /**
- * Injects the data-rail attribute-selector CSS rules as a raw <style> tag.
+ * Injects the data-rail / data-rail-peek attribute-selector CSS rules as a
+ * raw <style> tag.
  *
  * Turbopack's LightningCSS pipeline silently drops attribute-selector rules
  * whose attribute name doesn't appear in JS content scans (data-rail is only
- * set at runtime via localStorage / JS). Injecting them here bypasses the CSS
- * pipeline entirely, matching what legacy chrome.css does verbatim.
+ * set at runtime via localStorage / JS; data-rail-peek only from RailNav's
+ * hover/focus state). Injecting them here bypasses the CSS pipeline entirely,
+ * matching what legacy chrome.css does verbatim.
  *
- * Rules are ordered to match chrome.css source order. Media-query overrides
- * are included so tablet/mobile responsive behaviour is also preserved.
+ * EVERY attribute-scoped rail rule must exist in BOTH this block and
+ * chrome.css, in the same order — chrome.css is the readable source of truth,
+ * this copy is what actually reaches the browser.
+ *
+ * Media-query overrides are included so tablet/mobile responsive behaviour is
+ * also preserved.
  */
 export function RailStyles() {
   const css = `
@@ -72,7 +78,15 @@ export function RailStyles() {
 :root[data-rail="full"] .app{grid-template-columns:var(--rail-w-full) 1fr}
 :root[data-rail="compact"] .app{grid-template-columns:var(--rail-w) 1fr}
 html:not(.boot-ready) .app{transition:none}
-.app[data-rail="full"] .rail{align-items:stretch;padding:14px 12px}
+html:not(.boot-ready) .rail,html:not(.boot-ready) .rail-scrim{transition:none}
+/* In-flow gutter — reserves the rail's footprint. NEVER transitioned: it is
+   what sizes .main, and animating .main's width is the 45s /offers freeze. */
+.app[data-rail="full"] .rail-gutter{width:var(--rail-w-full)}
+:root[data-rail="full"] .rail-gutter{width:var(--rail-w-full)}
+:root[data-rail="compact"] .rail-gutter{width:var(--rail-w)}
+.app[data-rail="full"] .rail{width:var(--rail-w-full);align-items:stretch;padding:14px 12px}
+:root[data-rail="full"] .rail{width:var(--rail-w-full)}
+:root[data-rail="compact"] .rail{width:var(--rail-w)}
 .app[data-rail="full"] .rail-header{flex-direction:row;justify-content:space-between;align-items:center;padding:0 4px 0 6px;height:48px;margin-bottom:18px;gap:8px}
 .app[data-rail="full"] .rail-brand{justify-content:flex-start;flex:1;min-width:0;height:48px}
 .app[data-rail="full"] .rail-brand-icon{display:none}
@@ -80,7 +94,9 @@ html:not(.boot-ready) .app{transition:none}
 .app[data-rail="full"] .rail-brand-wordmark.dark{display:none}
 [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.light{display:none}
 [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark{display:block}
-.app[data-rail="full"] .rail-section-label{display:block}
+.app[data-rail="full"] .rail-section-label{padding:14px 10px 6px}
+.app[data-rail="full"] .rail-section-label::before{opacity:0}
+.app[data-rail="full"] .rail-section-label__text{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal}
 .app[data-rail="full"] .rail-item{width:100%;justify-content:flex-start;padding:0 10px;gap:12px}
 .app[data-rail="full"] .rail-item.active::before{left:-12px}
 .app[data-rail="full"] .rail-item svg.rail-icon,.app[data-rail="full"] .rail-item>svg{width:18px;height:18px}
@@ -95,12 +111,50 @@ html:not(.boot-ready) .app{transition:none}
 .app[data-rail="full"] .rail-theme{justify-content:flex-start;padding:0 10px}
 .app[data-rail="full"] .rail-toggle svg{transform:rotate(0deg)}
 .app[data-rail="compact"] .rail-toggle svg{transform:rotate(180deg)}
-.app[data-rail="compact"] .rail-toggle{width:32px;height:26px;border-radius:var(--radius-sm)}
+/* ── RAIL HOVER-PEEK ── mirror of the same block in chrome.css (~line 500).
+   data-rail-peek is a runtime-only attribute, so the stylesheet copy gets
+   stripped and THIS is the one that ships. Keep both copies in sync and in
+   the same order. Unpinned rail only, ≥1025px only: the rail widens as an
+   overlay (it is position:fixed) while .rail-gutter keeps reserving --rail-w,
+   so .main never reflows. */
+@keyframes railPeekLabelIn{from{opacity:0}to{opacity:1}}
+@media(min-width:1025px){
+  .app[data-rail="compact"][data-rail-peek="true"] .rail{width:var(--rail-w-full);align-items:stretch;padding:14px 12px;z-index:calc(var(--z-drawer) - 1);box-shadow:var(--shadow-lg)}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-scrim{opacity:1;pointer-events:auto}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-header{flex-direction:row;justify-content:space-between;align-items:center;padding:0 4px 0 6px;height:48px;margin-bottom:18px;gap:8px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand{justify-content:flex-start;flex:1;min-width:0;height:48px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-icon{display:none}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.light{display:block}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.dark{display:none}
+  [data-theme="dark"] .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.light{display:none}
+  [data-theme="dark"] .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.dark{display:block}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label{padding:14px 10px 6px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label::before{opacity:0}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label__text{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item{width:100%;justify-content:flex-start;padding:0 10px;gap:12px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item.active::before{left:-12px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item svg.rail-icon,.app[data-rail="compact"][data-rail-peek="true"] .rail-item>svg{width:18px;height:18px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label{display:inline}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-badge{position:static;margin-left:auto;height:18px;min-width:22px;padding:0 6px;font-size:11px;background:var(--surface-2);color:var(--text-3)}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-badge.accent{background:var(--accent-cta);color:var(--accent-on)}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-tooltip{display:none}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail .theme-switch{flex-direction:row}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-theme{justify-content:flex-start;padding:0 10px}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label,.app[data-rail="compact"][data-rail-peek="true"] .rail-section-label{animation:railPeekLabelIn var(--dur-quick) var(--ease-calm) var(--dur-fast) both}
+}
+@media(prefers-reduced-motion:reduce){
+  .rail,.rail-scrim,.rail-toggle,.rail-toggle svg{transition:none}
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label,.app[data-rail="compact"][data-rail-peek="true"] .rail-section-label{animation:none}
+}
 @media(max-width:1024px){
   .app,.app[data-rail="full"],.app[data-rail="compact"],:root[data-rail="full"] .app,:root[data-rail="compact"] .app{grid-template-columns:var(--rail-w) 1fr}
+  .app[data-rail="full"] .rail,:root[data-rail="full"] .rail{width:var(--rail-w)}
+  .app[data-rail="full"] .rail-gutter,:root[data-rail="full"] .rail-gutter{width:var(--rail-w)}
   .app[data-rail="full"] .rail{align-items:center;padding:14px 0}
   .app[data-rail="full"] .rail-label{display:none}
-  .app[data-rail="full"] .rail-section-label{display:none}
+  .app[data-rail="full"] .rail-section-label{padding:8px 0}
+  .app[data-rail="full"] .rail-section-label::before{opacity:1}
+  .app[data-rail="full"] .rail-section-label__text{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
   .app[data-rail="full"] .rail-brand-wordmark.light,.app[data-rail="full"] .rail-brand-wordmark.dark,[data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.light,[data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark{display:none}
   .app[data-rail="full"] .rail-brand-icon{display:block}
   .app[data-rail="full"] .rail-brand{justify-content:center;flex:none;height:auto}
