@@ -170,13 +170,15 @@ button {
 }
 
 /* ── APP SHELL ── */
-/* Flex (was grid) so the rail collapse/expand animates by transitioning
-   width on .rail alone — single-element layout property — instead of
-   transitioning .app's grid-template-columns, which forced a FULL grid
-   relayout every animation frame and cascaded into every child.
+/* Flex (was grid) so the rail collapse/expand never transitions .app's own
+   track sizing, which forced a FULL grid relayout every animation frame and
+   cascaded into every child. The cost showed up worst on /offers because the
+   percentage-width fixed-layout table inside recomputed all columns per frame.
 
-   The cost showed up worst on /offers because the percentage-width
-   fixed-layout table inside recomputed all columns per frame.
+   The left column is reserved by .rail-gutter — an empty in-flow flex item.
+   .rail itself is position: fixed ON TOP of that gutter, which is what lets
+   the hover-peek overlay animate its own width without ever changing .main's
+   width. See the .rail-gutter and .rail comments below.
 
    Main flex-fills the remaining width naturally; no transition needed
    on .app itself because flex children resize without per-frame
@@ -186,12 +188,36 @@ button {
   min-height: 100vh;
 }
 .app > .main {
-  /* Flex grow to fill all space left by the rail.
+  /* Flex grow to fill all space left by the rail gutter.
      min-width: 0 prevents flex children from overflowing on narrow
      viewports (default flex min-width: auto would force horizontal
      scroll when content is wider than the available track). */
   flex: 1;
   min-width: 0;
+}
+
+/* ── RAIL GUTTER ──
+   The ONLY element that reserves horizontal space for the rail, and therefore
+   the only element that decides .main's width. It must NEVER get a width
+   transition: animating it animates .main every frame, which is exactly the
+   regression recorded on .rail below (559-row /offers table, 45+ seconds of
+   frozen renderer per toggle).
+
+   It snaps between --rail-w and --rail-w-full when the user pins/unpins, and
+   it deliberately does NOT react to hover-peek — the peek overlay floats
+   above the content instead of pushing it. */
+.rail-gutter {
+  width: var(--rail-w);
+  flex-shrink: 0;
+}
+.app[data-rail="full"] .rail-gutter {
+  width: var(--rail-w-full);
+}
+:root[data-rail="full"] .rail-gutter {
+  width: var(--rail-w-full);
+}
+:root[data-rail="compact"] .rail-gutter {
+  width: var(--rail-w);
 }
 
 /* ── RAIL ── */
@@ -203,19 +229,32 @@ button {
   align-items: center;
   padding: 14px 0;
   gap: 6px;
-  position: sticky;
+  /* fixed, not sticky: the rail is lifted OUT OF FLOW so its width can
+     animate freely. The in-flow .rail-gutter above holds the space. */
+  position: fixed;
+  left: 0;
   top: 0;
-  height: 100vh;
+  bottom: 0;
   z-index: var(--z-rail);
   width: var(--rail-w);
-  flex-shrink: 0;
-  /* NO transition on width. The 220ms transition cascaded into the
-     /offers table (559 rows × percentage columns) and froze the
-     renderer for 45+ seconds per toggle — measured in Chrome with
-     boot-ready=true. Snapping width instantly keeps the page
-     interactive. A smoother animation requires either transform-based
-     rail off-canvas (rail stays at fixed width, slides labels out) or
-     virtualizing the offers table — both are bigger refactors. */
+  /* Must stay visible: the compact-mode .rail-tooltip flyouts and the
+     .rail-toggle edge disc both paint outside the rail's box. */
+  overflow: visible;
+  /* Transitioning width HERE is safe only because the rail is out of flow —
+     nothing downstream of it re-lays-out. The historical version transitioned
+     the in-flow rail and cascaded into the /offers table (559 rows ×
+     percentage columns), freezing the renderer for 45+ seconds per toggle
+     (measured in Chrome with boot-ready=true). Keep .rail-gutter above
+     transition-free and this stays cheap. */
+  transition:
+    width var(--dur-sheet) var(--ease-calm),
+    box-shadow var(--dur-sheet) var(--ease-calm);
+}
+/* Pre-paint guard: adopt the persisted width/scrim state without animating
+   it on boot. RailNav adds .boot-ready in a rAF after mirroring data-rail. */
+html:not(.boot-ready) .rail,
+html:not(.boot-ready) .rail-scrim {
+  transition: none;
 }
 .app[data-rail="full"] .rail {
   width: var(--rail-w-full);
@@ -228,7 +267,20 @@ button {
 :root[data-rail="compact"] .rail {
   width: var(--rail-w);
 }
-/* Pre-paint guard no longer needed — .rail has no width transition. */
+
+/* ── RAIL SCRIM ── full-page dim behind the hover-peek overlay.
+   Inert unless peeking — opacity 0 AND pointer-events: none, so it can never
+   swallow a click on the content. Sits below the peeking rail (which lifts to
+   just under --z-drawer) and above everything in .main. */
+.rail-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-scrim);
+  background: var(--scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-sheet) var(--ease-calm);
+}
 
 .rail-header {
   display: flex;
@@ -298,18 +350,70 @@ button {
   margin: 6px 0;
 }
 
-/* Brand book: rail section label → display sentence-case */
+/* Brand book: rail section label → display sentence-case.
+   ONE element, two presentations:
+   - COLLAPSED (base, and ≤1024px where the rail is force-collapsed): the text
+     is visually hidden and ::before draws a hairline in its place, so the
+     icon stack reads as "icons / rule / icons" instead of one undifferentiated
+     column. The text stays in the accessibility tree, so screen readers still
+     announce "Workspace" / "Settings" as the group heading — which is why the
+     text lives in its own span instead of being killed with font-size: 0.
+   - EXPANDED / PEEKING: the text is restored and the hairline fades out, on
+     the same duration tokens as the rest of the expand so nothing pops. */
 .rail-section-label {
-  display: none;
+  display: block;
+  position: relative;
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--text-muted);
-  padding: 14px 10px 6px;
+  /* Collapsed band. The text is out of flow, so the height is padding-only
+     and the hairline lands on the band's centre line — exactly where the
+     label sits when expanded. */
+  padding: 8px 0;
+  transition: padding var(--dur-sheet) var(--ease-calm);
+}
+/* The separator itself. Width tracks the 40px rail-item box instead of a
+   fixed edge inset, so it stays centred and item-aligned at any --rail-w. */
+.rail-section-label::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 1px;
+  background: var(--rule);
+  opacity: 1;
+  transition: opacity var(--dur-quick) var(--ease-calm);
+}
+/* Visually hidden, still announced — same technique as .sr-only. */
+.rail-section-label__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .app[data-rail="full"] .rail-section-label {
-  display: block;
+  padding: 14px 10px 6px;
+}
+.app[data-rail="full"] .rail-section-label::before {
+  opacity: 0;
+}
+.app[data-rail="full"] .rail-section-label__text {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
 }
 
 .rail-item {
@@ -463,30 +567,62 @@ button {
   flex: 1;
 }
 
+/* ── RAIL EDGE DISC (pin / unpin) ──
+   Circular control that straddles BOTH chrome seams: horizontally the rail's
+   right border (half over the rail, half over the content), vertically the
+   topbar's bottom border. It therefore sits exactly on the crossing point of
+   the two rules and reads as a handle ON the frame rather than a button
+   parked in the header.
+
+   Vertical maths: .rail is position: fixed at top: 0 and has no top border,
+   so its padding box — the containing block for this absolutely positioned
+   child — starts at viewport y=0, the same origin --topbar-h is measured
+   from. `top: calc(var(--topbar-h) - 12px)` therefore puts the 24px disc's
+   CENTRE on y=--topbar-h, which is where .topbar's border-bottom sits. The
+   offset is unconditional: routes that render without a topbar keep the disc
+   on the same line instead of jumping.
+
+   Absolutely positioned inside .rail, so it rides the right edge for free
+   while the rail's width animates — it only ever moves horizontally.
+   Identical in both states; only the chevron flips, pointing the way the rail
+   will move. Hidden ≤1024px (rail is force-collapsed there — nothing to
+   toggle). */
 .rail-toggle {
-  /* WIG: tap target ≥36px even though the visual stays compact. */
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  border: 0;
-  background: transparent;
+  position: absolute;
+  top: calc(var(--topbar-h) - 12px);
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--text-3);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  flex-shrink: 0;
-  padding: 0;
+  /* Above the rail's own children; the rail's --z-rail stacking context
+     already puts the whole thing above .main. */
+  z-index: 1;
+  box-shadow: var(--shadow);
   transition:
     background var(--dur-fast) ease,
-    color var(--dur-fast) ease;
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
 }
-.rail-toggle svg {
-  width: 16px;
-  height: 16px;
+/* Invisible 40×40 hit area around the 24px disc. The ≤1024px 44×44 floor
+   never applies to it (it is display:none at that width), so the comfort
+   target has to come from here. */
+.rail-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: var(--radius-pill);
 }
 .rail-toggle:hover {
   background: var(--surface-2);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 .rail-toggle svg {
@@ -505,10 +641,156 @@ button {
 .app[data-rail="compact"] .rail-toggle svg {
   transform: rotate(180deg);
 }
-.app[data-rail="compact"] .rail-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+
+/* ── RAIL HOVER-PEEK ──
+   Unpinned rail only. On hover or keyboard focus the rail expands to
+   --rail-w-full as an OVERLAY: .rail is fixed and .rail-gutter keeps
+   reserving --rail-w, so .main never reflows and the /offers table never
+   re-lays-out. A scrim fades in behind it; clicking the scrim (or Escape,
+   or leaving the rail) collapses it back.
+
+   Gated ≥1025px: below that the rail is force-collapsed to icon-only
+   (tablet) or replaced by MobileNav (phone), and an overlay would fight
+   both. RailNav applies the same gate via matchMedia.
+
+   Selectors carry BOTH attributes on purpose — peek only ever exists in the
+   unpinned state, and the extra attribute outranks the equal-specificity
+   [data-rail="compact"] rules these override (e.g. the theme-switch
+   orientation) no matter which stylesheet lands last.
+
+   MIRROR: every rule in this block is duplicated verbatim in RailStyles
+   (src/components/shell/theme-script.tsx) — data-rail-peek is set only at
+   runtime, so Turbopack's LightningCSS pipeline strips these rules from this
+   stylesheet and the RailStyles copy is what actually ships. Keep the two
+   copies in the same order. */
+@keyframes railPeekLabelIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (min-width: 1025px) {
+  .app[data-rail="compact"][data-rail-peek="true"] .rail {
+    width: var(--rail-w-full);
+    align-items: stretch;
+    padding: 14px 12px;
+    /* Above the scrim (--z-scrim), still below the offers drawer. */
+    z-index: calc(var(--z-drawer) - 1);
+    box-shadow: var(--shadow-lg);
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px 0 6px;
+    height: 48px;
+    margin-bottom: 18px;
+    gap: 8px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand {
+    justify-content: flex-start;
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-icon {
+    display: none;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.light {
+    display: block;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.dark {
+    display: none;
+  }
+  [data-theme="dark"] .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.light {
+    display: none;
+  }
+  [data-theme="dark"] .app[data-rail="compact"][data-rail-peek="true"] .rail-brand-wordmark.dark {
+    display: block;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label {
+    padding: 14px 10px 6px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label::before {
+    opacity: 0;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label__text {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0 10px;
+    gap: 12px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item.active::before {
+    left: -12px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item svg.rail-icon,
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-item > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label {
+    display: inline;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-badge {
+    position: static;
+    margin-left: auto;
+    height: 18px;
+    min-width: 22px;
+    padding: 0 6px;
+    font-size: 11px;
+    background: var(--surface-2);
+    color: var(--text-3);
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-badge.accent {
+    background: var(--accent-cta);
+    color: var(--accent-on);
+  }
+  /* The flyout labels are what the expanded rail replaces — suppress them so
+     both never show at once. */
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-tooltip {
+    display: none;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail .theme-switch {
+    flex-direction: row;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-theme {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+  /* Labels and section headings fade in a beat AFTER the width starts moving.
+     An animation, not a transition: these toggle `display`, which transitions
+     cannot interpolate. `both` holds opacity 0 through the delay. */
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label,
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label {
+    animation: railPeekLabelIn var(--dur-quick) var(--ease-calm) var(--dur-fast) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .rail-scrim,
+  .rail-toggle,
+  .rail-toggle svg {
+    transition: none;
+  }
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-label,
+  .app[data-rail="compact"][data-rail-peek="true"] .rail-section-label {
+    animation: none;
+  }
 }
 
 /* ── THEME SWITCH (shell) — Sun/Moon/Monitor segmented radiogroup.
@@ -522,6 +804,18 @@ button {
   display: flex;
   justify-content: center;
   margin-top: 6px;
+}
+/* These three were RailStyles-only for a long time. Recorded here too so the
+   "every [data-rail] rule lives in BOTH files" invariant holds in both
+   directions — RailStyles is still the copy that ships. The peek variants
+   above outrank the compact rule on specificity, not source order. */
+.app[data-rail="compact"] .rail .theme-switch,
+:root[data-rail="compact"] .app .rail .theme-switch {
+  flex-direction: column;
+}
+.app[data-rail="full"] .rail-theme {
+  justify-content: flex-start;
+  padding: 0 10px;
 }
 .theme-switch {
   display: inline-flex;
@@ -1324,6 +1618,12 @@ button.bottom-bar-tab {
   :root[data-rail="full"] .rail {
     width: var(--rail-w);
   }
+  /* The in-flow gutter has to collapse with it, or .main keeps a 220px
+     indent against a 64px rail. */
+  .app[data-rail="full"] .rail-gutter,
+  :root[data-rail="full"] .rail-gutter {
+    width: var(--rail-w);
+  }
   .app,
   .app[data-rail="full"],
   .app[data-rail="compact"],
@@ -1338,8 +1638,23 @@ button.bottom-bar-tab {
   .app[data-rail="full"] .rail-label {
     display: none;
   }
+  /* Section labels revert to their collapsed form (hairline separator, text
+     visually hidden but still announced) — the rail is force-collapsed here,
+     so the separators must show at this width too. */
   .app[data-rail="full"] .rail-section-label {
-    display: none;
+    padding: 8px 0;
+  }
+  .app[data-rail="full"] .rail-section-label::before {
+    opacity: 1;
+  }
+  .app[data-rail="full"] .rail-section-label__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
   /* Hide BOTH wordmark variants in BOTH light and dark themes. The dark-theme
      selector path [data-theme="dark"] .app[data-rail="full"] .rail-brand-wordmark.dark
@@ -1398,6 +1713,15 @@ button.bottom-bar-tab {
   /* Tooltip on hover (compact behavior). */
   .app[data-rail="full"] .rail-tooltip {
     display: block;
+  }
+  /* Theme switch matches the compact rail here too (see the note by
+     .rail-theme — mirrored from RailStyles for two-way parity). */
+  .app[data-rail="full"] .rail .theme-switch {
+    flex-direction: column;
+  }
+  .app[data-rail="full"] .rail-theme {
+    justify-content: center;
+    padding: 0;
   }
   /* Topbar: keep crumbs + actions on one row by default. Only force the
      actions onto a row of their own when the actions are heavy (contain a
@@ -1459,6 +1783,12 @@ button.bottom-bar-tab {
   /* Use .app descendant selectors to win against pipeline.html's higher
      source-order base rules (it duplicates .rail / .main definitions). */
   .app .rail {
+    display: none;
+  }
+  /* …and with it the space it reserved, plus the peek scrim (peek is gated
+     ≥1025px anyway — this is belt-and-braces for a live resize). */
+  .app .rail-gutter,
+  .app .rail-scrim {
     display: none;
   }
   .app .main,
