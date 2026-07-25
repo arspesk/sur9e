@@ -5,6 +5,7 @@
 // layout differs. A stream started elsewhere (bubble, Home hero) reattaches
 // here through the hook's persisted-turn probe.
 
+import { useEffect, useState } from 'react';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { useChatStore } from '@/stores/chat-store';
 import { ChatBrandMark } from './brand-mark';
@@ -26,6 +27,17 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   // when the bubble takes over on a phone.
   const redirectingToBubble = useMobileChatRedirect();
   const convo = useConversation({ consumeAutoSend: true });
+  // Snapshot at mount so the value can't change under an in-flight animation.
+  // The store copy is cleared on a timer (below) rather than here: a first
+  // message rewrites /chat → /chat/[id], which remounts this page, and the
+  // second mount still needs to see the origin to finish the same journey.
+  const [entryOrigin] = useState(() => useChatStore.getState().chatEntryOrigin);
+  useEffect(() => {
+    // Comfortably past the 420ms arrival, short enough that a later rail click
+    // or reload gets no stale directional motion.
+    const t = setTimeout(() => useChatStore.getState().setChatEntryOrigin(null), 1200);
+    return () => clearTimeout(t);
+  }, []);
   // Header title reads the same pair the sidebar does — the sessions query plus
   // the store's active id — so both stay in sync through one cache. No polling
   // here: useConversation already schedules delayed CHAT_SESSIONS_KEY
@@ -41,7 +53,7 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   if (redirectingToBubble) return null;
 
   return (
-    <div className="chat-page">
+    <div className="chat-page" data-enter={entryOrigin ?? undefined}>
       <ChatThreadsSidebar />
       <section className="chat-page__main" aria-label="Conversation">
         <header className="chat-page__header">

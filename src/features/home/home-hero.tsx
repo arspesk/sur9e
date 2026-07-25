@@ -28,6 +28,7 @@ export function HomeHero() {
         useChatStore.getState().openChat();
         return;
       }
+      useChatStore.getState().setChatEntryOrigin('home');
       router.push('/chat');
     },
   });

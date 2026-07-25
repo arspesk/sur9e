@@ -23,6 +23,10 @@ export function ChatHeader() {
           aria-label="Open full-screen chat"
           title="Open full-screen chat"
           onClick={() => {
+            // Tells /chat to grow out of this corner rather than replaying
+            // Home's downward glide, which would move from a place the card
+            // never occupied.
+            useChatStore.getState().setChatEntryOrigin('bubble');
             closeChat();
             router.push('/chat');
           }}

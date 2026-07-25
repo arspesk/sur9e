@@ -86,21 +86,45 @@
 }
 
 /* ─── Arrival ───
-   Coming from Home (or the bubble's expand button), the composer the user was
-   just typing in should look like it travelled here and settled, rather than
-   the page hard-cutting. The composer rises into its docked position while the
-   surrounding chrome fades up behind it — the input is the element the eye is
-   already tracking, so it leads and everything else follows.
-   Only plays on mount: switching threads is a router.replace on the same
-   route, so nothing remounts and nothing re-animates. */
-@keyframes chat-page-composer-expand {
+   The page enters from the direction the user actually came from, which is why
+   chat-store records the door (chatEntryOrigin). The two journeys are not the
+   same shape and must not share one animation:
+
+   · from Home — the hero composer sits mid-page, so its counterpart GLIDES
+     down into the dock. Straight travel on the standard soft curve, chosen in
+     the transition lab (option A + "soft"). The travel is deliberately ~120px
+     rather than the true ~600px: covering the real distance in a readable time
+     would need nearly a second, and doing it faster is what made the earlier
+     version read as a jump-cut.
+   · from the bubble — the card is already a bottom-right corner object whose
+     composer is already at the bottom. Replaying a downward glide would move it
+     from somewhere it never was, so the conversation GROWS out of that corner
+     instead.
+
+   Cold loads and rail clicks get no directional motion — there is no prior
+   position to move from. Only plays on mount: switching threads is a
+   router.replace on the same route, so nothing remounts. */
+@keyframes chat-page-composer-glide {
   from {
-    /* Roughly the hero composer's resting place: about a third down the
-       viewport and a touch narrower than the docked width. */
-    transform: translateY(-32vh) scaleX(0.92);
-    opacity: 0.6;
+    transform: translateY(-120px);
+    opacity: 0;
   }
-  60% {
+  /* Solid for most of the travel: fading throughout leaves the eye nothing
+     stable to track, which was half of the old "clanky" feel. */
+  35% {
+    opacity: 1;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes chat-page-corner-in {
+  from {
+    transform: scale(0.42) translate(24%, 18%);
+    opacity: 0;
+  }
+  30% {
     opacity: 1;
   }
   to {
@@ -121,34 +145,39 @@
   border-top: 1px solid var(--border);
   padding: var(--space-3) var(--space-4);
 }
-/* The composer is the element the eye is already tracking when you arrive from
-   Home or the bubble, so it leads: it enters from roughly where you left it
-   (Home's hero sits about a third down the page, the bubble in the corner),
-   slightly narrower, and settles into its docked width. Real element
-   continuity would need the View Transitions API — see next.config.ts for why
-   that isn't available here — so this is a deliberate approximation, tuned so
-   the travel reads as the input expanding rather than a page swap. */
-.chat-page__composer {
-  /* --dur-sheet is the app's slide-into-place duration (side-peek, sheets,
-     dialogs); this is the same gesture class. */
-  animation: chat-page-composer-expand var(--dur-sheet) var(--ease-entrance) both;
-  transform-origin: 50% 0;
+
+/* From Home: the composer leads, the chrome follows. */
+.chat-page[data-enter="home"] .chat-page__composer {
+  animation: chat-page-composer-glide 420ms var(--ease-soft) both;
 }
-.chat-page__threads-anim,
-.chat-page__header,
-.chat-page__body {
-  animation: chat-page-chrome-in var(--dur-base) var(--ease-entrance) both;
-  /* Chrome trails the composer so the two read as one gesture. */
+.chat-page[data-enter="home"] .chat-page__header,
+.chat-page[data-enter="home"] .chat-page__body {
+  animation: chat-page-chrome-in var(--dur-base) var(--ease-soft) both;
   animation-delay: 70ms;
 }
 
+/* From the bubble: the whole conversation column grows out of the corner the
+   card occupied. The thread list fades rather than scaling — it had no
+   counterpart in the bubble, so it is arriving, not moving. */
+.chat-page[data-enter="bubble"] .chat-page__main {
+  transform-origin: 100% 100%;
+  animation: chat-page-corner-in 420ms var(--ease-soft) both;
+}
+.chat-page[data-enter="bubble"] .chat-threads {
+  animation: chat-page-chrome-in var(--dur-base) var(--ease-soft) both;
+  animation-delay: 90ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-page__composer,
-  .chat-page__header,
-  .chat-page__body {
+  .chat-page[data-enter] .chat-page__composer,
+  .chat-page[data-enter] .chat-page__header,
+  .chat-page[data-enter] .chat-page__body,
+  .chat-page[data-enter] .chat-page__main,
+  .chat-page[data-enter] .chat-threads {
     animation: none;
   }
 }
+
 .chat-page__composer > * {
   max-width: 720px;
   margin-inline: auto;
