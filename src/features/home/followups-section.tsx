@@ -18,6 +18,7 @@ import { useRef, useState } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
 import { useToastStore } from '@/components/toast/toast-store';
+import { isPhoneViewport } from '@/features/chat/use-mobile-chat-redirect';
 import type { FollowupEntry } from '@/lib/server/followups';
 import { logFollowupAction } from '@/server/actions/followups';
 import { useChatStore } from '@/stores/chat-store';
@@ -97,6 +98,7 @@ export function FollowupsSection({ entries }: { entries: FollowupEntry[] }) {
   const push = useToastStore(s => s.push);
   const setAutoSendMessage = useChatStore(s => s.setAutoSendMessage);
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
+  const openChat = useChatStore(s => s.openChat);
 
   const shown = entries.filter(e => SHOWN_URGENCIES.has(e.urgency)).slice(0, 5);
 
@@ -116,6 +118,13 @@ export function FollowupsSection({ entries }: { entries: FollowupEntry[] }) {
   function draftInChat(e: FollowupEntry) {
     setActiveConversation(null);
     setAutoSendMessage(draftPrompt(e));
+    // Phones open the bubble in place rather than routing to /chat, which
+    // bounces back here anyway — see isPhoneViewport's note. Either surface
+    // picks the prompt out of the auto-send slot and sends it.
+    if (isPhoneViewport()) {
+      openChat();
+      return;
+    }
     router.push('/chat');
   }
 

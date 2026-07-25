@@ -16,6 +16,13 @@ import { useChatStore } from '@/stores/chat-store';
 
 export const CHAT_MOBILE_QUERY = '(max-width: 640px)';
 
+/** Client-only viewport probe. Callers use it to choose the bubble over a
+ * /chat navigation on phones — going to /chat and bouncing back would race
+ * this module's redirect against useChatUrlSync's own router.replace. */
+export function isPhoneViewport(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(CHAT_MOBILE_QUERY).matches;
+}
+
 /** @returns true once we know this is a phone and the redirect is under way —
  * callers render nothing in that state to avoid flashing the desktop layout. */
 export function useMobileChatRedirect(): boolean {

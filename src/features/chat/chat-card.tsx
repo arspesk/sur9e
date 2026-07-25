@@ -19,7 +19,11 @@ export function ChatCard() {
   const cardRef = useRef<HTMLDivElement>(null);
   useFocusTrap(cardRef, true);
 
-  const convo = useConversation();
+  // Claims a prompt handed over from Home (Draft follow-up) the same way the
+  // /chat page does. Safe to have both opted in: ChatHost hides the bubble on
+  // /chat, so the two surfaces are never mounted at once and only one can win
+  // the read-and-clear.
+  const convo = useConversation({ consumeAutoSend: true });
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
