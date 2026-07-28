@@ -5,7 +5,7 @@
 
 import 'server-only';
 import { readdirSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { cache } from 'react';
 import type { z } from 'zod';
 import type { ReportSummary } from '../schemas/applications';
@@ -19,7 +19,7 @@ import { atomicWrite } from './atomic-write';
 import { companySlug } from './format';
 import { loadProfile } from './profile';
 import { readFileOrNull, statOrNull } from './read-or-null';
-import { extractAppendedSections, loadReport } from './reports';
+import { extractAppendedSections, loadReport, parseFrontmatter } from './reports';
 import { appendTransition } from './status-log';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -388,6 +388,27 @@ function cleanupOfferArtifacts(
     }
   };
 
+  // Resolve a pasted-text source before removing the linked report that owns
+  // the metadata. Only a contained inputs/jds path is eligible; URL offers and
+  // malformed/legacy metadata leave no extra source artifact to remove.
+  let savedJdPath: string | null = null;
+  if (removedReport) {
+    try {
+      const raw = readFileOrNull(join(rootPath, removedReport));
+      if (raw) {
+        const { frontmatter } = parseFrontmatter(raw);
+        if (frontmatter.source_kind === 'text' && frontmatter.jd_path) {
+          const allowed = resolve(rootPath, 'inputs/jds');
+          const full = resolve(rootPath, frontmatter.jd_path);
+          const rel = relative(allowed, full);
+          if (rel && !rel.startsWith('..') && resolve(allowed, rel) === full) savedJdPath = full;
+        }
+      }
+    } catch {
+      // Damaged report metadata must not block the ordinary offer cleanup.
+    }
+  }
+
   // 1. The report file linked in the tracker row (whatever its name), plus its
   //    `.bak` sidecar — which the previous implementation left orphaned.
   let linkedRemoved = false;
@@ -396,6 +417,7 @@ function cleanupOfferArtifacts(
     linkedRemoved = tryUnlink(fullPath);
     tryUnlink(`${fullPath}.bak`);
   }
+  if (savedJdPath) tryUnlink(savedJdPath);
 
   // 2. Sweep any same-num sibling artifacts left on disk: `NNN-<slug>-<date>.md`
   //    (+ `.md.bak`) created by re-generation or screener churn under a

@@ -138,12 +138,15 @@ export function startJob(
 
   if (kind === 'screen' || kind === 'screen-evaluate') {
     const url = params.url;
+    const num = params.num;
     // 'screen' with no url is the queue mode used by Settings → Job scanning
     // ("Screen pending"): batch/screen.mjs screens every pending entry. Only
     // 'screen-evaluate' (add a specific offer + evaluate) requires a url.
     // When a url IS supplied it must be a valid http(s) URL either way.
     const urlRequired = kind === 'screen-evaluate';
-    if (url === undefined || url === null) {
+    if (kind === 'screen' && Number.isInteger(num)) {
+      if (!findByNum(rootPath, num as number)) throw new Error(`num not found: ${num}`);
+    } else if (url === undefined || url === null) {
       if (urlRequired) throw new Error('url must start with http:// or https://');
     } else if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
       throw new Error('url must start with http:// or https://');

@@ -9,7 +9,12 @@ import type { ChatTurnEvent } from '@/lib/schemas/chat';
 // Which gated action a confirm card stands for. Mirrors ConfirmKind in
 // src/lib/server/chat/confirms.ts (kept as a local type so this pure,
 // client-safe module never imports the server-only confirms store).
-export type ConfirmActionKind = 'start-job' | 'set-status' | 'edit-report';
+export type ConfirmActionKind =
+  | 'start-job'
+  | 'cancel-job'
+  | 'create-offer-from-text'
+  | 'set-status'
+  | 'edit-report';
 
 export type FoldedItem =
   | { kind: 'text'; markdown: string }
@@ -30,6 +35,7 @@ export type FoldedItem =
       // Matches ChatTurnEvent's confirm-resolved outcome enum exactly
       // (src/lib/schemas/chat.ts) — 'pending' is the pre-resolution default.
       outcome: 'pending' | 'approved' | 'cancelled' | 'expired';
+      execution?: 'succeeded' | 'failed' | 'unchanged';
       // The gated action this card confirms, when the confirm event carried it
       // — drives the action-specific resolved label. Absent on confirm events
       // persisted before the kind field existed (card falls back to generic).
@@ -167,7 +173,10 @@ export function foldEvents(events: ChatTurnEvent[]): FoldedItem[] {
         break;
       case 'confirm-resolved': {
         for (const it of items) {
-          if (it.kind === 'confirm' && it.token === event.token) it.outcome = event.outcome;
+          if (it.kind === 'confirm' && it.token === event.token) {
+            it.outcome = event.outcome;
+            if (event.execution) it.execution = event.execution;
+          }
         }
         break;
       }

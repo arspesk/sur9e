@@ -54,7 +54,7 @@ export function ChatJobsRuntime() {
 function ChatJobsAnnouncer() {
   const jobs = useChatJobsStore(s => s.jobs);
   const [message, setMessage] = useState('');
-  const seen = useRef<Map<string, 'started' | 'done' | 'error'>>(new Map());
+  const seen = useRef<Map<string, 'started' | 'done' | 'error' | 'cancelled'>>(new Map());
   const seeded = useRef(false);
 
   useEffect(() => {
@@ -62,7 +62,14 @@ function ChatJobsAnnouncer() {
     seeded.current = true;
     for (const [id, entry] of Object.entries(jobs)) {
       const status = entry.snapshot?.status;
-      const phase = status === 'done' ? 'done' : status === 'error' ? 'error' : 'started';
+      const phase =
+        status === 'done'
+          ? 'done'
+          : status === 'error'
+            ? 'error'
+            : status === 'cancelled'
+              ? 'cancelled'
+              : 'started';
       const prev = seen.current.get(id);
       if (prev === phase) continue;
       seen.current.set(id, phase);
@@ -71,6 +78,7 @@ function ChatJobsAnnouncer() {
       if (phase === 'started' && prev === undefined) setMessage(`${title} started`);
       else if (phase === 'done') setMessage(`${title} finished`);
       else if (phase === 'error') setMessage(`${title} failed`);
+      else if (phase === 'cancelled') setMessage(`${title} cancelled`);
     }
     // Prune dismissed ids so a re-tracked id can announce again.
     for (const id of [...seen.current.keys()]) if (!jobs[id]) seen.current.delete(id);

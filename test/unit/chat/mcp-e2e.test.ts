@@ -45,6 +45,8 @@ describe('mcp-app-server — full session', () => {
     expect(names).toEqual(
       [
         'edit_report',
+        'cancel_job',
+        'create_offer_from_text',
         'get_pipeline',
         'get_profile_summary',
         'get_report',

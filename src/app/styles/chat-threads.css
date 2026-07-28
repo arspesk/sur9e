@@ -69,8 +69,7 @@
   cursor: default;
 }
 .chat-threads__new:focus-visible,
-.chat-threads__open:focus-visible,
-.chat-threads__collapse:focus-visible {
+.chat-threads__open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -94,28 +93,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-threads__collapse {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease-soft),
-    color var(--dur-fast) var(--ease-soft);
-}
-.chat-threads__collapse:hover {
-  background: var(--surface-2);
-  color: var(--text);
 }
 
 /* Rule under the new-chat block — .chat-session-menu__divider. */
@@ -178,6 +155,8 @@
 }
 
 .chat-threads__open {
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
   text-align: left;
@@ -189,8 +168,21 @@
   color: var(--text);
   cursor: pointer;
   white-space: nowrap;
+}
+.chat-threads__title {
+  display: block;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-threads__title.is-clipped {
+  mask-image: linear-gradient(to right, rgba(0, 0, 0, 1) calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) calc(100% - 24px),
+    transparent 100%
+  );
 }
 /* The row owns the hover wash now, so the button stays transparent. */
 .chat-threads__open:hover {
@@ -291,52 +283,9 @@
   outline-offset: -2px;
 }
 
-/* ─── Collapsed strip ─── */
-
-/* The panel is a grid track of .chat-page, so the collapsed width has to be
-   set on the track. Scoped with :has() to the sidebar's own state so the page
-   shell's own grid declaration (chat-page.css) stays untouched. */
-.chat-page {
-  --chat-threads-w-collapsed: 46px;
-}
-.chat-page:has(> .chat-threads[data-collapsed]) {
-  grid-template-columns: var(--chat-threads-w-collapsed) minmax(0, 1fr);
-}
-/* data-ready lands a frame after the persisted state is restored, so
-   reloading into a collapsed panel doesn't animate on boot. */
-.chat-page:has(> .chat-threads[data-ready]) {
-  transition: grid-template-columns var(--dur-smooth) var(--ease-soft);
-}
-
-.chat-threads[data-collapsed] {
-  padding: var(--space-2) var(--space-1);
-  align-items: center;
-}
-.chat-threads[data-collapsed] .chat-threads__head {
-  flex-direction: column;
-  gap: var(--space-1);
-  width: 100%;
-}
-.chat-threads[data-collapsed] .chat-threads__new {
-  flex: 0 0 auto;
-  justify-content: center;
-  padding: 6px 0;
-  width: 100%;
-}
-/* Only the "+" chip and the expand toggle survive the collapse. */
-.chat-threads[data-collapsed] .chat-threads__new-label,
-.chat-threads[data-collapsed] .chat-threads__divider,
-.chat-threads[data-collapsed] .chat-threads__list {
-  display: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .chat-page:has(> .chat-threads[data-ready]) {
-    transition: none;
-  }
   .chat-threads,
   .chat-threads__new,
-  .chat-threads__collapse,
   .chat-threads__row,
   .chat-threads__kebab {
     transition: none;
@@ -348,9 +297,5 @@
 @media (max-width: 640px) {
   .chat-threads {
     display: none;
-  }
-  /* …and never leave the collapsed track behind once it's hidden. */
-  .chat-page:has(> .chat-threads[data-collapsed]) {
-    grid-template-columns: 1fr;
   }
 }

@@ -141,6 +141,9 @@ export function useJobAction(type: string) {
         }
         return { done: 1 };
       }
+      if (snapshot.status === 'cancelled') {
+        return { done: 0, cancelled: true };
+      }
 
       // No toast on job error — the chat jobs strip shows the error state
       // with actions (spec 2026-06-05-corner-notifications). failMsg

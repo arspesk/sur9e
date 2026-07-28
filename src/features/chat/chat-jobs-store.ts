@@ -8,7 +8,7 @@ import { create } from 'zustand';
 // generator modals, and screen-modal depend on it verbatim.
 
 export interface JobSnapshot {
-  status: 'queued' | 'running' | 'done' | 'error';
+  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   output?: string;
   startedAt?: string;
   /** Set by the runner when the job reaches a terminal state — freezes the
@@ -22,7 +22,7 @@ export interface JobSnapshot {
    * legacy `id` slot is kept for backwards compatibility with jobs that
    * predate the num-keyed contract.
    */
-  params?: { num?: number; id?: string };
+  params?: Record<string, unknown> & { num?: number; id?: string };
   /** Provider/model pair that actually RAN — mirrored from the JobRecord.
    * Re-stamped by the runner to the fallback pair when a [FALLBACK] marker
    * was emitted (see `fallback` below). */
@@ -101,7 +101,10 @@ function inFlight(jobs: Record<string, JobEntry>, order: string[]): PersistedJob
     .map(id => jobs[id])
     .filter(
       (j): j is JobEntry =>
-        Boolean(j) && j.snapshot?.status !== 'done' && j.snapshot?.status !== 'error',
+        Boolean(j) &&
+        j.snapshot?.status !== 'done' &&
+        j.snapshot?.status !== 'error' &&
+        j.snapshot?.status !== 'cancelled',
     )
     .map(j => ({ jobId: j.jobId, kind: j.kind, ...(j.num != null ? { num: j.num } : {}) }));
 }
@@ -156,7 +159,7 @@ export const useChatJobsStore = create<ChatJobsState>((set, get) => ({
       if (!entry) return s;
       return { jobs: { ...s.jobs, [jobId]: { ...entry, snapshot: snap } } };
     });
-    if (snap.status === 'done' || snap.status === 'error') {
+    if (snap.status === 'done' || snap.status === 'error' || snap.status === 'cancelled') {
       const s = get();
       persistActiveJobs(inFlight(s.jobs, s.order));
       const r = s._resolvers.get(jobId);
@@ -207,7 +210,10 @@ export const useChatJobsStore = create<ChatJobsState>((set, get) => ({
   waitForTerminal(jobId) {
     return new Promise<JobSnapshot>((resolve, reject) => {
       const snap = get().jobs[jobId]?.snapshot;
-      if (snap && (snap.status === 'done' || snap.status === 'error')) {
+      if (
+        snap &&
+        (snap.status === 'done' || snap.status === 'error' || snap.status === 'cancelled')
+      ) {
         resolve(snap);
         return;
       }

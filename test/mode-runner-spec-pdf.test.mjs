@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchJobDescription } from '../batch/jd-fetcher.mjs';
 import { coverLetterSpec, tailorCvSpec } from '../batch/specs/pdf.mjs';
 
 // loadInputs fetches the offer URL for the JD. Never hit the live network from
@@ -18,6 +19,7 @@ vi.mock('../batch/jd-fetcher.mjs', () => ({
 let root;
 let ctx;
 beforeEach(() => {
+  vi.mocked(fetchJobDescription).mockClear();
   root = mkdtempSync(join(tmpdir(), 'pdf-spec-'));
   for (const d of [
     'data',
@@ -138,5 +140,32 @@ describe('pdf specs', () => {
     await expect(tailorCvSpec.write(ctx, inputs, payload, { pdfImpl: fakePdf })).rejects.toThrow(
       /pdf/i,
     );
+  });
+
+  it('tailors from a saved pasted JD without calling the URL fetcher', async () => {
+    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
+    writeFileSync(join(root, 'inputs/jds/otter.md'), 'PASTED PDF JD\n', 'utf-8');
+    writeFileSync(
+      join(root, 'artifacts/reports/007-otter-ai-2026-06-01.md'),
+      `---
+num: 7
+company: Otter.ai
+role: SE
+source_kind: text
+jd_path: inputs/jds/otter.md
+jd_hash: ${'b'.repeat(64)}
+score: N/A
+---
+
+## TL;DR
+
+created
+`,
+      'utf-8',
+    );
+    const inputs = await tailorCvSpec.loadInputs(ctx);
+    expect(fetchJobDescription).not.toHaveBeenCalled();
+    expect(inputs.jd.text).toContain('PASTED PDF JD');
+    expect(tailorCvSpec.buildPrompt(ctx, inputs)).toContain('Saved pasted job description');
   });
 });

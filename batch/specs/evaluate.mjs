@@ -9,8 +9,8 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fetchJobDescription } from "../jd-fetcher.mjs";
 import { jdBlock, readOptional } from "../lib/inputs.mjs";
+import { resolveOfferSource } from "../lib/offer-source.mjs";
 import { findOfferRow } from "../lib/offers.mjs";
 import { extractSentinelPayload } from "../lib/output-parser.mjs";
 import { toIsoDate } from "../lib/posted-date.mjs";
@@ -64,7 +64,6 @@ const evaluateSpec = {
   async loadInputs(ctx) {
     const offer = findOfferRow(ctx.rootPath, ctx.num);
     if (!offer) throw new Error(`offer #${ctx.num} not found in data/applications.md`);
-    if (!offer.url) throw new Error(`offer #${ctx.num} report has no url in frontmatter`);
     const cv = readFileSync(join(ctx.rootPath, "inputs/personalization/cv.md"), "utf-8");
     const profile =
       readOptional(join(ctx.rootPath, "inputs/personalization/profile.yml")) ||
@@ -74,19 +73,15 @@ const evaluateSpec = {
     const modeBody = stripFrontMatter(
       readFileSync(join(ctx.rootPath, "content/modes/evaluate.md"), "utf-8"),
     );
-    const jd = await fetchJobDescription(offer.url);
-    return { offer, cv, profile, narrative, shared, modeBody, jd };
+    const source = await resolveOfferSource(ctx.rootPath, offer);
+    return { offer, cv, profile, narrative, shared, modeBody, source, jd: source.jd };
   },
 
-  buildPrompt(ctx, { offer, cv, profile, narrative, shared, modeBody, jd }) {
+  buildPrompt(ctx, { offer, cv, profile, narrative, shared, modeBody, source, jd }) {
     const jdText = jdBlock(jd);
-    return `You are running the sur9e "evaluate" mode headlessly — the ultimate
-JD evaluation. The mode contract follows, then the shared report contract,
-then every LOCAL input inlined. The shared "Tool conventions" section tells
-you how your CLI exposes web capabilities; use them.
-
-RESEARCH ON THE WEB — this is what makes the evaluation deep, not shallow:
-- JD acquisition ladder for the offer URL below (a pre-fetched copy is inlined
+    const acquisition =
+      source.kind === "url"
+        ? `- JD acquisition ladder for the offer URL below (a pre-fetched copy is inlined
   at the end as a floor, but it may be partial — a "__JD_INCOMPLETE__" marker
   means it is):
   1. \`render <url> in a browser\` — most portals (Lever, Ashby, Greenhouse,
@@ -97,7 +92,17 @@ RESEARCH ON THE WEB — this is what makes the evaluation deep, not shallow:
      indexes the JD in static HTML.
   4. Fall back to the inlined pre-fetched JD. If it is "__JD_INCOMPLETE__"
      too, score the offer low-confidence per the contract — never invent JD
-     content you could not read.
+     content you could not read.`
+        : `- The complete job description was pasted by the user and is inlined below.
+  Treat it as the canonical JD. There is no posting URL to fetch; never invent one.
+  You may still research the company and compensation on the web, citing only pages you read.`;
+    return `You are running the sur9e "evaluate" mode headlessly — the ultimate
+JD evaluation. The mode contract follows, then the shared report contract,
+then every LOCAL input inlined. The shared "Tool conventions" section tells
+you how your CLI exposes web capabilities; use them.
+
+RESEARCH ON THE WEB — this is what makes the evaluation deep, not shallow:
+${acquisition}
 - Comp + legitimacy: \`search the web\` for market-comp comparables and any
   legitimacy signals (recent layoffs, reposting). HONESTY RULE: every external
   claim must carry the source link to the page you actually read. If you could
@@ -139,9 +144,9 @@ ${narrative ? `\n==================== CANDIDATE NARRATIVE ====================\n
 - Offer #: ${offer.num} (re-evaluation of an EXISTING tracker entry)
 - Company: ${offer.company}
 - Role: ${offer.role}
-- URL: ${offer.url}
+- Source: ${source.label}
 
-==================== JOB DESCRIPTION (pre-fetched FLOOR — prefer a live read) ====================
+==================== JOB DESCRIPTION (${source.kind === "url" ? "pre-fetched FLOOR — prefer a live read" : "USER-PASTED SOURCE"}) ====================
 ${jdText}`;
   },
 
@@ -183,10 +188,19 @@ ${jdText}`;
       ...frontmatter,
       num: ctx.num,
       date: today,
-      url: offer.url,
+      ...(offer.url ? { url: offer.url } : {}),
+      ...(offer.sourceKind === "text"
+        ? { source_kind: "text", jd_path: offer.jdPath, jd_hash: offer.jdHash }
+        : {}),
       status: "Evaluated",
       state: "evaluated",
     };
+    if (offer.sourceKind === "text") delete fm.url;
+    else {
+      delete fm.source_kind;
+      delete fm.jd_path;
+      delete fm.jd_hash;
+    }
     if (posted) fm.posted = posted;
     else delete fm.posted;
     const reportAbs = join(ctx.rootPath, offer.reportPath);

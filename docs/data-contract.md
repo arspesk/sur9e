@@ -137,7 +137,7 @@ After a batch of evaluations, run `node merge-tracker.mjs` to merge additions in
 
 1. **NEVER edit `data/applications.md` to ADD new entries.** Write a TSV in `batch/tracker-additions/` and let `merge-tracker.mjs` merge.
 2. **YES you may edit `data/applications.md` to UPDATE status/notes of existing entries.** (The `dedup-tracker.mjs` script will warn on duplicates if you accidentally double-add.)
-3. All reports MUST include `**URL:**` in the header. Reports generated under the v1.3+ rubric MUST also include `**Legitimacy:** {tier}`. Legacy reports written before posting-legitimacy assessment existed are exempt — do not backfill (the absence accurately reflects "not assessed").
+3. URL-backed reports MUST preserve the real posting URL. Reports created from pasted text instead preserve `source_kind: text`, `jd_path`, and `jd_hash` in frontmatter and MUST NOT invent a URL. Reports generated under the v1.3+ rubric MUST also include `**Legitimacy:** {tier}`. Legacy reports written before posting-legitimacy assessment existed are exempt — do not backfill (the absence accurately reflects "not assessed").
 4. All status values MUST be canonical (see below). No bold, no dates, no extra text.
 
 ## Health checks

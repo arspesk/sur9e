@@ -9,6 +9,18 @@ import { z } from 'zod';
 import { ApplicationStatus } from './applications';
 import { JobType } from './jobs';
 
+export const TextOfferStartKind = z.enum([
+  'screen',
+  'evaluate',
+  'tailor-cv',
+  'cover-letter',
+  'research',
+  'interview-prep',
+  'reach-out',
+  'negotiate',
+]);
+export type TextOfferStartKind = z.infer<typeof TextOfferStartKind>;
+
 export const StartJobActionRequest = z.object({
   kind: JobType,
   params: z.record(z.string(), z.unknown()).optional(),
@@ -16,6 +28,21 @@ export const StartJobActionRequest = z.object({
   terminalApproved: z.boolean().optional(),
 });
 export type StartJobActionRequest = z.infer<typeof StartJobActionRequest>;
+
+export const CancelJobActionRequest = z.object({
+  jobId: z.string().regex(/^[a-z0-9-]{1,64}$/),
+  terminalApproved: z.boolean().optional(),
+});
+export type CancelJobActionRequest = z.infer<typeof CancelJobActionRequest>;
+
+export const CreateOfferFromTextActionRequest = z.object({
+  text: z.string().trim().min(1).max(32_000),
+  company: z.string().trim().min(1).max(160).optional(),
+  role: z.string().trim().min(1).max(240).optional(),
+  startKind: TextOfferStartKind.optional(),
+  terminalApproved: z.boolean().optional(),
+});
+export type CreateOfferFromTextActionRequest = z.infer<typeof CreateOfferFromTextActionRequest>;
 
 export const SetStatusActionRequest = z.object({
   num: z.number().int().positive(),

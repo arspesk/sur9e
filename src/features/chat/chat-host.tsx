@@ -87,7 +87,7 @@ export function ChatHost() {
   const jobsOrder = useChatJobsStore(s => s.order);
   const activeJobCount = jobsOrder.filter(id => {
     const st = jobsMap[id]?.snapshot?.status;
-    return st !== 'done' && st !== 'error';
+    return st !== 'done' && st !== 'error' && st !== 'cancelled';
   }).length;
 
   // Persistent bubble badges: a job that reaches a TERMINAL state (error or
@@ -114,7 +114,8 @@ export function ChatHost() {
   const frontIsActive =
     frontEntry != null &&
     frontEntry.snapshot?.status !== 'done' &&
-    frontEntry.snapshot?.status !== 'error';
+    frontEntry.snapshot?.status !== 'error' &&
+    frontEntry.snapshot?.status !== 'cancelled';
   // timePercent returns 0–96 (percent); ChatBubble's ring wants a 0..1 arc.
   const jobProgress = frontIsActive ? timePercent(frontElapsed, frontEntry.kind) / 100 : undefined;
 

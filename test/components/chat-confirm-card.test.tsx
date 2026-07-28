@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render as rtlRender, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useToastStore } from '@/components/toast/toast-store';
+import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
 import { ConfirmCard } from '@/features/chat/confirm-card';
 
 // ConfirmCard calls useQueryClient (it invalidates the conversation cache on
@@ -15,7 +17,12 @@ function render(ui: ReactElement) {
 }
 
 describe('ConfirmCard', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    const store = useChatJobsStore.getState();
+    for (const id of [...store.order]) store.dismiss(id);
+    useToastStore.setState({ toasts: [] });
+  });
 
   it('primary posts approve:true to the token route, then resolves the card optimistically', async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
@@ -101,6 +108,151 @@ describe('ConfirmCard', () => {
     );
     expect(getByText('✓ Started — running in the jobs strip')).toBeTruthy();
     expect(queryByRole('button')).toBeNull();
+  });
+
+  it('does not claim a job was cancelled when approval found it already finished', () => {
+    const { getByText, queryByText } = render(
+      <ConfirmCard
+        token="tok1"
+        summary="Cancel evaluation for #12"
+        meta=""
+        outcome="approved"
+        execution="unchanged"
+        action="cancel-job"
+      />,
+    );
+    expect(getByText('Job already finished')).toBeTruthy();
+    expect(queryByText('✓ Job cancelled')).toBeNull();
+  });
+
+  it('refreshes offers and registers an optional job after creating a text offer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                textOffer: { offer: { num: 42 } },
+                job: {
+                  id: '0123456789abcdef',
+                  type: 'cover-letter',
+                  status: 'queued',
+                  params: { num: 42 },
+                },
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const { getByRole } = render(
+      <ConfirmCard
+        token="tok-text"
+        summary="Create offer from pasted text"
+        meta=""
+        outcome="pending"
+        action="create-offer-from-text"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Create offer from pasted text' }));
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['applications'] });
+      expect(useChatJobsStore.getState().jobs['0123456789abcdef']).toMatchObject({
+        kind: 'cover-letter',
+        num: 42,
+      });
+    });
+  });
+
+  it('surfaces the server reason when an approved action fails to execute', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'failed',
+              result: { ok: false, error: 'The report changed while this card was open' },
+            }),
+          }) as Response,
+      ),
+    );
+    const { getByRole, findByText } = render(
+      <ConfirmCard
+        token="tok-failed"
+        summary="Edit report #12"
+        meta=""
+        outcome="pending"
+        action="edit-report"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Edit report #12' }));
+
+    await findByText('✕ Action failed');
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        tone: 'danger',
+        message: 'The report changed while this card was open',
+      }),
+    ]);
+  });
+
+  it('warns when the offer is ready but its optional job could not start', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                textOffer: { offer: { num: 42 } },
+                job: {
+                  conflict: true,
+                  setupRequired: true,
+                  message: 'Finish profile setup before starting cover letter',
+                },
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const { getByRole, findByText } = render(
+      <ConfirmCard
+        token="tok-partial"
+        summary="Create offer and cover letter"
+        meta=""
+        outcome="pending"
+        action="create-offer-from-text"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Create offer and cover letter' }));
+
+    await findByText('✓ Offer ready');
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        tone: 'warning',
+        message: 'Finish profile setup before starting cover letter',
+      }),
+    ]);
+    expect(useChatJobsStore.getState().order).toHaveLength(0);
   });
 
   it('varies the approved label by action kind (set-status / edit-report)', () => {

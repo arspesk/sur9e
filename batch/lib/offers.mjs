@@ -30,13 +30,26 @@ export function findOfferRow(rootPath, num) {
     const full = containedPath(rootPath, reportPath);
     if (!full || !existsSync(full)) return null;
     let url = null;
+    let sourceKind = null;
+    let jdPath = null;
+    let jdHash = null;
     try {
       const { frontmatter } = parseReportFile(readFileSync(full, "utf-8"));
       if (typeof frontmatter.url === "string" && frontmatter.url) url = frontmatter.url;
+      if (frontmatter.source_kind === "text") sourceKind = "text";
+      if (typeof frontmatter.jd_path === "string") jdPath = frontmatter.jd_path;
+      if (typeof frontmatter.jd_hash === "string") jdHash = frontmatter.jd_hash;
     } catch {
       return null;
     }
-    return { num, company: parts[3], role: parts[4], reportPath, url };
+    return {
+      num,
+      company: parts[3],
+      role: parts[4],
+      reportPath,
+      url,
+      ...(sourceKind === "text" ? { sourceKind, jdPath, jdHash } : {}),
+    };
   }
   return null;
 }

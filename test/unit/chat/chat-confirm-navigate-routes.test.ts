@@ -12,9 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const emitTurnEventMock = vi.fn();
 const spawnJobMock = vi.fn();
+const revalidatePathMock = vi.fn();
 
 vi.mock('@/lib/server/chat/turn-runner', () => ({ emitTurnEvent: emitTurnEventMock }));
 vi.mock('@/lib/server/jobs/runner', () => ({ spawnJob: spawnJobMock }));
+vi.mock('@/server/revalidate', () => ({ revalidatePath: revalidatePathMock }));
 
 const APPLICATIONS_MD = [
   '# Applications Tracker',
@@ -50,12 +52,14 @@ async function flushImmediate(): Promise<void> {
 type NavigateRoute = typeof import('@/app/api/chat/actions/navigate/route');
 type ConfirmsRoute = typeof import('@/app/api/chat/confirms/[token]/route');
 type StartJobRoute = typeof import('@/app/api/chat/actions/start-job/route');
+type CreateTextOfferRoute = typeof import('@/app/api/chat/actions/create-offer-from-text/route');
 
 describe('navigate + confirm resolution routes', () => {
   let root: string;
   let navigateRoute: NavigateRoute;
   let confirmsRoute: ConfirmsRoute;
   let startJobRoute: StartJobRoute;
+  let createTextOfferRoute: CreateTextOfferRoute;
 
   beforeEach(async () => {
     root = seedRoot();
@@ -64,8 +68,10 @@ describe('navigate + confirm resolution routes', () => {
     navigateRoute = await import('@/app/api/chat/actions/navigate/route');
     confirmsRoute = await import('@/app/api/chat/confirms/[token]/route');
     startJobRoute = await import('@/app/api/chat/actions/start-job/route');
+    createTextOfferRoute = await import('@/app/api/chat/actions/create-offer-from-text/route');
     emitTurnEventMock.mockReset();
     spawnJobMock.mockReset();
+    revalidatePathMock.mockReset();
   });
 
   afterEach(async () => {
@@ -140,6 +146,7 @@ describe('navigate + confirm resolution routes', () => {
         type: 'confirm-resolved',
         token,
         outcome: 'approved',
+        execution: 'succeeded',
       });
     });
 
@@ -152,6 +159,32 @@ describe('navigate + confirm resolution routes', () => {
       const body = await res.json();
       expect(body.outcome).toBe('cancelled');
       expect(readdirSync(join(root, 'data/jobs'))).toHaveLength(0);
+    });
+
+    it('revalidates offers after approving a pasted-text offer creation', async () => {
+      const create = await createTextOfferRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/create-offer-from-text',
+          {
+            text: 'Build reliable systems.',
+            company: 'Acme',
+            role: 'Platform Engineer',
+          },
+          { 'x-sur9e-turn': 'turn-text' },
+        ),
+      );
+      const token = (await create.json()).token as string;
+
+      const res = await confirmsRoute.POST(
+        postJson(`http://localhost/api/chat/confirms/${token}`, { approve: true }),
+        { params: Promise.resolve({ token }) },
+      );
+
+      expect((await res.json()).result).toMatchObject({
+        ok: true,
+        textOffer: { offer: { company: 'Acme', role: 'Platform Engineer' } },
+      });
+      expect(revalidatePathMock).toHaveBeenCalledWith('/offers');
     });
 
     it('an unknown token resolves to expired', async () => {

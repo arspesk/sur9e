@@ -35,8 +35,66 @@ describe('mcp-app-server — action tools', () => {
     const res = await client.request(2, 'tools/list');
     const names = res.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(
-      expect.arrayContaining(['start_job', 'set_status', 'edit_report', 'navigate']),
+      expect.arrayContaining(['start_job', 'cancel_job', 'set_status', 'edit_report', 'navigate']),
     );
+  });
+
+  it('create_offer_from_text forwards text identity and optional job in one confirmation', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/create-offer-from-text': {
+        status: 200,
+        body: {
+          needsConfirm: true,
+          token: 'tok-text',
+          summary: 'Create offer from pasted text — Acme · Engineer',
+          meta: 'local tracker write · then start CV tailoring',
+        },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+    const res = await client.request(2, 'tools/call', {
+      name: 'create_offer_from_text',
+      arguments: {
+        text: 'Build the platform.',
+        company: 'Acme',
+        role: 'Engineer',
+        start_kind: 'tailor-cv',
+      },
+    });
+    const data = JSON.parse(res.result.content[0].text);
+    expect(data.token).toBe('tok-text');
+    expect(data.instructions).toMatch(/confirmation card/i);
+    expect(app.requests[0].body).toEqual({
+      text: 'Build the platform.',
+      company: 'Acme',
+      role: 'Engineer',
+      startKind: 'tailor-cv',
+    });
+  });
+
+  it('cancel_job forwards one exact job id through the confirmation gate', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/cancel-job': {
+        status: 200,
+        body: {
+          needsConfirm: true,
+          token: 'tok-cancel',
+          summary: 'Cancel evaluation for offer #7',
+          meta: 'job 0123456789abcdef',
+        },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+    const res = await client.request(2, 'tools/call', {
+      name: 'cancel_job',
+      arguments: { job_id: '0123456789abcdef' },
+    });
+    const data = JSON.parse(res.result.content[0].text);
+    expect(data.token).toBe('tok-cancel');
+    expect(data.instructions).toMatch(/confirmation card/i);
+    expect(app.requests[0].body).toEqual({ jobId: '0123456789abcdef' });
   });
 
   it('edit_report maps old_text→oldText / new_text→newText in the forwarded body', async () => {

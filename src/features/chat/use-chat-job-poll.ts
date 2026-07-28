@@ -18,7 +18,7 @@ export function useChatJobPoll(jobId: string): void {
   const setSnapshot = useChatJobsStore(s => s.setSnapshot);
   const num = useChatJobsStore(s => s.jobs[jobId]?.num);
   const status = useChatJobsStore(s => s.jobs[jobId]?.snapshot?.status);
-  const isTerminal = status === 'done' || status === 'error';
+  const isTerminal = status === 'done' || status === 'error' || status === 'cancelled';
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -49,7 +49,7 @@ export function useChatJobPoll(jobId: string): void {
         if (!r.ok) return;
         const data = await r.json();
         setSnapshot(jobId, data);
-        if (data.status === 'done' || data.status === 'error') {
+        if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
           if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
@@ -96,7 +96,7 @@ export function useJobElapsed(jobId: string | undefined): number {
     jobId ? (s.jobs[jobId]?.snapshot?.finishedAt ?? undefined) : undefined,
   );
   const status = useChatJobsStore(s => (jobId ? s.jobs[jobId]?.snapshot?.status : undefined));
-  const isTerminal = status === 'done' || status === 'error';
+  const isTerminal = status === 'done' || status === 'error' || status === 'cancelled';
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!startedAt) {

@@ -62,6 +62,12 @@ export const ReportFrontmatter = z.object({
     z.string().optional(),
   ),
   url: z.string().optional(),
+  source_kind: z.enum(['url', 'text']).optional(),
+  jd_path: z.string().optional(),
+  jd_hash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   status: z.string(),
   state: z.enum(['screened', 'evaluated']),
   // batch/screen.mjs writes the literal 'N/A' for unreadable/prefiltered

@@ -31,5 +31,12 @@ export async function POST(request: Request, { params }: Params) {
     revalidatePath('/report/[filename]', 'page');
     revalidatePath('/offers');
   }
+  if (
+    resolved.outcome === 'approved' &&
+    resolved.result?.ok === true &&
+    'textOffer' in resolved.result
+  ) {
+    revalidatePath('/offers');
+  }
   return Response.json(resolved);
 }

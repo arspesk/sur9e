@@ -104,6 +104,62 @@ const ACTION_TOOLS = [
     },
   },
   {
+    name: 'cancel_job',
+    description:
+      'Cancel ONE exact queued/running background job by id. First call list_jobs; if more than one job could match the user’s request, ask which one. ALWAYS requires user approval. Cancellation keeps logs and partial files.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        job_id: {
+          type: 'string',
+          pattern: '^[a-z0-9-]{1,64}$',
+          description: 'Exact id returned by list_jobs',
+        },
+        terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
+      },
+      required: ['job_id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_offer_from_text',
+    description:
+      'Create or reuse a normal tracked offer from pasted job-description text, without a URL. ' +
+      'If company or role is missing, ask the user first; use Unknown only when the information is genuinely absent from the text. ' +
+      'Exact normalized text is deduplicated. Optionally start screen, evaluate, CV, cover letter, research, interview prep, outreach, or negotiation in the SAME approval. ' +
+      'ALWAYS requires user approval.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 32000,
+          description: 'The pasted job description text',
+        },
+        company: { type: 'string', description: 'Company name, when known' },
+        role: { type: 'string', description: 'Role title, when known' },
+        start_kind: {
+          type: 'string',
+          enum: [
+            'screen',
+            'evaluate',
+            'tailor-cv',
+            'cover-letter',
+            'research',
+            'interview-prep',
+            'reach-out',
+            'negotiate',
+          ],
+          description: 'Optional job to start after the offer is created or reused',
+        },
+        terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
+      },
+      required: ['text'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'set_status',
     description:
       'Set the tracker status of one application. ALWAYS requires user approval — follow the instructions in the tool result.',
@@ -320,6 +376,19 @@ async function callTool(name, args) {
       return confirmGatedCall('/api/chat/actions/start-job', {
         kind: args?.kind,
         params: args?.params ?? {},
+        terminalApproved: args?.terminalApproved === true,
+      });
+    case 'cancel_job':
+      return confirmGatedCall('/api/chat/actions/cancel-job', {
+        jobId: args?.job_id,
+        terminalApproved: args?.terminalApproved === true,
+      });
+    case 'create_offer_from_text':
+      return confirmGatedCall('/api/chat/actions/create-offer-from-text', {
+        text: args?.text,
+        company: args?.company,
+        role: args?.role,
+        startKind: args?.start_kind,
         terminalApproved: args?.terminalApproved === true,
       });
     case 'set_status':

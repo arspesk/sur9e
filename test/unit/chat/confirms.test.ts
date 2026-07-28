@@ -108,6 +108,7 @@ describe('chat confirms store', () => {
       type: 'confirm-resolved',
       token,
       outcome: 'approved',
+      execution: 'succeeded',
     });
   });
 
@@ -127,6 +128,105 @@ describe('chat confirms store', () => {
     const record = JSON.parse(readFileSync(join(root, 'data/jobs', files[0]), 'utf-8'));
     expect(record.type).toBe('evaluate');
     expect(record.status).toBe('queued');
+    await flushImmediate();
+    expect(spawnJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('approve executes an exact cancel-job payload through the shared lifecycle', () => {
+    const jobId = '0123456789abcdef';
+    writeFileSync(
+      join(root, 'data/jobs', `${jobId}.json`),
+      JSON.stringify({
+        id: jobId,
+        type: 'evaluate',
+        status: 'queued',
+        params: { num: 1001 },
+        startedAt: '2026-07-28T10:00:00.000Z',
+        finishedAt: null,
+        output: '',
+        error: null,
+        exitCode: null,
+      }),
+    );
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-1',
+      kind: 'cancel-job',
+      payload: { jobId },
+      summary: 'Cancel evaluation for offer #1001',
+      meta: `job ${jobId}`,
+    });
+    const res = confirms.resolveConfirm(root, token, true);
+    expect(res).toMatchObject({
+      outcome: 'approved',
+      execution: 'succeeded',
+      result: { ok: true, cancellation: { cancelled: true, job: { status: 'cancelled' } } },
+    });
+  });
+
+  it('records an unchanged execution when a cancel approval arrives after completion', () => {
+    const jobId = '0123456789abcdee';
+    writeFileSync(
+      join(root, 'data/jobs', `${jobId}.json`),
+      JSON.stringify({
+        id: jobId,
+        type: 'evaluate',
+        status: 'done',
+        params: { num: 1001 },
+        startedAt: '2026-07-28T10:00:00.000Z',
+        finishedAt: '2026-07-28T10:01:00.000Z',
+        output: '',
+        error: null,
+        exitCode: 0,
+      }),
+    );
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-1',
+      kind: 'cancel-job',
+      payload: { jobId },
+      summary: 'Cancel evaluation for offer #1001',
+      meta: `job ${jobId}`,
+    });
+
+    const res = confirms.resolveConfirm(root, token, true);
+
+    expect(res).toMatchObject({
+      outcome: 'approved',
+      execution: 'unchanged',
+      result: { ok: true, cancellation: { cancelled: false, job: { status: 'done' } } },
+    });
+    expect(emitTurnEventMock).toHaveBeenLastCalledWith('turn-1', {
+      type: 'confirm-resolved',
+      token,
+      outcome: 'approved',
+      execution: 'unchanged',
+    });
+  });
+
+  it('approve creates a pasted-text offer and starts the optional mode as one action', async () => {
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-1',
+      kind: 'create-offer-from-text',
+      payload: {
+        text: 'Build reliable systems.',
+        company: 'Acme',
+        role: 'Platform Engineer',
+        startKind: 'cover-letter',
+      },
+      summary: 'Create offer from pasted text',
+      meta: 'local tracker write · then start cover letter',
+    });
+    const res = confirms.resolveConfirm(root, token, true);
+    expect(res).toMatchObject({
+      outcome: 'approved',
+      result: {
+        ok: true,
+        textOffer: { reused: false, offer: { company: 'Acme', role: 'Platform Engineer' } },
+        job: { type: 'cover-letter' },
+      },
+    });
+    expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain(
+      'Platform Engineer',
+    );
     await flushImmediate();
     expect(spawnJobMock).toHaveBeenCalledTimes(1);
   });

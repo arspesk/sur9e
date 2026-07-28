@@ -132,4 +132,22 @@ describe('useJobAction', () => {
     expect(final.cancelled).toBe(true);
     unmount();
   });
+
+  it('returns cancelled=true when the persisted job reaches the cancelled state', async () => {
+    mockStartJob.mockResolvedValue(jobRecord('job-cancelled'));
+
+    const { result, unmount } = renderHook(() => useJobAction('research'), { wrapper });
+    const runPromise = result.current.run({ num: 5 });
+    await new Promise(r => setTimeout(r, 10));
+    await act(async () => {
+      useChatJobsStore
+        .getState()
+        .setSnapshot('job-cancelled', { status: 'cancelled', output: 'partial output' });
+    });
+    const final = await runPromise;
+
+    expect(final).toEqual({ done: 0, cancelled: true });
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+    unmount();
+  });
 });

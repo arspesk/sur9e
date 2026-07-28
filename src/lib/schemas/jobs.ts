@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { ProviderId } from './providers';
 
-export const JobStatus = z.enum(['queued', 'running', 'done', 'error']);
+export const JobStatus = z.enum(['queued', 'running', 'done', 'error', 'cancelled']);
 export type JobStatus = z.infer<typeof JobStatus>;
 
 // Mirrors the literal union used in ModeRuntime.resolvedFrom in
@@ -78,7 +78,8 @@ export const JobParams = z.preprocess(
       parallel: z.number().int().positive().optional(),
       min_score: z.number().optional(),
     }),
-    // A `screen` job either targets one offer (`url`) or, in queue mode, screens
+    // A `screen` job targets a URL, a tracked pasted-text offer (`num`), or,
+    // in queue mode, screens
     // the whole pending pipeline. Queue mode must be opted into explicitly with
     // `queue: true` (see api/jobs/screen route) — it is never inferred from a
     // missing url, so a malformed body can't silently spawn a background job.
@@ -86,10 +87,11 @@ export const JobParams = z.preprocess(
       .object({
         type: z.literal('screen'),
         url: z.string().url().optional(),
+        num: z.number().int().positive().optional(),
         queue: z.literal(true).optional(),
       })
-      .refine(p => typeof p.url === 'string' || p.queue === true, {
-        message: 'screen requires a url, or queue:true to screen the whole pending pipeline',
+      .refine(p => typeof p.url === 'string' || typeof p.num === 'number' || p.queue === true, {
+        message: 'screen requires a url, num, or queue:true to screen the whole pending pipeline',
       }),
     z.object({
       type: z.literal('screen-evaluate'),
@@ -119,6 +121,9 @@ export const JobRecord = z.object({
   // restart. Optional for back-compat with records that predate it (those
   // fall back to record-age staleness).
   pid: z.number().int().positive().optional(),
+  // POSIX workers spawn in their own process group so cancellation can stop
+  // the complete CLI/shell descendant tree. Optional for legacy records.
+  processGroupId: z.number().int().positive().optional(),
   // Provider-routing metadata. Optional for back-compat with older
   // records on disk that lack these fields.
   provider: ProviderId.optional(),

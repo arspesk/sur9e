@@ -3,8 +3,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button } from '@/components/primitives';
+import { useToastStore } from '@/components/toast/toast-store';
 import { chatSessionKey } from '@/hooks/use-chat-sessions';
 import { useChatStore } from '@/stores/chat-store';
+import { useChatJobsStore } from './chat-jobs-store';
 import type { ConfirmActionKind } from './fold-events';
 
 // Matches FoldedItem's confirm.outcome union exactly (src/features/chat/fold-events.ts),
@@ -18,6 +20,8 @@ export type ConfirmOutcome = 'pending' | 'approved' | 'cancelled' | 'expired';
 // the kind field existed (foldEvents leaves `action` undefined there).
 const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
   'start-job': '✓ Started — running in the jobs strip',
+  'cancel-job': '✓ Job cancelled',
+  'create-offer-from-text': '✓ Offer ready',
   'set-status': '✓ Status updated',
   'edit-report': '✓ Report updated',
 };
@@ -25,10 +29,43 @@ const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
 function resolvedLabel(
   outcome: Exclude<ConfirmOutcome, 'pending'>,
   action: ConfirmActionKind | undefined,
+  execution: ConfirmExecution | undefined,
 ): string {
   if (outcome === 'cancelled') return '✕ Cancelled';
   if (outcome === 'expired') return '⃠ Expired';
+  if (execution === 'failed') return '✕ Action failed';
+  if (execution === 'unchanged') {
+    if (action === 'cancel-job') return 'Job already finished';
+    if (action === 'start-job') return 'Job not started';
+    return 'No changes made';
+  }
   return (action && APPROVED_LABEL_BY_ACTION[action]) || '✓ Confirmed';
+}
+
+type ConfirmExecution = 'succeeded' | 'failed' | 'unchanged';
+
+interface ConfirmResponseJob {
+  id?: string;
+  type?: string;
+  status?: string;
+  params?: Record<string, unknown>;
+  output?: string;
+  startedAt?: string;
+  finishedAt?: string | null;
+  error?: string | null;
+  provider?: string;
+  model?: string;
+  conflict?: boolean;
+  setupRequired?: boolean;
+  message?: string;
+}
+
+interface ConfirmResponseResult {
+  ok?: boolean;
+  error?: string;
+  job?: ConfirmResponseJob;
+  textOffer?: { offer?: { num?: number } };
+  cancellation?: { job?: ConfirmResponseJob };
 }
 
 /** Inline confirm card for gated actions (spec §3.2). Approval executes
@@ -40,12 +77,14 @@ export function ConfirmCard({
   summary,
   meta,
   outcome,
+  execution,
   action,
 }: {
   token: string;
   summary: string;
   meta: string;
   outcome: ConfirmOutcome;
+  execution?: ConfirmExecution;
   /** Which gated action this card confirms — varies the resolved label. */
   action?: ConfirmActionKind;
 }) {
@@ -56,6 +95,7 @@ export function ConfirmCard({
   // the turn finished — so relying on that event alone leaves the card stuck on
   // disabled buttons with no resolved message. Resolve from the POST response.
   const [localOutcome, setLocalOutcome] = useState<ConfirmOutcome | null>(null);
+  const [localExecution, setLocalExecution] = useState<ConfirmExecution | null>(null);
   const queryClient = useQueryClient();
 
   async function respond(approve: boolean) {
@@ -68,9 +108,49 @@ export function ConfirmCard({
         body: JSON.stringify({ approve }),
       });
       if (!res.ok) throw new Error(`Confirm failed (${res.status}). Try again.`);
-      const data = (await res.json().catch(() => null)) as { outcome?: ConfirmOutcome } | null;
+      const data = (await res.json().catch(() => null)) as {
+        outcome?: ConfirmOutcome;
+        execution?: ConfirmExecution;
+        result?: ConfirmResponseResult;
+      } | null;
       // Immediate feedback: swap the buttons for the resolved message now.
       setLocalOutcome(data?.outcome ?? (approve ? 'approved' : 'cancelled'));
+      setLocalExecution(data?.execution ?? null);
+      if (data?.result?.ok === false && data.result.error) {
+        useToastStore.getState().push('danger', data.result.error);
+      }
+      if (data?.result?.ok === true) {
+        if (data.result.textOffer) {
+          void queryClient.invalidateQueries({ queryKey: ['applications'] });
+        }
+        const started = data.result.job;
+        if (started?.conflict && started.message) {
+          useToastStore.getState().push('warning', started.message);
+        } else if (
+          started?.id &&
+          started.type &&
+          (started.status === 'queued' || started.status === 'running')
+        ) {
+          const num =
+            typeof started.params?.num === 'number'
+              ? started.params.num
+              : data.result.textOffer?.offer?.num;
+          useChatJobsStore.getState().startJob(started.id, started.type, num);
+        }
+        const cancelled = data.result.cancellation?.job;
+        if (cancelled?.id && cancelled.status === 'cancelled') {
+          useChatJobsStore.getState().setSnapshot(cancelled.id, {
+            status: 'cancelled',
+            output: cancelled.output,
+            startedAt: cancelled.startedAt,
+            finishedAt: cancelled.finishedAt,
+            error: cancelled.error ?? undefined,
+            params: cancelled.params,
+            provider: cancelled.provider,
+            model: cancelled.model,
+          });
+        }
+      }
       // Refresh the persisted conversation so a close/reopen — which re-mounts
       // this card from the query cache — reflects the now-persisted resolution
       // instead of the stale pending confirm.
@@ -83,11 +163,14 @@ export function ConfirmCard({
   }
 
   const effectiveOutcome = localOutcome ?? outcome;
+  const effectiveExecution = localExecution ?? execution;
   if (effectiveOutcome !== 'pending') {
     return (
       <div className="chat-confirm" data-outcome={effectiveOutcome}>
         <p className="chat-confirm__summary">{summary}</p>
-        <p className="chat-confirm__resolved">{resolvedLabel(effectiveOutcome, action)}</p>
+        <p className="chat-confirm__resolved">
+          {resolvedLabel(effectiveOutcome, action, effectiveExecution)}
+        </p>
       </div>
     );
   }

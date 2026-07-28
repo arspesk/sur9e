@@ -82,6 +82,39 @@ describe('section specs', () => {
     expect(prompt).toContain('## Company Research');
   });
 
+  it('inlines the saved JD when a section mode starts directly from pasted text', async () => {
+    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
+    writeFileSync(
+      join(root, 'inputs/jds/pasted.md'),
+      'Own production reliability and incident response.\n',
+      'utf-8',
+    );
+    writeFileSync(
+      join(root, 'artifacts/reports/007-acme-2026-06-01.md'),
+      `---
+num: 7
+company: Acme
+role: SE
+source_kind: text
+jd_path: inputs/jds/pasted.md
+jd_hash: ${'a'.repeat(64)}
+score: N/A
+---
+
+## TL;DR
+
+Created from pasted text.
+`,
+      'utf-8',
+    );
+
+    const inputs = await interviewPrepSpec.loadInputs(ctx);
+    const prompt = interviewPrepSpec.buildPrompt(ctx, inputs);
+
+    expect(prompt).toContain('Saved pasted job description');
+    expect(prompt).toContain('Own production reliability and incident response.');
+  });
+
   it('optional leading Next Steps callout is split off and replaces the report leading callout', async () => {
     // Seed the report with an existing leading callout (the report contract's
     // first body block) so the refresh path REPLACES rather than stacks.

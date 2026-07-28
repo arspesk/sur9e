@@ -126,6 +126,36 @@ describe('foldEvents', () => {
     ]);
   });
 
+  it('carries the execution result that qualifies an approved confirm', () => {
+    const items = foldEvents([
+      e(
+        {
+          type: 'confirm',
+          token: 'tok-cancel',
+          summary: 'Cancel job',
+          meta: 'job abc',
+          kind: 'cancel-job',
+        },
+        1,
+      ),
+      e(
+        {
+          type: 'confirm-resolved',
+          token: 'tok-cancel',
+          outcome: 'approved',
+          execution: 'unchanged',
+        },
+        2,
+      ),
+    ]);
+    expect(items[0]).toMatchObject({
+      kind: 'confirm',
+      outcome: 'approved',
+      execution: 'unchanged',
+      action: 'cancel-job',
+    });
+  });
+
   it('confirm-resolved with an expired outcome flips the matching confirm item', () => {
     const items = foldEvents([
       e(

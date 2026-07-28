@@ -18,6 +18,7 @@
 // directly instead.
 import { ROOT } from '@/lib/root';
 import {
+  cancelJob,
   type JobConflictPayload,
   type JobRecord,
   type JobSetupRequiredPayload,
@@ -29,4 +30,8 @@ export async function startJobAction(
   input: StartJobInput,
 ): Promise<JobRecord | JobConflictPayload | JobSetupRequiredPayload> {
   return startJob(ROOT, input);
+}
+
+export async function cancelJobAction(jobId: string) {
+  return cancelJob(ROOT, jobId);
 }

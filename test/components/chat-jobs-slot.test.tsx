@@ -13,18 +13,30 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const { confirmCancelMock } = vi.hoisted(() => ({
+  confirmCancelMock: vi.fn(),
+}));
+
+vi.mock('@/components/delete-confirm-modal', () => ({
+  useDeleteConfirmStore: (selector: (state: { confirm: typeof confirmCancelMock }) => unknown) =>
+    selector({ confirm: confirmCancelMock }),
+}));
+
 // ChatJobsSlot now imports the startJobAction server action (for the failed-row
 // Retry). Mock it so the test stays a pure unit and the transitive `server-only`
 // import chain never loads — same guard as test/use-job-action.test.tsx.
 vi.mock('@/server/actions/jobs', () => ({
+  cancelJobAction: vi.fn(),
   startJobAction: vi.fn(),
 }));
 
+import { useToastStore } from '@/components/toast/toast-store';
 import { ChatJobsSlot } from '@/features/chat/chat-jobs-slot';
 import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
-import { startJobAction } from '@/server/actions/jobs';
+import { cancelJobAction, startJobAction } from '@/server/actions/jobs';
 
 const mockStartJobAction = vi.mocked(startJobAction);
+const mockCancelJobAction = vi.mocked(cancelJobAction);
 
 function resetStore() {
   const s = useChatJobsStore.getState();
@@ -34,6 +46,9 @@ function resetStore() {
 afterEach(() => {
   act(resetStore);
   mockStartJobAction.mockReset();
+  mockCancelJobAction.mockReset();
+  confirmCancelMock.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 function jobRecord(id: string) {
@@ -110,6 +125,68 @@ describe('ChatJobsSlot', () => {
       const pre = container.querySelector('.chat-jobs__logs pre');
       expect(pre?.textContent).toContain('[1/2] working…');
     });
+  });
+
+  it('confirms and cancels the exact running job from the icon beside Logs', async () => {
+    seedRunning('job-1', 'evaluate', 1, 30);
+    confirmCancelMock.mockResolvedValue(true);
+    mockCancelJobAction.mockResolvedValue({
+      cancelled: true,
+      job: { ...jobRecord('job-1'), status: 'cancelled' },
+    });
+    const { getByLabelText } = render(<ChatJobsSlot />);
+
+    fireEvent.click(getByLabelText('Cancel Evaluate · #1'));
+
+    await waitFor(() => {
+      expect(confirmCancelMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Cancel job?',
+          confirmLabel: 'Cancel job',
+        }),
+      );
+      expect(mockCancelJobAction).toHaveBeenCalledWith('job-1');
+      expect(useChatJobsStore.getState().jobs['job-1'].snapshot?.status).toBe('cancelled');
+    });
+  });
+
+  it('surfaces a cancellation failure and keeps the running job actionable', async () => {
+    seedRunning('job-1', 'evaluate', 1, 30);
+    confirmCancelMock.mockResolvedValue(true);
+    mockCancelJobAction.mockRejectedValue(new Error('Cancellation service unavailable'));
+    const { getByLabelText } = render(<ChatJobsSlot />);
+
+    fireEvent.click(getByLabelText('Cancel Evaluate · #1'));
+
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts).toEqual([
+        expect.objectContaining({
+          tone: 'danger',
+          message: 'Cancellation service unavailable',
+        }),
+      ]);
+      expect(getByLabelText('Cancel Evaluate · #1')).not.toBeDisabled();
+      expect(useChatJobsStore.getState().jobs['job-1'].snapshot?.status).toBe('running');
+    });
+  });
+
+  it('renders cancelled as a distinct neutral state with logs and Dismiss but no Retry', async () => {
+    act(() => {
+      useChatJobsStore.getState().startJob('job-c', 'evaluate', 7);
+      useChatJobsStore.getState().setSnapshot('job-c', {
+        status: 'cancelled',
+        output: 'partial output',
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+        finishedAt: new Date().toISOString(),
+        params: { num: 7 },
+      });
+    });
+    const { container, getByText, queryByText } = render(<ChatJobsSlot />);
+    expect(container.querySelector('.chat-jobs__cancelled')).toBeTruthy();
+    expect(getByText('Cancelled')).toBeTruthy();
+    expect(getByText('Dismiss')).toBeTruthy();
+    expect(queryByText('Retry')).toBeNull();
+    expect(container.querySelector('.chat-jobs__logs-toggle')).toBeTruthy();
   });
 
   it('done state shows ✓ + View report and dismisses on ×', async () => {

@@ -77,6 +77,13 @@ describe('jobs/command-registry', () => {
       expect(cmd?.args).toContain('https://example.com/jobs/99');
     });
 
+    it('screen — tracked pasted-text offer routes through the text screener', () => {
+      const cmd = buildCommand('screen', { num: 42 }, root);
+      expect(cmd?.args[1]).toContain('node batch/screen-text.mjs --num 42');
+      expect(cmd?.args[1]).toContain('node cli/merge-tracker.mjs --re-eval=42');
+      expect(cmd?.args[1]).not.toContain('add-to-pipeline');
+    });
+
     it('screen-evaluate — chains add-to-pipeline, screen, num resolution, evaluate', () => {
       const cmd = buildCommand('screen-evaluate', { url: 'https://example.com/jobs/99' }, root);
       expect(cmd).not.toBeNull();

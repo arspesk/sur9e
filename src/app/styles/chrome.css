@@ -2888,6 +2888,11 @@ input[type="range"]::-moz-range-track {
     transform: translateY(100%);
     transition: transform var(--dur-base) var(--ease-calm);
   }
+  body:has(.toc-sheet.open) .chat-bubble {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 @media (min-width: 1025px) {
   /* Desktop hides the bottom-sheet entirely — the line-stack TOC indicator

@@ -20,7 +20,7 @@ const STATE_PATH = join(process.cwd(), 'data/usage-mode-state.json');
 const JOBS_DIR = join(process.cwd(), 'data/jobs');
 
 export interface ModeState {
-  status: 'running' | 'done' | 'failed';
+  status: 'running' | 'done' | 'failed' | 'cancelled';
   markdown?: string;
   error?: string;
   startedAt?: string;
@@ -49,7 +49,7 @@ const ORPHAN_GRACE_MS = 45_000;
 interface JobFile {
   id: string;
   type: string;
-  status: 'queued' | 'running' | 'done' | 'error';
+  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   startedAt: string;
   finishedAt?: string;
   error?: string;
@@ -93,6 +93,9 @@ function scanJobsForMode(num: number, mode: string, since?: string): ModeState |
   }
   if (latest.status === 'error') {
     return { status: 'failed', error: latest.error, startedAt: latest.startedAt };
+  }
+  if (latest.status === 'cancelled') {
+    return { status: 'cancelled', startedAt: latest.startedAt };
   }
   // queued | running
   return { status: 'running', startedAt: latest.startedAt };

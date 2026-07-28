@@ -133,6 +133,16 @@ function _buildCommand(
     };
   }
   if (type === 'screen') {
+    const num = params && params.num;
+    if (Number.isInteger(num)) {
+      return {
+        cmd: '/bin/bash',
+        args: [
+          '-c',
+          `node batch/screen-text.mjs --num ${num} && node cli/merge-tracker.mjs --re-eval=${num}`,
+        ],
+      };
+    }
     const url = params && params.url;
     // Queue mode (no url): screen EVERY pending pipeline entry, then merge.
     // The scan chain minus the jobspy crawl — used for re-screens of

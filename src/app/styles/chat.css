@@ -445,7 +445,20 @@
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+.chat-session-menu__title,
+.chat-session-menu__archived-title,
+.chat-header__title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.chat-session-menu__title.is-clipped,
+.chat-session-menu__archived-title.is-clipped,
+.chat-header__title.is-clipped {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
 }
 .chat-session-menu__icon {
   width: 22px;
@@ -504,7 +517,6 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-3);
   font-size: 13px;
@@ -919,7 +931,6 @@
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .chat-header__close {
   display: inline-flex;
@@ -1297,6 +1308,9 @@
 .chat-jobs__progress-fill.is-error {
   background: var(--st-danger);
 }
+.chat-jobs__progress-fill.is-cancelled {
+  background: var(--text-3);
+}
 
 .chat-jobs__row {
   display: flex;
@@ -1324,7 +1338,8 @@
 }
 
 .chat-jobs__check,
-.chat-jobs__cross {
+.chat-jobs__cross,
+.chat-jobs__cancelled {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
@@ -1341,6 +1356,9 @@
 }
 .chat-jobs__cross {
   background: var(--st-danger);
+}
+.chat-jobs__cancelled {
+  color: var(--text-3);
 }
 
 .chat-jobs__title {
@@ -1394,6 +1412,7 @@
 }
 
 .chat-jobs__logs-toggle,
+.chat-jobs__cancel,
 .chat-jobs__close {
   width: 20px;
   height: 20px;
@@ -1413,6 +1432,7 @@
   line-height: 1;
 }
 .chat-jobs__logs-toggle:hover,
+.chat-jobs__cancel:hover,
 .chat-jobs__close:hover {
   background: var(--surface-2);
   color: var(--text);
@@ -1425,6 +1445,10 @@
 }
 .chat-jobs[data-logs-open="true"] .chat-jobs__logs-toggle {
   color: var(--accent-text);
+}
+.chat-jobs__cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .chat-jobs__error {
@@ -1439,6 +1463,12 @@
   padding: 0 12px 10px;
   display: flex;
   gap: 8px;
+}
+.chat-jobs__cancelled-label {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-3);
+  font-size: 12px;
 }
 .chat-jobs__action-primary {
   font-family: var(--font-body);
@@ -1505,6 +1535,7 @@
 /* Focus rings for the strip's interactive elements. */
 .chat-jobs__nav-btn:focus-visible,
 .chat-jobs__logs-toggle:focus-visible,
+.chat-jobs__cancel:focus-visible,
 .chat-jobs__close:focus-visible,
 .chat-jobs__action-primary:focus-visible,
 .chat-jobs__action-secondary:focus-visible {
@@ -1817,6 +1848,7 @@
 
 /* Icon-only regenerate: match the inline copy footprint. */
 .chat-regenerate {
+  color: var(--text-2);
   font-size: 13px;
   padding: 1px 7px;
   line-height: 1.4;

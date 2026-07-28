@@ -159,6 +159,7 @@ export function FoldedEventList({
                 summary={item.summary}
                 meta={item.meta}
                 outcome={item.outcome}
+                execution={item.execution}
                 action={item.action}
               />
             );

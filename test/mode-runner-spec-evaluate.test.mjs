@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchJobDescription } from '../batch/jd-fetcher.mjs';
 import { parseReportFile } from '../batch/lib/report-file.mjs';
 import evaluateSpec from '../batch/specs/evaluate.mjs';
 
@@ -53,6 +54,7 @@ score_breakdown:
 let root;
 let ctx;
 beforeEach(() => {
+  vi.mocked(fetchJobDescription).mockClear();
   root = mkdtempSync(join(tmpdir(), 'eval-spec-'));
   mkdirSync(join(root, 'data'), { recursive: true });
   mkdirSync(join(root, 'artifacts/reports'), { recursive: true });
@@ -109,6 +111,24 @@ describe('evaluate spec', () => {
     expect(body).toContain('**Next Steps**');
   });
 
+  it('clears hallucinated pasted-text metadata when evaluating a URL offer', async () => {
+    const inputs = await evaluateSpec.loadInputs(ctx);
+    const poisoned = MODEL_REPORT.replace(
+      'score: 4.2',
+      `source_kind: text\njd_path: inputs/jds/unrelated.md\njd_hash: ${'b'.repeat(64)}\nscore: 4.2`,
+    );
+    const payload = evaluateSpec.parse(`<<<SUR9E_OUTPUT>>>\n${poisoned}\n<<<SUR9E_END>>>`);
+    await evaluateSpec.write(ctx, inputs, payload);
+
+    const { frontmatter } = parseReportFile(
+      readFileSync(join(root, 'artifacts/reports/007-acme-2026-06-01.md'), 'utf-8'),
+    );
+    expect(frontmatter.url).toBe('https://acme.com/jobs/1');
+    expect(frontmatter.source_kind).toBeUndefined();
+    expect(frontmatter.jd_path).toBeUndefined();
+    expect(frontmatter.jd_hash).toBeUndefined();
+  });
+
   it('write omits posted when the model leaves it out or emits garbage', async () => {
     const inputs = await evaluateSpec.loadInputs(ctx);
     const noPosted = MODEL_REPORT.replace('posted: 2026-05-18\n', 'posted: sometime in May\n');
@@ -151,6 +171,42 @@ describe('evaluate spec', () => {
     expect(prompt).toContain('# CV');
     expect(prompt).toContain('JD TEXT');
     expect(prompt).toContain('<<<SUR9E_OUTPUT>>>');
+  });
+
+  it('loads a pasted-text JD without fetching a URL and preserves the text source on write', async () => {
+    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
+    writeFileSync(join(root, 'inputs/jds/acme.md'), 'PASTED JD TEXT\n', 'utf-8');
+    writeFileSync(
+      join(root, 'artifacts/reports/007-acme-2026-06-01.md'),
+      `---
+num: 7
+company: Acme
+role: SE
+source_kind: text
+jd_path: inputs/jds/acme.md
+jd_hash: ${'a'.repeat(64)}
+score: N/A
+---
+
+## TL;DR
+
+created
+`,
+      'utf-8',
+    );
+    const inputs = await evaluateSpec.loadInputs(ctx);
+    expect(fetchJobDescription).not.toHaveBeenCalled();
+    expect(inputs.jd.text).toContain('PASTED JD TEXT');
+    expect(evaluateSpec.buildPrompt(ctx, inputs)).toContain('USER-PASTED SOURCE');
+
+    const payload = evaluateSpec.parse(`<<<SUR9E_OUTPUT>>>\n${MODEL_REPORT}\n<<<SUR9E_END>>>`);
+    await evaluateSpec.write(ctx, inputs, payload);
+    const { frontmatter } = parseReportFile(
+      readFileSync(join(root, 'artifacts/reports/007-acme-2026-06-01.md'), 'utf-8'),
+    );
+    expect(frontmatter.source_kind).toBe('text');
+    expect(frontmatter.jd_path).toBe('inputs/jds/acme.md');
+    expect(frontmatter.url).toBeUndefined();
   });
 });
 

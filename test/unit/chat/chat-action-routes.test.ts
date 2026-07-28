@@ -11,9 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const emitTurnEventMock = vi.fn();
 const spawnJobMock = vi.fn();
+const revalidatePathMock = vi.fn();
 
 vi.mock('@/lib/server/chat/turn-runner', () => ({ emitTurnEvent: emitTurnEventMock }));
 vi.mock('@/lib/server/jobs/runner', () => ({ spawnJob: spawnJobMock }));
+vi.mock('@/server/revalidate', () => ({ revalidatePath: revalidatePathMock }));
 
 const APPLICATIONS_MD = [
   '# Applications Tracker',
@@ -48,11 +50,15 @@ async function flushImmediate(): Promise<void> {
 
 type StartJobRoute = typeof import('@/app/api/chat/actions/start-job/route');
 type SetStatusRoute = typeof import('@/app/api/chat/actions/set-status/route');
+type CancelJobRoute = typeof import('@/app/api/chat/actions/cancel-job/route');
+type CreateTextOfferRoute = typeof import('@/app/api/chat/actions/create-offer-from-text/route');
 
 describe('chat action routes', () => {
   let root: string;
   let startJobRoute: StartJobRoute;
   let setStatusRoute: SetStatusRoute;
+  let cancelJobRoute: CancelJobRoute;
+  let createTextOfferRoute: CreateTextOfferRoute;
 
   beforeEach(async () => {
     root = seedRoot();
@@ -60,8 +66,11 @@ describe('chat action routes', () => {
     vi.resetModules();
     startJobRoute = await import('@/app/api/chat/actions/start-job/route');
     setStatusRoute = await import('@/app/api/chat/actions/set-status/route');
+    cancelJobRoute = await import('@/app/api/chat/actions/cancel-job/route');
+    createTextOfferRoute = await import('@/app/api/chat/actions/create-offer-from-text/route');
     emitTurnEventMock.mockReset();
     spawnJobMock.mockReset();
+    revalidatePathMock.mockReset();
   });
 
   afterEach(async () => {
@@ -156,6 +165,57 @@ describe('chat action routes', () => {
     });
   });
 
+  describe('POST /api/chat/actions/create-offer-from-text', () => {
+    it('web chat context combines the local write and optional run behind one confirm', async () => {
+      const res = await createTextOfferRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/create-offer-from-text',
+          {
+            text: 'Build reliable systems.',
+            company: 'Acme',
+            role: 'Platform Engineer',
+            startKind: 'tailor-cv',
+          },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+      const body = await res.json();
+      expect(body.needsConfirm).toBe(true);
+      expect(body.summary).toContain('Create offer from pasted text');
+      expect(body.meta).toContain('then start CV tailoring');
+      expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).not.toContain(
+        'Platform Engineer',
+      );
+      expect(emitTurnEventMock).toHaveBeenCalledWith(
+        'turn-1',
+        expect.objectContaining({ kind: 'create-offer-from-text' }),
+      );
+    });
+
+    it('terminal approval creates a tracked offer and starts the requested mode', async () => {
+      const res = await createTextOfferRoute.POST(
+        postJson('http://localhost/api/chat/actions/create-offer-from-text', {
+          text: 'Build reliable systems.',
+          company: 'Acme',
+          role: 'Platform Engineer',
+          startKind: 'tailor-cv',
+          terminalApproved: true,
+        }),
+      );
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.created).toBe(true);
+      expect(body.offer.company).toBe('Acme');
+      expect(body.job.type).toBe('tailor-cv');
+      expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain(
+        'Platform Engineer',
+      );
+      expect(revalidatePathMock).toHaveBeenCalledWith('/offers');
+      await flushImmediate();
+      expect(spawnJobMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('POST /api/chat/actions/set-status', () => {
     it('web chat context: creates a confirm, writes nothing', async () => {
       const res = await setStatusRoute.POST(
@@ -196,6 +256,69 @@ describe('chat action routes', () => {
         }),
       );
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/chat/actions/cancel-job', () => {
+    const jobId = '0123456789abcdef';
+
+    function seedQueuedJob() {
+      writeFileSync(
+        join(root, 'data/jobs', `${jobId}.json`),
+        JSON.stringify({
+          id: jobId,
+          type: 'evaluate',
+          status: 'queued',
+          params: { num: 1001 },
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+          output: '',
+          error: null,
+          exitCode: null,
+        }),
+      );
+    }
+
+    it('web chat context creates an exact-job confirm and cancels nothing yet', async () => {
+      seedQueuedJob();
+      const res = await cancelJobRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/cancel-job',
+          { jobId },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+      const body = await res.json();
+      expect(body).toMatchObject({
+        needsConfirm: true,
+        summary: 'Cancel evaluation for offer #1001',
+      });
+      expect(
+        JSON.parse(readFileSync(join(root, 'data/jobs', `${jobId}.json`), 'utf-8')).status,
+      ).toBe('queued');
+      expect(emitTurnEventMock).toHaveBeenCalledWith(
+        'turn-1',
+        expect.objectContaining({ type: 'confirm', kind: 'cancel-job' }),
+      );
+    });
+
+    it('terminal context requires approval, then cancels only that job', async () => {
+      seedQueuedJob();
+      const pending = await cancelJobRoute.POST(
+        postJson('http://localhost/api/chat/actions/cancel-job', { jobId }),
+      );
+      expect(await pending.json()).toMatchObject({ needsConfirm: true });
+
+      const approved = await cancelJobRoute.POST(
+        postJson('http://localhost/api/chat/actions/cancel-job', {
+          jobId,
+          terminalApproved: true,
+        }),
+      );
+      expect(await approved.json()).toMatchObject({
+        cancelled: true,
+        job: { id: jobId, status: 'cancelled' },
+      });
     });
   });
 });

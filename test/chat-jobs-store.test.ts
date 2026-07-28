@@ -64,6 +64,17 @@ describe('chat jobs store', () => {
     await expect(s.waitForTerminal('job-a')).resolves.toMatchObject({ status: 'done' });
   });
 
+  it('treats cancelled as a neutral terminal state and prunes it from active persistence', async () => {
+    const s = useChatJobsStore.getState();
+    s.startJob('job-a', 'evaluate', 12);
+    const waiter = s.waitForTerminal('job-a');
+    s.setSnapshot('job-a', { status: 'cancelled', output: 'partial output' });
+    await expect(waiter).resolves.toMatchObject({ status: 'cancelled' });
+    expect(readPersistedActiveJobs()).toEqual([]);
+    s.markTerminalSeen();
+    expect(useChatJobsStore.getState().seenTerminalIds).toEqual([]);
+  });
+
   it('persists in-flight jobs under the UNCHANGED deck key and prunes terminal ones', () => {
     const s = useChatJobsStore.getState();
     s.startJob('job-a', 'evaluate', 12);

@@ -13,8 +13,8 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import yaml from "js-yaml";
-import { fetchJobDescription } from "../jd-fetcher.mjs";
 import { jdBlock, readOptional } from "../lib/inputs.mjs";
+import { resolveOfferSource } from "../lib/offer-source.mjs";
 import { findOfferRow, markOfferPdf } from "../lib/offers.mjs";
 import { extractSentinelPayload } from "../lib/output-parser.mjs";
 import { stripFrontMatter } from "../lib/report-file.mjs";
@@ -35,7 +35,6 @@ function makePdfSpec({ modeId, modeFile, templateFile, filePrefix, label }) {
     async loadInputs(ctx) {
       const offer = findOfferRow(ctx.rootPath, ctx.num);
       if (!offer) throw new Error(`offer #${ctx.num} not found in data/applications.md`);
-      if (!offer.url) throw new Error(`offer #${ctx.num} report has no url in frontmatter`);
       const cv = readFileSync(join(ctx.rootPath, "inputs/personalization/cv.md"), "utf-8");
       const profileRaw = readFileSync(
         join(ctx.rootPath, "inputs/personalization/profile.yml"),
@@ -50,11 +49,21 @@ function makePdfSpec({ modeId, modeFile, templateFile, filePrefix, label }) {
         join(ctx.rootPath, `content/templates/${templateFile}`),
         "utf-8",
       );
-      const jd = await fetchJobDescription(offer.url);
-      return { offer, cv, profileRaw, profile, narrative, modeBody, template, jd };
+      const source = await resolveOfferSource(ctx.rootPath, offer);
+      return {
+        offer,
+        cv,
+        profileRaw,
+        profile,
+        narrative,
+        modeBody,
+        template,
+        source,
+        jd: source.jd,
+      };
     },
 
-    buildPrompt(ctx, { offer, cv, profileRaw, narrative, modeBody, template, jd }) {
+    buildPrompt(ctx, { offer, cv, profileRaw, narrative, modeBody, template, source, jd }) {
       const jdText = jdBlock(jd);
       return `You are running the sur9e "${modeId}" mode (${label}) headlessly.
 Follow the mode contract below for CONTENT (keyword extraction, language,
@@ -101,7 +110,7 @@ ${narrative ? `\n==================== CANDIDATE NARRATIVE ====================\n
 - Offer #: ${offer.num}
 - Company: ${offer.company}
 - Role: ${offer.role}
-- URL: ${offer.url}
+- Source: ${source.label}
 
 ==================== JOB DESCRIPTION (already fetched) ====================
 ${jdText}`;

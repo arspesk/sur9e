@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { jobEstimateLabel } from '../../job-types';
 import type { ApplicationRow } from '../../schemas/applications';
+import type { TextOfferStartKind } from '../../schemas/chat-actions';
 import type { JobType } from '../../schemas/jobs';
 import { updateStatus } from '../applications';
 import {
@@ -23,14 +24,21 @@ import {
   type JobSetupRequiredPayload,
   startJob,
 } from '../jobs';
+import { type CancelJobResult, cancelJob } from '../jobs/lifecycle';
 import { resolveModeRuntime } from '../providers/registry';
 import { applyReportBodyEdit, parseFrontmatter, saveReport } from '../reports';
+import { createOrReuseTextOffer, type TextOfferResult } from '../text-offers';
 import { appendConfirmResolution } from './store';
 import { emitTurnEvent } from './turn-runner';
 
 const TTL_MS = 15 * 60 * 1000;
 
-export type ConfirmKind = 'start-job' | 'set-status' | 'edit-report';
+export type ConfirmKind =
+  | 'start-job'
+  | 'cancel-job'
+  | 'create-offer-from-text'
+  | 'set-status'
+  | 'edit-report';
 
 export interface StartJobPayload {
   kind: JobType;
@@ -42,6 +50,17 @@ export interface SetStatusPayload {
   status: string;
 }
 
+export interface CancelJobPayload {
+  jobId: string;
+}
+
+export interface CreateOfferFromTextPayload {
+  text: string;
+  company?: string;
+  role?: string;
+  startKind?: TextOfferStartKind;
+}
+
 export interface EditReportPayload {
   num: number;
   /** Resolved on-disk report path — the route resolves it before parking so
@@ -51,7 +70,12 @@ export interface EditReportPayload {
   newText: string;
 }
 
-type ConfirmPayload = StartJobPayload | SetStatusPayload | EditReportPayload;
+type ConfirmPayload =
+  | StartJobPayload
+  | CancelJobPayload
+  | CreateOfferFromTextPayload
+  | SetStatusPayload
+  | EditReportPayload;
 
 interface ConfirmRecord {
   token: string;
@@ -115,17 +139,44 @@ export function createConfirm(_root: string, input: CreateConfirmInput): { token
 }
 
 export type ConfirmOutcome = 'approved' | 'cancelled' | 'expired';
+export type ConfirmExecution = 'succeeded' | 'failed' | 'unchanged';
 
 export type ConfirmExecutionResult =
   | { ok: true; job: JobRecord | JobConflictPayload | JobSetupRequiredPayload }
   | { ok: true; updated: ApplicationRow | undefined }
   | { ok: true; report: { num: number } }
+  | { ok: true; cancellation: CancelJobResult }
+  | {
+      ok: true;
+      textOffer: TextOfferResult;
+      job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload;
+    }
   | { ok: false; error: string };
 
 export interface ResolveConfirmResult {
   outcome: ConfirmOutcome;
+  execution?: ConfirmExecution;
   /** Present only on approval: what the execution produced. */
   result?: ConfirmExecutionResult;
+}
+
+function executionFor(
+  kind: ConfirmKind,
+  result: ConfirmExecutionResult | undefined,
+): ConfirmExecution | undefined {
+  if (!result) return undefined;
+  if (!result.ok) return 'failed';
+  if (kind === 'cancel-job' && 'cancellation' in result) {
+    return result.cancellation.job.status === 'cancelled' ? 'succeeded' : 'unchanged';
+  }
+  if (kind === 'start-job' && 'job' in result) {
+    const status = result.job && 'status' in result.job ? result.job.status : undefined;
+    return status === 'queued' || status === 'running' ? 'succeeded' : 'unchanged';
+  }
+  if (kind === 'set-status' && 'updated' in result) {
+    return result.updated ? 'succeeded' : 'unchanged';
+  }
+  return 'succeeded';
 }
 
 /**
@@ -160,6 +211,16 @@ export function resolveConfirm(
       if (rec.kind === 'start-job') {
         const p = rec.payload as StartJobPayload;
         result = { ok: true, job: startJob(root, { kind: p.kind, params: p.params }) };
+      } else if (rec.kind === 'cancel-job') {
+        const p = rec.payload as CancelJobPayload;
+        result = { ok: true, cancellation: cancelJob(root, p.jobId) };
+      } else if (rec.kind === 'create-offer-from-text') {
+        const p = rec.payload as CreateOfferFromTextPayload;
+        const textOffer = createOrReuseTextOffer(root, p);
+        const job = p.startKind
+          ? startJob(root, { kind: p.startKind, params: { num: textOffer.offer.num } })
+          : undefined;
+        result = { ok: true, textOffer, ...(job ? { job } : {}) };
       } else if (rec.kind === 'edit-report') {
         const p = rec.payload as EditReportPayload;
         // RE-READ at resolve time: the card may have sat open while the user
@@ -182,11 +243,17 @@ export function resolveConfirm(
       result = { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
+  const execution = approve ? executionFor(rec.kind, result) : undefined;
 
   // Best-effort: the turn may have finished streaming by the time the
   // user clicks — the resolution itself still stands.
   try {
-    emitTurnEvent(rec.turnId, { type: 'confirm-resolved', token, outcome });
+    emitTurnEvent(rec.turnId, {
+      type: 'confirm-resolved',
+      token,
+      outcome,
+      ...(execution ? { execution } : {}),
+    });
   } catch {
     // no live turn to notify
   }
@@ -194,16 +261,21 @@ export function resolveConfirm(
   // turn's 'done' (the common case) never touches the persisted message.
   // Stamp the resolution onto that message too so a reload shows the resolved
   // card instead of re-armed buttons for an action that already ran.
-  persistResolution(root, token, outcome);
-  return { outcome, result };
+  persistResolution(root, token, outcome, execution);
+  return { outcome, ...(execution ? { execution } : {}), result };
 }
 
 /** Best-effort persistence of a confirm's terminal state onto its owning
  * assistant message. Never throws into the resolution path — a failed write
  * only means a reload would show the pre-fix (pending) card, not a crash. */
-function persistResolution(root: string, token: string, outcome: ConfirmOutcome): void {
+function persistResolution(
+  root: string,
+  token: string,
+  outcome: ConfirmOutcome,
+  execution?: ConfirmExecution,
+): void {
   try {
-    appendConfirmResolution(root, token, outcome);
+    appendConfirmResolution(root, token, outcome, execution);
   } catch {
     // never let a persistence hiccup break resolution
   }
@@ -255,6 +327,31 @@ export function describeSetStatus(num: number, status: string): { summary: strin
   return {
     summary: `Set offer #${num} status to "${status}"`,
     meta: 'tracker write · no AI spend',
+  };
+}
+
+/** Confirm-card copy for stopping one exact queued/running job. */
+export function describeCancelJob(job: JobRecord): { summary: string; meta: string } {
+  const label = KIND_LABELS[job.type] ?? job.type;
+  const num = Number.isInteger(job.params?.num) ? (job.params.num as number) : null;
+  return {
+    summary: num == null ? `Cancel ${label}` : `Cancel ${label} for offer #${num}`,
+    meta: `job ${job.id} · graceful stop · partial output kept`,
+  };
+}
+
+export function describeCreateOfferFromText(
+  preview: { reused: boolean; offer: ApplicationRow | null },
+  input: { company?: string; role?: string; startKind?: TextOfferStartKind },
+): { summary: string; meta: string } {
+  const identity = [input.company?.trim(), input.role?.trim()].filter(Boolean).join(' · ');
+  const action = preview.reused
+    ? `Reuse offer #${preview.offer?.num}`
+    : `Create offer from pasted text`;
+  const next = input.startKind ? ` · then start ${KIND_LABELS[input.startKind]}` : '';
+  return {
+    summary: identity ? `${action} — ${identity}` : action,
+    meta: `${preview.reused ? 'exact text match' : 'local tracker write'}${next}`,
   };
 }
 

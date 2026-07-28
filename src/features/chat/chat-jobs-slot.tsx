@@ -14,11 +14,13 @@
 // mounted once elsewhere, so it keeps running for every tracked job
 // regardless of which one is currently cycled into view.
 
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, OctagonX } from 'lucide-react';
 import { useState } from 'react';
+import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
+import { useToastStore } from '@/components/toast/toast-store';
 import type { JobType } from '@/lib/server/jobs';
 import { cleanErrorLine } from '@/lib/terminal-noise';
-import { startJobAction } from '@/server/actions/jobs';
+import { cancelJobAction, startJobAction } from '@/server/actions/jobs';
 import { fmtElapsed, jobTitle, parseLogLines, reportTarget, timePercent } from './chat-jobs-lib';
 import { useChatJobsStore } from './chat-jobs-store';
 import { useJobElapsed } from './use-chat-job-poll';
@@ -36,7 +38,11 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
   const startJob = useChatJobsStore(s => s.startJob);
   const cycleActive = useChatJobsStore(s => s.cycleActive);
   const toggleLogs = useChatJobsStore(s => s.toggleLogs);
+  const setSnapshot = useChatJobsStore(s => s.setSnapshot);
+  const confirmCancel = useDeleteConfirmStore(s => s.confirm);
+  const pushToast = useToastStore(s => s.push);
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   // 1-based rank in CREATION order — stable across cycling (seq, not index).
   const position = useChatJobsStore(s => {
     const me = s.jobs[jobId];
@@ -52,7 +58,8 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
   const snapshot = entry.snapshot;
   const isDone = snapshot?.status === 'done';
   const isError = snapshot?.status === 'error';
-  const isTerminal = isDone || isError;
+  const isCancelled = snapshot?.status === 'cancelled';
+  const isTerminal = isDone || isError || isCancelled;
   const percent = isDone ? 100 : timePercent(elapsed, kind);
   const title = jobTitle(kind, num);
   const target = reportTarget(entry);
@@ -66,7 +73,13 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
   // Terminal-state announcement for SR users — mirrors chat-card's
   // stream-status live region. Non-terminal states stay silent; the
   // spinner + elapsed tick would spam an aria-live region every second.
-  const announcement = isDone ? `${title} finished` : isError ? `${title} failed` : '';
+  const announcement = isDone
+    ? `${title} finished`
+    : isError
+      ? `${title} failed`
+      : isCancelled
+        ? `${title} cancelled`
+        : '';
 
   function handlePrimary() {
     dismiss(jobId);
@@ -107,6 +120,38 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
     setRetrying(false);
   }
 
+  async function handleCancel() {
+    if (cancelling) return;
+    const approved = await confirmCancel({
+      title: 'Cancel job?',
+      target: title,
+      bodyText: 'Stop this exact running job.',
+      warningText: 'Partial output and files already written will be kept.',
+      confirmLabel: 'Cancel job',
+    });
+    if (!approved) return;
+    setCancelling(true);
+    try {
+      const result = await cancelJobAction(jobId);
+      const job = result.job;
+      setSnapshot(jobId, {
+        status: job.status,
+        output: job.output,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt,
+        error: job.error ?? undefined,
+        params: job.params,
+        provider: job.provider,
+        model: job.model,
+        fallback: job.fallback,
+      });
+    } catch (err) {
+      pushToast('danger', err instanceof Error ? err.message : 'Could not cancel job');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="chat-jobs" data-logs-open={logsOpen ? 'true' : 'false'}>
       <span className="sr-only" aria-live="polite">
@@ -114,7 +159,7 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
       </span>
       <div className="chat-jobs__progress">
         <div
-          className={`chat-jobs__progress-fill ${isDone ? 'is-done' : isError ? 'is-error' : ''}`}
+          className={`chat-jobs__progress-fill ${isDone ? 'is-done' : isError ? 'is-error' : isCancelled ? 'is-cancelled' : ''}`}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -128,6 +173,11 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
         {isError && (
           <span className="chat-jobs__cross" aria-hidden="true">
             ✕
+          </span>
+        )}
+        {isCancelled && (
+          <span className="chat-jobs__cancelled" aria-hidden="true">
+            <OctagonX size={13} />
           </span>
         )}
         <span className="chat-jobs__title" title={title}>
@@ -157,6 +207,17 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
             </button>
           </span>
         )}
+        {!isTerminal && (
+          <button
+            type="button"
+            className="chat-jobs__cancel"
+            aria-label={`Cancel ${title}`}
+            disabled={cancelling}
+            onClick={() => void handleCancel()}
+          >
+            <OctagonX size={12} aria-hidden="true" />
+          </button>
+        )}
         <button
           type="button"
           className="chat-jobs__logs-toggle"
@@ -180,7 +241,18 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
       {errorText && <p className="chat-jobs__error">{errorText}</p>}
       {isTerminal && (
         <div className="chat-jobs__actions">
-          {isError ? (
+          {isCancelled ? (
+            <>
+              <span className="chat-jobs__cancelled-label">Cancelled</span>
+              <button
+                type="button"
+                className="chat-jobs__action-secondary"
+                onClick={() => dismiss(jobId)}
+              >
+                Dismiss
+              </button>
+            </>
+          ) : isError ? (
             <>
               <button
                 type="button"

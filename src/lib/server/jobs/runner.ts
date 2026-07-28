@@ -7,7 +7,7 @@
 // Inlined from src/server/lib/jobs.mjs.
 
 import 'server-only';
-import { spawn } from 'node:child_process';
+import { type ChildProcess, type SpawnOptions, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type JobRecord } from '../../schemas/jobs';
@@ -23,6 +23,13 @@ import {
 import { normalizeReportMarkdown } from '../report-markdown';
 import { parseFrontmatter, reportPathForNum, serializeFrontmatter } from '../reports';
 import { buildCommand } from './command-registry';
+import {
+  cancelJob,
+  persistJobRecord,
+  readJobRecord,
+  registerLiveJob,
+  unregisterLiveJob,
+} from './lifecycle';
 
 const MAX_OUTPUT_BYTES = 256 * 1024; // cap stored stdout/stderr to keep JSON small
 
@@ -48,10 +55,7 @@ function jobPath(rootPath: string, id: string): string {
   return join(jobsDir(rootPath), `${id}.json`);
 }
 
-function persist(rootPath: string, job: JobRecord): void {
-  mkdirSync(jobsDir(rootPath), { recursive: true });
-  writeFileSync(jobPath(rootPath, job.id), JSON.stringify(job, null, 2), 'utf-8');
-}
+const persist = persistJobRecord;
 
 // ---------------------------------------------------------------------------------
 
@@ -223,7 +227,36 @@ export function stampScreenJobNum(rootPath: string, job: JobRecord): JobRecord {
  * providerVersion field is left undefined — it's `.optional()` on the
  * schema specifically to tolerate this path.
  */
-export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> {
+type SpawnedJobProcess = ChildProcess & {
+  stdout: NonNullable<ChildProcess['stdout']>;
+  stderr: NonNullable<ChildProcess['stderr']>;
+};
+
+type TrackUsage = (
+  provider: NonNullable<JobRecord['provider']>,
+  inputTokens: number,
+  outputTokens: number,
+  options: {
+    cost_usd?: number;
+    model?: string;
+    mode: string;
+    rootPath: string;
+    estimated: boolean;
+  },
+) => unknown;
+
+interface SpawnJobDeps {
+  spawnProcess?: (command: string, args: string[], options: SpawnOptions) => SpawnedJobProcess;
+  cancel?: typeof cancelJob;
+  trackUsage?: TrackUsage;
+}
+
+export async function spawnJob(
+  rootPath: string,
+  job: JobRecord,
+  deps: SpawnJobDeps = {},
+): Promise<void> {
+  if (readJobRecord(rootPath, job.id)?.status === 'cancelled') return;
   let built: ReturnType<typeof buildCommand>;
   try {
     built = buildCommand(job.type, job.params, rootPath);
@@ -327,6 +360,7 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
     modeId: job.type,
     resolvedFrom: runtime.resolvedFrom,
   };
+  if (readJobRecord(rootPath, job.id)?.status === 'cancelled') return;
   persist(rootPath, running);
 
   // Use a mutable reference so inner closures can update the live record.
@@ -351,11 +385,22 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
   if (typeof guidance === 'string' && guidance.trim()) {
     childEnv.SUR9E_GUIDANCE = guidance;
   }
-  const child = spawn(built.cmd, built.args, {
+  const child = (deps.spawnProcess ?? spawn)(built.cmd, built.args, {
     cwd: rootPath,
     env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
-  });
+    detached: process.platform !== 'win32',
+  }) as SpawnedJobProcess;
+  registerLiveJob(job.id, child);
+
+  const cancelledDuringSpawn = readJobRecord(rootPath, job.id);
+  const childIdentity =
+    typeof child.pid === 'number'
+      ? {
+          pid: child.pid,
+          ...(process.platform !== 'win32' ? { processGroupId: child.pid } : {}),
+        }
+      : {};
 
   // Stamp the worker pid onto the running record. The lifecycle below is
   // flipped to done/error exclusively by this process's close/error
@@ -363,12 +408,41 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
   // would stay 'running' forever. The pid lets the read path (api.ts
   // reap-on-read via jobs/stale.ts) probe whether the worker still exists
   // and flip orphaned records to a terminal 'interrupted' error.
-  if (typeof child.pid === 'number') {
-    current = { ...current, pid: child.pid };
+  // Re-read BEFORE writing the pid: cancelJob can land after the pre-spawn
+  // running stamp but before registerLiveJob. Never overwrite that terminal
+  // decision with the runner's stale local "running" copy.
+  if (cancelledDuringSpawn?.status === 'cancelled') {
+    current = {
+      ...current,
+      ...childIdentity,
+      status: 'cancelled',
+      error: null,
+      finishedAt: cancelledDuringSpawn.finishedAt ?? new Date().toISOString(),
+    };
+    persist(rootPath, current);
+    (deps.cancel ?? cancelJob)(rootPath, job.id);
+  } else if (typeof child.pid === 'number') {
+    current = {
+      ...current,
+      ...childIdentity,
+    };
     persist(rootPath, current);
   }
 
   // Throttle persistence: collect output, write at most every 500ms.
+  function persistCurrentPreservingCancellation(): void {
+    const persisted = readJobRecord(rootPath, job.id);
+    if (persisted?.status === 'cancelled' && current.status !== 'cancelled') {
+      current = {
+        ...current,
+        status: 'cancelled',
+        error: null,
+        finishedAt: persisted.finishedAt ?? new Date().toISOString(),
+      };
+    }
+    persist(rootPath, current);
+  }
+
   let pending = false;
   let scheduled: ReturnType<typeof setTimeout> | null = null;
   function schedulePersist(): void {
@@ -377,7 +451,7 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
       scheduled = null;
       if (pending) {
         pending = false;
-        persist(rootPath, current);
+        persistCurrentPreservingCancellation();
       }
     }, 500);
   }
@@ -404,6 +478,7 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
   child.stderr.on('data', (d: Buffer) => append(d.toString()));
 
   child.on('close', async (code: number | null) => {
+    unregisterLiveJob(job.id);
     if (scheduled) {
       clearTimeout(scheduled);
       scheduled = null;
@@ -411,13 +486,23 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
     // Preserve null semantics from the .mjs: code === null means the process
     // was killed by a signal (no numeric exit). Don't coalesce to -1 — that
     // collides with legitimate exit codes and confuses downstream consumers.
-    current = {
-      ...current,
-      exitCode: code,
-      status: code === 0 ? 'done' : 'error',
-      error: code === 0 ? null : workerErrorFromOutput(current.output, code),
-      finishedAt: new Date().toISOString(),
-    };
+    const persisted = readJobRecord(rootPath, job.id);
+    current =
+      persisted?.status === 'cancelled'
+        ? {
+            ...current,
+            status: 'cancelled',
+            error: null,
+            exitCode: code,
+            finishedAt: persisted.finishedAt ?? new Date().toISOString(),
+          }
+        : {
+            ...current,
+            exitCode: code,
+            status: code === 0 ? 'done' : 'error',
+            error: code === 0 ? null : workerErrorFromOutput(current.output, code),
+            finishedAt: new Date().toISOString(),
+          };
     // Fallback re-stamp: when the worker retried on the fallback pair, the
     // provider/model stamped at spawn time describe the FAILED primary.
     // Flip the record to the pair that actually ran and keep the primary in
@@ -466,7 +551,9 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
             cost_usd?: number;
             model?: string;
           };
-          const { trackProvider } = await import('../../../../cli/usage-tracker.mjs');
+          const trackProvider =
+            deps.trackUsage ??
+            ((await import('../../../../cli/usage-tracker.mjs')).trackProvider as TrackUsage);
           // Pass rootPath explicitly: Turbopack bundles usage-tracker.mjs and
           // strips import.meta.dirname, so without this the tracker writes to
           // <repo>/../data/usage.json (one dir above the repo). See the
@@ -475,13 +562,18 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
           // current.provider is set on the running record for jobs that
           // carry provider-routing metadata. Older records on disk lack it —
           // default to 'claude' since that's what they implicitly were.
-          trackProvider(current.provider ?? 'claude', u.input_tokens || 0, u.output_tokens || 0, {
-            cost_usd: u.cost_usd ?? undefined,
-            model: u.model || current.model,
-            mode: current.modeId ?? current.type,
-            rootPath,
-            estimated: false, // [USAGE] from a real CLI is exact, not estimated
-          });
+          await trackProvider(
+            current.provider ?? 'claude',
+            u.input_tokens || 0,
+            u.output_tokens || 0,
+            {
+              cost_usd: u.cost_usd ?? undefined,
+              model: u.model || current.model,
+              mode: current.modeId ?? current.type,
+              rootPath,
+              estimated: false, // [USAGE] from a real CLI is exact, not estimated
+            },
+          );
         } catch (err) {
           // Don't fail the job over telemetry — log and move on.
           console.warn('[jobs] failed to track usage:', (err as Error).message);
@@ -498,20 +590,30 @@ export async function spawnJob(rootPath: string, job: JobRecord): Promise<void> 
     if (fixLog) {
       current = { ...current, fixes: fixLog };
     }
-    persist(rootPath, current);
+    persistCurrentPreservingCancellation();
   });
 
   child.on('error', (err: Error) => {
+    unregisterLiveJob(job.id);
     if (scheduled) {
       clearTimeout(scheduled);
       scheduled = null;
     }
-    current = {
-      ...current,
-      status: 'error',
-      error: err.message,
-      finishedAt: new Date().toISOString(),
-    };
+    const persisted = readJobRecord(rootPath, job.id);
+    current =
+      persisted?.status === 'cancelled'
+        ? {
+            ...current,
+            status: 'cancelled',
+            error: null,
+            finishedAt: persisted.finishedAt ?? new Date().toISOString(),
+          }
+        : {
+            ...current,
+            status: 'error',
+            error: err.message,
+            finishedAt: new Date().toISOString(),
+          };
     persist(rootPath, current);
   });
 }

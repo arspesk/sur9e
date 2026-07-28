@@ -11,11 +11,28 @@ import {
   useDeleteSession,
   useRenameSession,
 } from '@/hooks/use-chat-sessions';
+import { useOverflowFade } from '@/hooks/use-overflow-fade';
 import type { Conversation } from '@/lib/schemas/chat';
 import { useChatStore } from '@/stores/chat-store';
 import { groupByRecency } from './thread-groups';
 
 const ICON = { size: 15, strokeWidth: 1.8 } as const;
+
+function SessionTitle({
+  children,
+  className = 'chat-session-menu__title',
+}: {
+  children: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useOverflowFade(ref, children);
+  return (
+    <span ref={ref} className={className}>
+      {children}
+    </span>
+  );
+}
 
 /** Per-row ⋮ trigger + its portaled actions menu (rename / archive / delete).
  * Encapsulates its own open state + trigger ref so each row is independent. */
@@ -128,7 +145,7 @@ export function SessionMenu() {
     >
       <PopoverTrigger asChild>
         <button type="button" className="chat-session-trigger" aria-label="Switch chat session">
-          <span className="chat-header__title">{active?.title || 'Chat'}</span>
+          <SessionTitle className="chat-header__title">{active?.title || 'Chat'}</SessionTitle>
           <ChevronDown
             className="chat-session-trigger__caret"
             size={16}
@@ -217,7 +234,7 @@ export function SessionMenu() {
                         setMenuOpen(false);
                       }}
                     >
-                      {c.title || 'Untitled chat'}
+                      <SessionTitle>{c.title || 'Untitled chat'}</SessionTitle>
                       {unread.includes(c.id) && (
                         <>
                           <span className="chat-session-dot" aria-hidden="true" />
@@ -260,9 +277,9 @@ export function SessionMenu() {
             </summary>
             {archived.map(c => (
               <div key={c.id} className="chat-session-menu__row">
-                <span className="chat-session-menu__archived-title">
+                <SessionTitle className="chat-session-menu__archived-title">
                   {c.title || 'Untitled chat'}
-                </span>
+                </SessionTitle>
                 <SessionRowKebab
                   label={c.title || 'chat'}
                   items={[

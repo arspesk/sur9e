@@ -38,6 +38,22 @@ const readable = {
 };
 
 describe('buildScreenReport', () => {
+  it('does not trust model-provided pasted-text source metadata in URL screening', () => {
+    const { report } = buildScreenReport(
+      {
+        ...readable,
+        source_kind: 'text',
+        jd_path: 'inputs/jds/unrelated.md',
+        jd_hash: 'a'.repeat(64),
+      },
+      3,
+    );
+    expect(report).toContain('url: https://acme.com/jobs/1');
+    expect(report).not.toContain('source_kind: text');
+    expect(report).not.toContain('jd_path:');
+    expect(report).not.toContain('jd_hash:');
+  });
+
   it('follows the contract: Next Steps callout first, bare TL;DR, table, data-callouts', () => {
     const { report, tsv } = buildScreenReport(readable, 3);
     expect(report).toMatch(/^---\n/);

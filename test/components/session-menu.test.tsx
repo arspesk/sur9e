@@ -167,6 +167,18 @@ describe('SessionMenu', () => {
     );
   });
 
+  it('applies the overflow fade to clipped thread titles in the bubble menu', async () => {
+    const title = 'A deliberately long bubble-chat thread title that overflows';
+    renderMenu([makeConversation({ id: 'a', title })]);
+    fireEvent.click(screen.getByRole('button', { name: 'Switch chat session' }));
+    const row = await screen.findByRole('button', { name: title });
+    const label = row.querySelector('.chat-session-menu__title') as HTMLSpanElement;
+    Object.defineProperty(label, 'scrollWidth', { configurable: true, value: 320 });
+    Object.defineProperty(label, 'clientWidth', { configurable: true, value: 160 });
+    fireEvent(window, new Event('resize'));
+    expect(label).toHaveClass('is-clipped');
+  });
+
   it('rename: pencil icon opens an inline field, Enter commits via PATCH', async () => {
     const fetchSpy = vi.fn();
     renderMenu([makeConversation({ id: 'a', title: 'Session A' })]);

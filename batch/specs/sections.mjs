@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findOfferRow } from "../lib/offers.mjs";
+import { resolveOfferSource } from "../lib/offer-source.mjs";
 import { extractSentinelPayload } from "../lib/output-parser.mjs";
 import {
   parseReportFile,
@@ -56,10 +57,12 @@ function makeSectionSpec({ modeId, modeFile, title, stageLabel, timeoutMs = 6000
       );
       const reportRaw = readFileSync(join(ctx.rootPath, offer.reportPath), "utf-8");
       const report = parseReportFile(reportRaw);
-      return { offer, shared, modeBody, report };
+      const source =
+        offer.sourceKind === "text" ? await resolveOfferSource(ctx.rootPath, offer) : null;
+      return { offer, shared, modeBody, report, source };
     },
 
-    buildPrompt(ctx, { offer, shared, modeBody, report }) {
+    buildPrompt(ctx, { offer, shared, modeBody, report, source }) {
       return `You are running the sur9e "${modeId}" mode (${stageLabel}) headlessly.
 Research with your CLI's web-search / web-fetch capability as the mode
 describes. Your ONLY deliverable is ONE markdown H2 section, emitted between
@@ -95,6 +98,7 @@ ${shared}
 - Role: ${offer.role}
 - URL: ${offer.url ?? "(none on file)"}
 
+${source ? `==================== JOB DESCRIPTION SOURCE ====================\n${source.label}\n\n${source.jd.text}\n` : ""}
 ==================== CURRENT REPORT (context — do not re-emit) ====================
 ${report.body}`;
     },

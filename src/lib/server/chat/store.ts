@@ -292,6 +292,7 @@ export function appendConfirmResolution(
   root: string,
   token: string,
   outcome: 'approved' | 'cancelled' | 'expired',
+  execution?: 'succeeded' | 'failed' | 'unchanged',
 ): boolean {
   const db = openChatDb(root);
   const rows = db
@@ -316,7 +317,13 @@ export function appendConfirmResolution(
       const s = isRecord(e) ? e.seq : undefined;
       return typeof s === 'number' && s > m ? s : m;
     }, 0);
-    events.push({ seq: maxSeq + 1, type: 'confirm-resolved', token, outcome });
+    events.push({
+      seq: maxSeq + 1,
+      type: 'confirm-resolved',
+      token,
+      outcome,
+      ...(execution ? { execution } : {}),
+    });
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
       JSON.stringify(events),
       row.id,

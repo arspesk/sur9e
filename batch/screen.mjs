@@ -269,7 +269,13 @@ export function guessDomainFromCompany(company) {
 
 // ── Worker ───────────────────────────────────────────────────────────
 
-function buildUserMessage(offer, jd, cvContent, profileContent) {
+export function buildUserMessage(
+  offer,
+  jd,
+  cvContent,
+  profileContent,
+  scoreThreshold = screeningPolicy.scoreThreshold,
+) {
   // jd is { text, status: 'ok' | 'incomplete' | 'error' } from
   // batch/jd-fetcher.mjs. We inline whatever the fetcher returned (even
   // for incomplete pages — the prompt's `__JD_INCOMPLETE__` marker tells
@@ -293,10 +299,10 @@ ${profileContent}
 \`\`\`
 
 Job posting:
-- URL: ${offer.url}
+- Source: ${offer.sourceLabel || offer.url || 'Saved pasted job description'}
 - Hinted title: ${offer.title || '(unknown — derive from JD body)'}
 - Hinted company: ${offer.company || '(unknown — derive from JD body)'}
-- Score threshold: ${screeningPolicy.scoreThreshold}
+- Score threshold: ${scoreThreshold}
 
 Job description content (plain text, already fetched):
 \`\`\`text
@@ -328,7 +334,11 @@ export function parseScreenResponse(responseText) {
 // report shape (frontmatter + ## TL;DR + ## Role summary + ### Gaps) but short.
 // Unreadable pages (worker `readable:false`, or Unknown company + no score)
 // reuse Discarded with score N/A — never a fabricated 0.0.
-export function buildScreenReport(fields, scoreThreshold) {
+export function buildScreenReport(
+  fields,
+  scoreThreshold,
+  { reportPath: trustedReportPath, textSource } = {},
+) {
   const { num, slug, date, url } = fields;
   const company = (fields.company || '').trim();
   const hasScore = typeof fields.score === 'number' && Number.isFinite(fields.score);
@@ -380,7 +390,14 @@ export function buildScreenReport(fields, scoreThreshold) {
     role: displayRole,
     date,
     ...(posted ? { posted } : {}),
-    url,
+    ...(url ? { url } : {}),
+    ...(textSource
+      ? {
+          source_kind: 'text',
+          jd_path: textSource.jdPath,
+          jd_hash: textSource.jdHash,
+        }
+      : {}),
     status,
     state: 'screened',
     score: scoreOut === 'N/A' ? 'N/A' : Number(scoreOut),
@@ -474,7 +491,9 @@ export function buildScreenReport(fields, scoreThreshold) {
   // Tracker TSV — table order (…role, score, status, pdf, report, notes,
   // posted), 10 cols. `posted` is last (empty when unknown) so 9-col legacy
   // consumers stay readable.
-  const reportPath = `artifacts/reports/${String(num).padStart(3, '0')}-${slug}-${date}.md`;
+  const reportPath =
+    trustedReportPath ||
+    `artifacts/reports/${String(num).padStart(3, '0')}-${slug}-${date}.md`;
   const note = unreadable
     ? 'unreadable — JS/bot-walled page; try the careers page'
     : forced

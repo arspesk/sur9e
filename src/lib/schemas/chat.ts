@@ -109,13 +109,19 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
     // set-status → "Status updated", edit-report → "Report updated"). Optional
     // so confirm events persisted before this field existed still parse; the
     // card falls back to a generic "Confirmed" label when it's absent.
-    kind: z.enum(['start-job', 'set-status', 'edit-report']).optional(),
+    kind: z
+      .enum(['start-job', 'cancel-job', 'create-offer-from-text', 'set-status', 'edit-report'])
+      .optional(),
   }),
   z.object({
     seq,
     type: z.literal('confirm-resolved'),
     token: z.string(),
     outcome: z.enum(['approved', 'cancelled', 'expired']),
+    // Approval records the user's decision; execution qualifies whether the
+    // gated action actually changed state. Optional for persisted events from
+    // before execution outcomes were recorded.
+    execution: z.enum(['succeeded', 'failed', 'unchanged']).optional(),
   }),
   z.object({
     seq,

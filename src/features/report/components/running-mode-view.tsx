@@ -95,7 +95,8 @@ export function RunningModeView({ node }: NodeViewProps) {
 
   const showDone = status.status === 'done';
   const showFailed = status.status === 'failed';
-  const isRunning = !showDone && !showFailed;
+  const showCancelled = status.status === 'cancelled';
+  const isRunning = !showDone && !showFailed && !showCancelled;
 
   return (
     <NodeViewWrapper
@@ -145,6 +146,21 @@ export function RunningModeView({ node }: NodeViewProps) {
           >
             <polyline points="20 6 9 17 4 12" />
           </svg>
+        ) : showCancelled ? (
+          <svg
+            viewBox="0 0 24 24"
+            width="26"
+            height="26"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m15 9-6 6" />
+            <path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z" />
+            <path d="m9 9 6 6" />
+          </svg>
         ) : (
           <svg
             viewBox="0 0 24 24"
@@ -172,7 +188,9 @@ export function RunningModeView({ node }: NodeViewProps) {
                 mode === 'cover-letter' || mode === 'tailor-cv'
                 ? 'Done — saved to Attachments.'
                 : 'Done — added to the report.'
-              : `Failed${status.error ? ` — ${status.error}` : ''}`}
+              : showCancelled
+                ? 'Cancelled — partial output was kept.'
+                : `Failed${status.error ? ` — ${status.error}` : ''}`}
         </div>
       </div>
       {/* Dismiss button — only visible when terminal so the user can't
