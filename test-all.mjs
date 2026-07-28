@@ -17,6 +17,7 @@ import { execFileSync, execSync } from 'child_process';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { boundaryViolations } from './src/lib/check-user-data-boundary.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -132,7 +133,11 @@ console.log('\n5. Data contract validation');
 // Check system files exist
 const systemFiles = [
   'CLAUDE.md',
+  'AGENTS.md',
   'VERSION',
+  'package-lock.json',
+  'release-please-config.json',
+  '.release-please-manifest.json',
   'content/modes/_shared.md',
   'content/examples/personalization/narrative.md',
   'content/modes/evaluate.md',
@@ -141,6 +146,8 @@ const systemFiles = [
   'content/templates/cv-template.html',
   '.claude/skills/sur9e/SKILL.md',
   'content/examples/personalization/profile.yml',
+  'src/lib/repo-path-policy.mjs',
+  'src/lib/check-user-data-boundary.mjs',
 ];
 
 for (const f of systemFiles) {
@@ -151,21 +158,26 @@ for (const f of systemFiles) {
   }
 }
 
-// Check user files are NOT tracked (gitignored)
-const userFiles = [
-  'inputs/personalization/profile.yml',
-  'inputs/personalization/narrative.md',
-  'inputs/personalization/cv.md',
-  'inputs/personalization/article-digest.md',
-];
-for (const f of userFiles) {
-  const tracked = run('git', ['ls-files', f]);
-  if (tracked === '') {
-    pass(`User file gitignored: ${f}`);
-  } else if (tracked === null) {
-    pass(`User file gitignored: ${f}`);
+// Check the complete repository boundary, not only a spot list of common
+// personalization files. Tracked scaffolding exceptions are owned by the
+// shared path policy used by both this local gate and pull-request CI.
+let trackedFiles;
+try {
+  const trackedFileOutput = execFileSync('git', ['ls-files', '-z'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  trackedFiles = trackedFileOutput === '' ? [] : trackedFileOutput.slice(0, -1).split('\0');
+} catch {
+  fail('Unable to scan tracked files for private user-data paths');
+}
+if (trackedFiles) {
+  const violations = boundaryViolations(trackedFiles);
+  if (violations.length === 0) {
+    pass('No private user-data paths are tracked');
   } else {
-    fail(`User file IS tracked (should be gitignored): ${f}`);
+    for (const path of violations) fail(`Private user-data path is tracked: ${path}`);
   }
 }
 

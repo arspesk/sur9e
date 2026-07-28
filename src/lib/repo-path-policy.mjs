@@ -31,7 +31,7 @@ export const SYSTEM_PATHS = Object.freeze([
   '.prettierignore',
   '.env.example',
   'src/lib/repo-path-policy.mjs',
-  'scripts/check-user-data-boundary.mjs',
+  'src/lib/check-user-data-boundary.mjs',
   'scripts/sync-release-version.mjs',
   'update-system.mjs',
   'test-all.mjs',

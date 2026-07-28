@@ -82,7 +82,7 @@ describe('repository path policy', () => {
     'release-please-config.json',
     '.release-please-manifest.json',
     'src/lib/repo-path-policy.mjs',
-    'scripts/check-user-data-boundary.mjs',
+    'src/lib/check-user-data-boundary.mjs',
     'scripts/sync-release-version.mjs',
     '.github/workflows/release.yml',
   ])('classifies %s as a system path', path => {
@@ -155,13 +155,14 @@ describe('repository path policy', () => {
         'release-please-config.json',
         '.release-please-manifest.json',
         'src/lib/repo-path-policy.mjs',
-        'scripts/check-user-data-boundary.mjs',
+        'src/lib/check-user-data-boundary.mjs',
         'scripts/sync-release-version.mjs',
         'update-system.mjs',
         'test-all.mjs',
       ]),
     );
     expect(SYSTEM_PATHS).not.toContain('scripts/repo-path-policy.mjs');
+    expect(SYSTEM_PATHS).not.toContain('scripts/check-user-data-boundary.mjs');
   });
 
   it('normalizes separators and leading relative markers', () => {
