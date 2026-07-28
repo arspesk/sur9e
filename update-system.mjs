@@ -21,6 +21,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import yaml from 'js-yaml';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { isSystemPath, isUserPath, SYSTEM_PATHS } from './src/lib/repo-path-policy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -98,48 +99,6 @@ function resolveUpdateRemote() {
 }
 const REMOTE = resolveUpdateRemote();
 
-// System layer paths — ONLY these files get updated
-const SYSTEM_PATHS = [
-  // Claude mode prompts (content)
-  'content/modes/',
-  // Server + CLI source (under src/)
-  'src/',
-  // Static frontend assets
-  'public/',
-  // Templates (PDF, CV, states)
-  'content/templates/',
-  // Batch worker
-  'batch/batch-prompt.md',
-  'batch/batch-runner.sh',
-  // Skills + docs + version + license + repo metadata
-  '.claude/skills/',
-  'docs/',
-  'VERSION',
-  'README.md',
-  'LICENSE',
-  'CLAUDE.md',
-  '.github/',
-  'package.json',
-  'biome.json',
-  'tsconfig.json',
-  '.prettierrc.json',
-  '.prettierignore',
-  '.env.example',
-  // Update mechanism + test gate (these update themselves)
-  'update-system.mjs',
-  'test-all.mjs',
-];
-
-// User layer paths — NEVER touch these (safety check)
-const USER_PATHS = [
-  'inputs/personalization/',
-  'artifacts/interview-prep/story-bank.md',
-  'data/',
-  'artifacts/reports/',
-  'artifacts/output/',
-  'inputs/jds/',
-];
-
 function localVersion() {
   const vPath = join(ROOT, 'VERSION');
   return existsSync(vPath) ? readFileSync(vPath, 'utf-8').trim() : '0.0.0';
@@ -184,22 +143,14 @@ function revertPaths(paths) {
   git('checkout', 'HEAD', '--', ...paths);
 }
 
-function isSystemFile(file) {
-  return SYSTEM_PATHS.some(p => (p.endsWith('/') ? file.startsWith(p) : file === p));
-}
-
-function isUserFile(file) {
-  return USER_PATHS.some(p => (p.endsWith('/') ? file.startsWith(p) : file === p));
-}
-
 // True sync for one system path: `git checkout <ref> -- <path>` only
 // overwrites/creates, so files deleted or renamed in the target tree would
 // otherwise linger (stale duplicate Next.js routes can brick the build).
 // Lists tracked files that exist in fromRef but not in toRef under `path`
 // and removes them. Safety by construction: the diff is pathspec-scoped to a
 // SYSTEM_PATH, only tracked files can appear (gitignored user content never
-// does), and each candidate is re-checked against SYSTEM_PATHS / USER_PATHS
-// before removal.
+// does), and each candidate is re-checked against the shared system/user path
+// policy before removal.
 function removeFilesAbsentInTarget(fromRef, toRef, path) {
   const removed = [];
   let deleted;
@@ -221,7 +172,7 @@ function removeFilesAbsentInTarget(fromRef, toRef, path) {
     .split('\n')
     .map(f => f.trim())
     .filter(Boolean)) {
-    if (!isSystemFile(file) || isUserFile(file)) continue; // defense in depth
+    if (!isSystemPath(file) || isUserPath(file)) continue; // defense in depth
     try {
       git('rm', '-f', '--ignore-unmatch', '--', file);
       removed.push(file);
@@ -297,9 +248,7 @@ async function apply() {
   // Refuse to overwrite uncommitted local edits in system paths — the backup
   // branch is created from HEAD, so checkout FETCH_HEAD would clobber them
   // with no recovery path.
-  const dirtySystem = initialStatusEntries.filter(entry =>
-    SYSTEM_PATHS.some(p => (p.endsWith('/') ? entry.path.startsWith(p) : entry.path === p)),
-  );
+  const dirtySystem = initialStatusEntries.filter(entry => isSystemPath(entry.path));
   if (dirtySystem.length > 0) {
     console.error('Uncommitted changes in system files — commit or stash them first:');
     for (const entry of dirtySystem) console.error(`  ${entry.code} ${entry.path}`);
@@ -357,11 +306,9 @@ async function apply() {
       for (const entry of gitStatusEntries()) {
         const file = entry.path;
         if (initialStatusPaths.has(file)) continue;
-        for (const userPath of USER_PATHS) {
-          if (file.startsWith(userPath)) {
-            console.error(`SAFETY VIOLATION: User file was modified: ${file}`);
-            userFileTouched = true;
-          }
+        if (isUserPath(file)) {
+          console.error(`SAFETY VIOLATION: User file was modified: ${file}`);
+          userFileTouched = true;
         }
       }
     } catch {
