@@ -1,33 +1,51 @@
-name: test
+name: CI
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
+permissions:
+  contents: read
 
-      - uses: actions/setup-node@v5
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quick quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          # sur9e requires Node 24+ (node:sqlite in the chat store); the
-          # postinstall check-node.mjs guard hard-fails on anything lower.
           node-version: 24
+          cache: npm
 
       - name: Install dependencies
-        # `npm install` (not `npm ci`) because package-lock.json is gitignored
-        # in this repo by deliberate choice. See .gitignore.
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
-      - name: Lint
-        run: npm run lint
+      - name: Run quick quality gate
+        run: npm run test:quick
 
-      - name: Type-check (JSDoc)
-        run: npm run typecheck
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Test suite (--quick)
-        run: node test-all.mjs --quick
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production application
+        run: npm run build
