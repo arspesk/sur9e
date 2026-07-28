@@ -80,7 +80,6 @@ batch/screened-urls.txt
 .codex/hooks.json
 sur9e-dashboard
 career-dashboard
-package-lock.json
 
 # IDE
 .idea/
