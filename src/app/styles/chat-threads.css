@@ -31,12 +31,52 @@
   overflow: hidden;
 }
 
+/* Same resize affordance as the offers table: a discoverable 1px divider,
+   wider invisible hit area, and 2px hover/drag state. */
+.chat-threads__resize {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  bottom: 6px;
+  left: calc(var(--chat-thread-width, 256px) - 1px);
+  width: 1px;
+  padding: 0;
+  border: 0;
+  background: var(--border);
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  transition:
+    background var(--dur-fast) ease,
+    width var(--dur-fast) ease;
+}
+.chat-threads__resize::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -5px;
+  right: -5px;
+}
+.chat-threads__resize:hover,
+.chat-threads__resize.dragging {
+  width: 2px;
+  background: var(--text-3);
+}
+.chat-threads__resize:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* ─── Head: New chat + collapse toggle (pinned) ─── */
 
 .chat-threads__head {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  /* Account for the panel's top padding plus the divider's margin and 1px
+     rule, placing that rule on the shared 56px topbar baseline. */
+  height: calc(var(--topbar-h) - var(--space-2) - var(--space-1) - 1px);
   flex-shrink: 0;
 }
 
@@ -287,7 +327,8 @@
   .chat-threads,
   .chat-threads__new,
   .chat-threads__row,
-  .chat-threads__kebab {
+  .chat-threads__kebab,
+  .chat-threads__resize {
     transition: none;
   }
 }
@@ -295,7 +336,8 @@
 /* Mobile: /chat is normally reached via the bubble (already a full-screen
    takeover ≤640px), but a deep link should still work — drop the sidebar. */
 @media (max-width: 640px) {
-  .chat-threads {
+  .chat-threads,
+  .chat-threads__resize {
     display: none;
   }
 }

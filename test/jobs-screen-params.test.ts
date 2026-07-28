@@ -36,4 +36,22 @@ describe('JobParams — screen variant', () => {
     const r = JobParams.safeParse({ type: 'screen', queue: false });
     expect(r.success).toBe(false);
   });
+
+  it('accepts screen-evaluate for a tracked pasted-text offer number', () => {
+    const r = JobParams.safeParse({ type: 'screen-evaluate', num: 42 });
+    expect(r.success).toBe(true);
+  });
+
+  it('still accepts screen-evaluate for a URL offer', () => {
+    const r = JobParams.safeParse({
+      type: 'screen-evaluate',
+      url: 'https://example.com/job/42',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects screen-evaluate without either an offer number or URL', () => {
+    const r = JobParams.safeParse({ type: 'screen-evaluate' });
+    expect(r.success).toBe(false);
+  });
 });

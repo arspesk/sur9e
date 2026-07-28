@@ -132,10 +132,16 @@ describe('opencode provider', () => {
       expect(opencode.parseStreamLine('   ')).toBeNull();
       expect(opencode.parseStreamLine('INFO  some plain log line')).toBeNull();
     });
-    it('truncates long reasoning/text to 200 chars', () => {
-      const long = JSON.stringify({ type: 'reasoning', part: { text: 'a'.repeat(500) } });
-      const ev = opencode.parseStreamLine(long);
-      expect(ev?.message.length).toBeLessThanOrEqual(200);
+    it('preserves complete reasoning while bounding the duplicate reply stage', () => {
+      const reasoning = `reasoning-start ${'a'.repeat(500)} reasoning-end`;
+      const thinking = opencode.parseStreamLine(
+        JSON.stringify({ type: 'reasoning', part: { text: reasoning } }),
+      );
+      const stage = opencode.parseStreamLine(
+        JSON.stringify({ type: 'text', part: { text: 'b'.repeat(500) } }),
+      );
+      expect(thinking).toMatchObject({ kind: 'thinking', message: reasoning });
+      expect(stage?.message.length).toBeLessThanOrEqual(200);
     });
   });
 

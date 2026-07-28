@@ -222,6 +222,13 @@ describe('chat confirms store', () => {
         ok: true,
         textOffer: { reused: false, offer: { company: 'Acme', role: 'Platform Engineer' } },
         job: { type: 'cover-letter' },
+        message: expect.stringMatching(/Offer #\d+ created/i),
+        links: [
+          {
+            label: expect.stringMatching(/^Offer #\d+$/),
+            href: expect.stringMatching(/^\/report\/\d+$/),
+          },
+        ],
       },
     });
     expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain(
@@ -229,6 +236,39 @@ describe('chat confirms store', () => {
     );
     await flushImmediate();
     expect(spawnJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs pasted-text screening then evaluation behind one approval', async () => {
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-1',
+      kind: 'create-offer-from-text',
+      payload: {
+        text: 'Own platform reliability.',
+        company: 'Acme',
+        role: 'Staff Engineer',
+        startKind: 'screen-evaluate',
+      },
+      summary: 'Create, screen, and evaluate offer',
+      meta: 'local tracker write · then start screen + evaluate',
+    });
+    const res = confirms.resolveConfirm(root, token, true);
+    expect(res).toMatchObject({
+      outcome: 'approved',
+      result: {
+        ok: true,
+        job: { type: 'screen-evaluate' },
+        message: expect.stringMatching(/screening and evaluation started/i),
+      },
+    });
+    expect(emitTurnEventMock).toHaveBeenLastCalledWith(
+      'turn-1',
+      expect.objectContaining({
+        type: 'confirm-resolved',
+        token,
+        message: expect.stringMatching(/screening and evaluation started/i),
+        links: [expect.objectContaining({ href: expect.stringMatching(/^\/report\//) })],
+      }),
+    );
   });
 
   it('cancel executes nothing and emits confirm-resolved cancelled', () => {

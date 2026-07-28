@@ -39,6 +39,17 @@ describe('mcp-app-server — action tools', () => {
     );
   });
 
+  it('advertises tracked pasted-text screening by offer number', async () => {
+    client = new McpTestClient({ SUR9E_APP_URL: 'http://127.0.0.1:9' });
+    await client.initialize();
+    const res = await client.request(2, 'tools/list');
+    const startJob = res.result.tools.find((tool: { name: string }) => tool.name === 'start_job');
+    expect(startJob.inputSchema.properties.params.description).toContain(
+      'screen or screen-evaluate with { "num": <tracker number> }',
+    );
+    expect(startJob.inputSchema.properties.params.description).toContain('does not require a URL');
+  });
+
   it('create_offer_from_text forwards text identity and optional job in one confirmation', async () => {
     app = await startMockApp({
       'POST /api/chat/actions/create-offer-from-text': {
@@ -71,6 +82,40 @@ describe('mcp-app-server — action tools', () => {
       role: 'Engineer',
       startKind: 'tailor-cv',
     });
+  });
+
+  it('advertises and forwards the recommended create + screen + evaluate workflow', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/create-offer-from-text': {
+        status: 200,
+        body: {
+          needsConfirm: true,
+          token: 'tok-workflow',
+          summary: 'Create offer from pasted text — Acme · Engineer',
+          meta: 'local tracker write · then start screen + evaluate',
+        },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+    const tools = await client.request(2, 'tools/list');
+    const tool = tools.result.tools.find(
+      (candidate: { name: string }) => candidate.name === 'create_offer_from_text',
+    );
+    expect(tool.inputSchema.properties.start_kind.enum).toContain('screen-evaluate');
+    expect(tool.description).toContain('Create + screen + evaluate');
+    expect(tool.description).toContain('recommended');
+
+    await client.request(3, 'tools/call', {
+      name: 'create_offer_from_text',
+      arguments: {
+        text: 'Build the platform.',
+        company: 'Acme',
+        role: 'Engineer',
+        start_kind: 'screen-evaluate',
+      },
+    });
+    expect(app.requests[0].body).toMatchObject({ startKind: 'screen-evaluate' });
   });
 
   it('cancel_job forwards one exact job id through the confirmation gate', async () => {

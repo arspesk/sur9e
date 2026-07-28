@@ -258,7 +258,7 @@ function pruneTerminalTurns(): void {
 
 export type MappedLine = {
   events: ChatTurnEventPayload[];
-  /** Full-fidelity reply text carried by this line (parseStreamLine truncates at 200 chars). */
+  /** Full-fidelity reply text carried by this line (stage summaries are capped at 200 chars). */
   text: string | null;
   /** Authoritative complete reply from the provider's terminal event, when present. */
   resultText: string | null;
@@ -275,7 +275,8 @@ export type MappedLine = {
  *
  * Layered on provider.parseStreamLine for the progress kinds
  * (thinking/tool/stage), with raw-line extraction for what the unified
- * parser can't carry: full reply text (200-char truncation) and cost.
+ * parser can't carry: full reply text (stage summaries are capped at 200
+ * characters) and cost.
  * Verified against the adapters: kind 'tokens' is the TERMINAL usage event
  * (claude `result`, codex `turn.completed`; 'final' is the reserved
  * equivalent) — usage, never reply text.
@@ -448,7 +449,7 @@ export async function startTurn(
      * context, rendered into the prompt but never persisted on the message. */
     selections?: string[];
   },
-): Promise<{ turnId: string }> {
+): Promise<{ turnId: string; userMessageId: string | null }> {
   // Synchronous check-and-add, BEFORE any await: two near-simultaneous
   // startTurn() calls for the same conversationId can't interleave here —
   // there's no yield point between the .has() check and the .add() below,
@@ -506,6 +507,7 @@ export async function startTurn(
     let versionGroup: string | null = null;
     let attachments = opts.attachments;
     let referencedOffers = opts.referencedOffers;
+    let userMessageId: string | null = null;
     if (opts.regenerate) {
       const lastAssistant = [...history].reverse().find(m => m.role === 'assistant');
       const lastUser = [...history].reverse().find(m => m.role === 'user');
@@ -536,13 +538,13 @@ export async function startTurn(
         throw new Error('message required');
       }
       userMessage = opts.userMessage ?? '';
-      appendMessage(root, {
+      userMessageId = appendMessage(root, {
         conversationId: opts.conversationId,
         role: 'user',
         content: userMessage,
         attachments: opts.attachments,
         referencedOffers: opts.referencedOffers,
-      });
+      }).id;
       // First message ever in this conversation → immediate fallback title so
       // the sessions list never shows a lingering 'New chat'.
       if (history.length === 0) applyFallbackTitle(root, opts.conversationId, userMessage);
@@ -597,7 +599,7 @@ export async function startTurn(
       versionGroup,
       isFirstTurn,
     });
-    return { turnId };
+    return { turnId, userMessageId };
   } catch (err) {
     inFlightConversations.delete(opts.conversationId);
     throw err;

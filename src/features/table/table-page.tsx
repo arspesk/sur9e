@@ -15,6 +15,7 @@ import {
 import type { ActionsMenuScope } from '@/components/domain/actions-menu';
 import { IconButton } from '@/components/primitives';
 import { Topbar } from '@/components/shell/topbar';
+import { isPendingOfferStatus } from '@/features/home/pending-offers-select';
 import { useApplications } from '@/hooks/use-applications';
 import { useJobAction } from '@/hooks/use-job-action';
 import { useSetPageContext } from '@/hooks/use-page-context';
@@ -210,14 +211,10 @@ function TablePageInner({ initialData, setupMissing }: TablePageInnerProps) {
       : `${rows.length} of ${totalCount} offers`
     : '…';
 
-  // "Waiting on you" = screened (evaluated, not yet applied) + responded
-  // (they replied, you owe a reply). Locked in the 2026-06-04 polish spec.
+  // Keep this count aligned with Home's Pending Offers decision queue.
   const waitingCount = useMemo(() => {
     const entries = query.data?.entries ?? [];
-    return entries.filter((e: ApplicationRow) => {
-      const s = (e.status || '').toLowerCase();
-      return s === 'screened' || s === 'responded';
-    }).length;
+    return entries.filter((e: ApplicationRow) => isPendingOfferStatus(e.status)).length;
   }, [query.data?.entries]);
 
   const allRowNums = rows.map(r => r.num);

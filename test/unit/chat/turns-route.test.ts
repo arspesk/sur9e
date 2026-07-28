@@ -149,6 +149,7 @@ describe('POST /api/chat/sessions/[id]/turns — onboarding preflight', () => {
     expect(res.status).toBe(202);
     const body = await res.json();
     expect(typeof body.turnId).toBe('string');
+    expect(typeof body.userMessageId).toBe('string');
     expect(body.setupRequired).toBeUndefined();
 
     await new Promise<void>((resolve, reject) => {

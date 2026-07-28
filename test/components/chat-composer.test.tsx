@@ -93,6 +93,27 @@ describe('ChatComposer', () => {
     expect(textarea().value).toBe('');
   });
 
+  it('keeps the draft editable but blocks Enter and Send while the target thread loads', () => {
+    const onSend = vi.fn();
+    render(
+      <ChatComposer
+        streaming={false}
+        sendDisabled
+        files={[]}
+        onFilesChange={() => {}}
+        onSend={onSend}
+        onStop={() => {}}
+      />,
+    );
+
+    fireEvent.change(textarea(), { target: { value: 'keep this draft' } });
+    fireEvent.keyDown(textarea(), { key: 'Enter' });
+
+    expect(textarea().value).toBe('keep this draft');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+  });
+
   it('Shift+Enter does not send', () => {
     const onSend = vi.fn();
     render(

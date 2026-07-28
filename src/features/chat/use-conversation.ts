@@ -43,11 +43,14 @@ const NO_SUPPRESS = Symbol('no-suppress');
 
 export interface ConversationApi {
   messages: ChatMessage[];
+  conversationStatus: 'new' | 'loading' | 'ready' | 'error';
+  conversationError: string | null;
   live: LiveTurn | null;
   streaming: boolean;
   /** Raw turn status — hosts announce transitions to screen readers. */
   turnStatus: 'idle' | 'streaming' | 'done' | 'error';
   pendingUserMessage: string | null;
+  pendingUserMessageId: string | null;
   sendError: string | null;
   setupRequired: boolean;
   draftFiles: File[];
@@ -56,6 +59,7 @@ export interface ConversationApi {
   send: (text: string, referencedOffers?: number[], files?: File[]) => Promise<void>;
   stop: () => Promise<void>;
   retry: () => void;
+  retryConversation: () => void;
   regenerate: () => Promise<void>;
 }
 
@@ -74,6 +78,7 @@ export function useConversation(opts?: {
   const adoptDraftOverride = useChatStore(s => s.adoptDraftOverride);
 
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
+  const [pendingUserMessageId, setPendingUserMessageId] = useState<string | null>(null);
   const [doneMessageId, setDoneMessageId] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   // Draft attachments live HERE (not the composer) — the host is the drop
@@ -84,8 +89,23 @@ export function useConversation(opts?: {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data: session } = useChatSession(activeConversationId);
+  const sessionQuery = useChatSession(activeConversationId);
+  const session = sessionQuery.data;
   const messages: ChatMessage[] = session?.messages ?? [];
+  const conversationStatus =
+    activeConversationId == null
+      ? 'new'
+      : session != null
+        ? 'ready'
+        : sessionQuery.isError
+          ? 'error'
+          : 'loading';
+  const conversationError =
+    conversationStatus === 'error'
+      ? sessionQuery.error instanceof Error
+        ? sessionQuery.error.message
+        : 'Conversation failed to load.'
+      : null;
 
   // send() and the turn hook reference each other (done → auto-send queued),
   // so the hook reads send through a ref that each render refreshes.
@@ -169,10 +189,12 @@ export function useConversation(opts?: {
       setDoneMessageId(null);
       const store = useChatStore.getState();
       store.setLastUserMessage(conversationKey(store.activeConversationId), text);
+      setPendingUserMessageId(null);
       setPendingUserMessage(
         text ||
           (files.length ? `[${files.length} attached file${files.length === 1 ? '' : 's'}]` : text),
       );
+      let createdConversationId: string | null = null;
       try {
         let conversationId = useChatStore.getState().activeConversationId;
         if (!conversationId) {
@@ -182,17 +204,15 @@ export function useConversation(opts?: {
             body: JSON.stringify({}),
           });
           conversationId = created.session.id;
-          // draft → created is the SAME thread: the per-thread reset effect
-          // must not fire for this id change (see suppressResetForRef).
-          suppressResetForRef.current = conversationId;
-          setActiveConversation(conversationId);
-          adoptDraftOverride(conversationId);
-          queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_KEY });
+          createdConversationId = conversationId;
         }
         // Attachments force conversation creation FIRST (above) by design —
         // no draft-upload dance; the upload needs a real conversation id.
         const attachments = await uploadFiles(conversationId, files); // throws → catch shows sendError, files kept
-        const override = useChatStore.getState().modelOverride[conversationId];
+        const overrideStore = useChatStore.getState().modelOverride;
+        const override =
+          overrideStore[conversationId] ??
+          (createdConversationId ? overrideStore[conversationKey(null)] : undefined);
         // On-screen awareness: the semantic page summary the active surface
         // published (Part 1), and the text selections staged as chips (Part 2).
         // Both are read at send time from their stores; context falls back to
@@ -201,28 +221,57 @@ export function useConversation(opts?: {
           usePageContextStore.getState().context ?? `viewing ${window.location.pathname}`;
         const selections = useChatStore.getState().selections;
         // 200 + `{ setupRequired: true }` is a NORMAL body, not a thrown error.
-        const res = await chatFetch<{ turnId: string } | { setupRequired: true }>(
-          `/api/chat/sessions/${encodeURIComponent(conversationId)}/turns`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              message: text,
-              ...(attachments.length ? { attachments } : {}),
-              ...(referencedOffers.length ? { referencedOffers } : {}),
-              ...(selections.length ? { selections } : {}),
-              ...(override ? { provider: override.provider, model: override.model } : {}),
-              pageContext,
-            }),
-          },
-        );
+        const res = await chatFetch<
+          { turnId: string; userMessageId: string | null } | { setupRequired: true }
+        >(`/api/chat/sessions/${encodeURIComponent(conversationId)}/turns`, {
+          method: 'POST',
+          body: JSON.stringify({
+            message: text,
+            ...(attachments.length ? { attachments } : {}),
+            ...(referencedOffers.length ? { referencedOffers } : {}),
+            ...(selections.length ? { selections } : {}),
+            ...(override ? { provider: override.provider, model: override.model } : {}),
+            pageContext,
+          }),
+        });
         if ('setupRequired' in res) {
           setPendingUserMessage(null);
+          setPendingUserMessageId(null);
           setSetupRequired(true);
+          if (createdConversationId) {
+            suppressResetForRef.current = createdConversationId;
+            setActiveConversation(createdConversationId);
+            adoptDraftOverride(createdConversationId);
+            queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_KEY });
+          }
           return;
         }
+        setPendingUserMessageId(res.userMessageId);
         setStreamingTurnId(res.turnId);
         persistActiveTurn({ turnId: res.turnId, conversationId });
         turn.start(res.turnId);
+        if (createdConversationId) {
+          const destinationConversationId = createdConversationId;
+          // Seed the destination query before the route changes. The new page
+          // then mounts with the persisted user row instead of swapping the
+          // optimistic transcript for a loading/empty frame; later invalidation
+          // still refreshes it normally while retaining this cached snapshot.
+          await queryClient.prefetchQuery({
+            queryKey: chatSessionKey(destinationConversationId),
+            queryFn: () =>
+              chatFetch<{ session: Conversation; messages: ChatMessage[] }>(
+                `/api/chat/sessions/${encodeURIComponent(destinationConversationId)}`,
+              ),
+          });
+          // Keep the draft surface mounted until the server has persisted the
+          // user message and the live turn exists. Activating sooner rewrites
+          // /chat → /chat/:id, remounts this hook, and exposes the still-empty
+          // conversation while the turn POST is in flight.
+          suppressResetForRef.current = createdConversationId;
+          setActiveConversation(createdConversationId);
+          adoptDraftOverride(createdConversationId);
+          queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_KEY });
+        }
         // The server inserts the user's message row synchronously inside
         // startTurn, so it provably exists now. Without this invalidate the
         // session query can still hold the empty snapshot it fetched when the
@@ -242,6 +291,7 @@ export function useConversation(opts?: {
         onAfterSendRef.current?.();
       } catch (err) {
         setPendingUserMessage(null);
+        setPendingUserMessageId(null);
         if (err instanceof ChatApiError && err.setupRequired) {
           setSetupRequired(true);
           return;
@@ -306,6 +356,7 @@ export function useConversation(opts?: {
     }
     turn.reset(); // detach only — an in-flight server turn keeps running
     setPendingUserMessage(null);
+    setPendingUserMessageId(null);
     setDoneMessageId(null);
     setSendError(null);
     setStreamingTurnId(null);
@@ -446,7 +497,10 @@ export function useConversation(opts?: {
   // the refetched list — no empty flash between 'done' and the refetch.
   const persistedLanded = doneMessageId != null && messages.some(m => m.id === doneMessageId);
   useEffect(() => {
-    if (persistedLanded) setPendingUserMessage(null);
+    if (persistedLanded) {
+      setPendingUserMessage(null);
+      setPendingUserMessageId(null);
+    }
   }, [persistedLanded]);
   const live: LiveTurn | null =
     turn.status !== 'idle' && !persistedLanded
@@ -460,14 +514,21 @@ export function useConversation(opts?: {
       : null;
 
   const showEmpty =
-    !setupRequired && messages.length === 0 && live == null && pendingUserMessage == null;
+    (conversationStatus === 'new' || conversationStatus === 'ready') &&
+    !setupRequired &&
+    messages.length === 0 &&
+    live == null &&
+    pendingUserMessage == null;
 
   return {
     messages,
+    conversationStatus,
+    conversationError,
     live,
     streaming,
     turnStatus: turn.status,
     pendingUserMessage,
+    pendingUserMessageId,
     sendError,
     setupRequired,
     draftFiles,
@@ -476,6 +537,9 @@ export function useConversation(opts?: {
     send,
     stop: handleStop,
     retry: handleRetry,
+    retryConversation: () => {
+      void sessionQuery.refetch();
+    },
     regenerate: handleRegenerate,
   };
 }

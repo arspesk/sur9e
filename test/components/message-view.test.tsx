@@ -52,6 +52,14 @@ describe('ChatMarkdownView', () => {
     expect(container.querySelector('.chat-md strong')?.textContent).toBe('bold');
   });
 
+  it('renders an inline report route as a clickable internal link', () => {
+    const { container } = render(<ChatMarkdownView markdown={'Open `/report/88`'} />);
+    const link = container.querySelector<HTMLAnchorElement>('.chat-md a');
+    expect(link?.getAttribute('href')).toBe('/report/88');
+    expect(link?.textContent).toBe('/report/88');
+    expect(container.querySelector('.chat-md code')).toBeNull();
+  });
+
   it('never raw-injects a script/html tag from model text', () => {
     const { container } = render(
       <ChatMarkdownView markdown={'before <script>alert(1)</script> after'} />,

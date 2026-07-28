@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type Ref, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/primitives';
 import { type ChatMessage, ChatTurnEvent } from '@/lib/schemas/chat';
 import { renderChatMarkdown } from './chat-markdown';
@@ -161,6 +161,8 @@ export function FoldedEventList({
                 outcome={item.outcome}
                 execution={item.execution}
                 action={item.action}
+                message={item.message}
+                links={item.links}
               />
             );
           case 'usage':
@@ -193,16 +195,18 @@ export function MessageView({
   message,
   onRetry,
   hideActions = false,
+  rowRef,
 }: {
   message: ChatMessage;
   onRetry?: () => void;
   /** The transcript renders a combined row (copy + arrows + regenerate)
    * for the last assistant reply — suppress the built-in one there. */
   hideActions?: boolean;
+  rowRef?: Ref<HTMLDivElement>;
 }) {
   if (message.role === 'user') {
     return (
-      <div className="chat-msg chat-msg--user">
+      <div className="chat-msg chat-msg--user" ref={rowRef}>
         <div className="chat-user-bubble">{message.content}</div>
         {message.attachments && message.attachments.length > 0 && (
           <div className="chat-msg__attachments">
@@ -240,7 +244,7 @@ export function MessageView({
   const events = parseTurnEvents(message.events);
   const items = events ? foldEvents(events) : null;
   return (
-    <div className="chat-msg chat-msg--assistant">
+    <div className="chat-msg chat-msg--assistant" ref={rowRef}>
       {items ? (
         <FoldedEventList items={items} streaming={false} onRetry={onRetry} />
       ) : (

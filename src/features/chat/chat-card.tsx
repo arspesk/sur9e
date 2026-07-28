@@ -8,9 +8,8 @@ import { useRef, useState } from 'react';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
 import { useChatStore } from '@/stores/chat-store';
 import { ChatComposer } from './chat-composer';
-import { ChatEmptyState, SetupCard } from './chat-empty-state';
+import { ChatConversationContent } from './chat-conversation-content';
 import { ChatHeader } from './chat-header';
-import { ChatTranscript } from './chat-transcript';
 import { useConversation } from './use-conversation';
 
 export function ChatCard() {
@@ -69,19 +68,7 @@ export function ChatCard() {
               : ''}
       </span>
       <div className="chat-card__body">
-        {convo.setupRequired ? (
-          <SetupCard />
-        ) : convo.showEmpty ? (
-          <ChatEmptyState onPick={text => void convo.send(text)} />
-        ) : (
-          <ChatTranscript
-            messages={convo.messages}
-            pendingUserMessage={convo.pendingUserMessage}
-            live={convo.live}
-            onRetry={convo.retry}
-            onRegenerate={convo.streaming ? undefined : () => void convo.regenerate()}
-          />
-        )}
+        <ChatConversationContent convo={convo} />
         {convo.sendError && (
           <div className="chat-error chat-error--send" role="alert">
             <span className="chat-error__msg">{convo.sendError}</span>
@@ -93,6 +80,9 @@ export function ChatCard() {
       </div>
       <ChatComposer
         streaming={convo.streaming}
+        sendDisabled={
+          convo.conversationStatus === 'loading' || convo.conversationStatus === 'error'
+        }
         files={convo.draftFiles}
         onFilesChange={convo.setDraftFiles}
         onSend={(text, refs) => void convo.send(text, refs)}

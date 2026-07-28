@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: Params) {
     return Response.json({ setupRequired: true }, { status: 200 });
   }
   try {
-    const { turnId } = await startTurn(ROOT, {
+    const { turnId, userMessageId } = await startTurn(ROOT, {
       conversationId: id,
       userMessage: parsed.data.message,
       regenerate: parsed.data.regenerate,
@@ -85,7 +85,7 @@ export async function POST(request: Request, { params }: Params) {
       pageContext: parsed.data.pageContext,
       selections: parsed.data.selections,
     });
-    return Response.json({ turnId }, { status: 202 });
+    return Response.json({ turnId, userMessageId }, { status: 202 });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Failed to start turn');
   }

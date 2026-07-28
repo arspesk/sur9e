@@ -140,6 +140,8 @@ describe('chat action routes', () => {
       const body = await res.json();
       expect(body.started).toBe(true);
       expect(body.job.type).toBe('evaluate');
+      expect(body.message).toBe('Evaluation started for offer #1001.');
+      expect(body.links).toEqual([{ label: 'Offer #1001', href: '/report/1001' }]);
       expect(readdirSync(join(root, 'data/jobs'))).toHaveLength(1);
       await flushImmediate();
       expect(spawnJobMock).toHaveBeenCalledTimes(1);
@@ -207,12 +209,41 @@ describe('chat action routes', () => {
       expect(body.created).toBe(true);
       expect(body.offer.company).toBe('Acme');
       expect(body.job.type).toBe('tailor-cv');
+      expect(body.message).toContain('Offer #');
+      expect(body.links).toEqual([
+        expect.objectContaining({
+          label: expect.stringMatching(/^Offer #/),
+          href: expect.stringMatching(/^\/report\//),
+        }),
+      ]);
       expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain(
         'Platform Engineer',
       );
       expect(revalidatePathMock).toHaveBeenCalledWith('/offers');
       await flushImmediate();
       expect(spawnJobMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts the recommended screen + evaluate workflow for pasted text', async () => {
+      const res = await createTextOfferRoute.POST(
+        postJson('http://localhost/api/chat/actions/create-offer-from-text', {
+          text: 'Own platform reliability.',
+          company: 'Acme',
+          role: 'Staff Engineer',
+          startKind: 'screen-evaluate',
+          terminalApproved: true,
+        }),
+      );
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.job).toMatchObject({
+        type: 'screen-evaluate',
+        params: { num: body.offer.num },
+      });
+      expect(body.message).toMatch(/screening and evaluation started/i);
+      expect(body.links).toEqual([
+        { label: `Offer #${body.offer.num}`, href: `/report/${body.offer.num}` },
+      ]);
     });
   });
 

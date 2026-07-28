@@ -4,12 +4,11 @@
    shell, so the bubble card and this page can never drift visually. */
 
 .chat-page {
+  position: relative;
   display: grid;
-  /* Wide enough for a full AI-generated thread title ("ZipRecruiter follow-up
-     email draft") to sit on one line — at 240px nearly every title ellipsised.
-     The conversation column still gets the rest, and the panel collapses when
-     the extra width is in the way (see chat-threads.css). */
-  grid-template-columns: 296px minmax(0, 1fr);
+  /* 256px is the approved compact default. ChatThreadsSidebar updates the
+     custom property while dragging and restores the persisted preference. */
+  grid-template-columns: var(--chat-thread-width, 256px) minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
 }
@@ -27,9 +26,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Fixed chrome: the transcript below is what scrolls, never this row. */
+  /* Match every other page's shared topbar so the bottom border remains on
+     the same horizontal line instead of depending on title line-height. */
+  height: var(--topbar-h);
   flex-shrink: 0;
-  padding: var(--space-3) var(--space-4);
+  padding: 0 var(--space-4);
   border-bottom: 1px solid var(--border);
   /* Same ground as the thread list (--surface, chat-threads.css) so the two
      read as one continuous band of chrome across the top, with the
@@ -183,12 +184,44 @@
   margin-inline: auto;
 }
 
+/* Route-level loading shell: the same page geometry with decorative bars in
+   place of data. The transcript owns the single live status region. */
+.chat-page-skeleton__title {
+  width: min(220px, 38%);
+  height: 14px;
+}
+.chat-threads--skeleton {
+  gap: 0;
+}
+.chat-threads-skeleton__new-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.chat-threads-skeleton__new-label {
+  width: 88px;
+  height: 12px;
+}
+.chat-threads-skeleton__group {
+  width: 48px;
+  height: 8px;
+  margin: var(--space-3) 6px var(--space-1);
+}
+.chat-threads-skeleton__row {
+  height: 30px;
+  margin: 1px 8px;
+}
+
 /* Mobile: /chat is normally reached via the bubble (already a full-screen
    takeover ≤640px), but a deep link should still work — drop the sidebar
    and leave room for the bottom nav. */
 @media (max-width: 640px) {
   .chat-page {
     grid-template-columns: 1fr;
+    /* .main reserves --space-8 for the fixed bottom tab bar. Subtract the
+       same footprint from this viewport-height inner-scroll surface so its
+       composer ends above the bar instead of underneath it. */
+    height: calc(100dvh - var(--space-8));
   }
   .chat-page__composer {
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));

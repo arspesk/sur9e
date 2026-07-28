@@ -19,6 +19,7 @@ const NEAR_BOTTOM_PX = 48;
 export function ChatTranscript({
   messages,
   pendingUserMessage,
+  pendingUserMessageId,
   live,
   onRetry,
   onRegenerate,
@@ -26,6 +27,8 @@ export function ChatTranscript({
   messages: ChatMessage[];
   /** Optimistic echo of the message just sent, until the turn persists it. */
   pendingUserMessage: string | null;
+  /** Server identity of that echo, once the turn-start request returns. */
+  pendingUserMessageId?: string | null;
   live: LiveTurn | null;
   onRetry: () => void;
   /** Re-run the last user message for a fresh reply (idle only). */
@@ -36,6 +39,9 @@ export function ChatTranscript({
   const [atBottom, setAtBottom] = useState(true);
   const streaming = live?.status === 'streaming';
   const liveItems = useMemo(() => (live ? foldEvents(live.events) : null), [live]);
+  const pendingPersisted =
+    pendingUserMessageId != null && messages.some(message => message.id === pendingUserMessageId);
+  const optimisticUserMessage = pendingPersisted ? null : pendingUserMessage;
 
   // Pin the sent message to the top exactly once per streaming turn.
   const pinnedRef = useRef(false);
@@ -71,7 +77,7 @@ export function ChatTranscript({
       {groupTranscript(messages).map((u, i, all) => {
         const isLastUnit = i === all.length - 1;
         const showRegen =
-          isLastUnit && live == null && pendingUserMessage == null && onRegenerate != null;
+          isLastUnit && live == null && optimisticUserMessage == null && onRegenerate != null;
         if (u.kind === 'versions') {
           return (
             <AssistantVersions
@@ -85,7 +91,12 @@ export function ChatTranscript({
         const mergeActions = showRegen && u.message.role === 'assistant';
         return (
           <Fragment key={u.message.id}>
-            <MessageView message={u.message} onRetry={onRetry} hideActions={mergeActions} />
+            <MessageView
+              message={u.message}
+              onRetry={onRetry}
+              hideActions={mergeActions}
+              rowRef={u.message.id === pendingUserMessageId ? pinRef : undefined}
+            />
             {mergeActions && (
               <div className="chat-versions">
                 <CopyMessageButton inline text={u.message.content} />
@@ -95,12 +106,12 @@ export function ChatTranscript({
           </Fragment>
         );
       })}
-      {pendingUserMessage != null && (
+      {optimisticUserMessage != null && (
         <div className="chat-msg chat-msg--user" ref={pinRef}>
-          <div className="chat-user-bubble">{pendingUserMessage}</div>
+          <div className="chat-user-bubble">{optimisticUserMessage}</div>
         </div>
       )}
-      {(pendingUserMessage != null || streaming) &&
+      {(optimisticUserMessage != null || streaming) &&
         (liveItems == null || liveItems.length === 0) && <ResponseIndicator />}
       {liveItems && (
         <div className="chat-msg chat-msg--assistant" aria-busy={streaming || undefined}>

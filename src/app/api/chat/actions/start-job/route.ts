@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
 import { StartJobActionRequest } from '@/lib/schemas/chat-actions';
-import { createConfirm, describeStartJob } from '@/lib/server/chat/confirms';
+import { createConfirm, describeStartedJob, describeStartJob } from '@/lib/server/chat/confirms';
 import { JOB_KIND_BY_NUM, startJob } from '@/lib/server/jobs';
 
 export async function POST(request: Request) {
@@ -47,7 +47,11 @@ export async function POST(request: Request) {
     if ('conflict' in result) {
       return Response.json({ started: false, conflict: true, message: result.message });
     }
-    return Response.json({ started: true, job: result });
+    return Response.json({
+      started: true,
+      job: result,
+      ...describeStartedJob(kind, params, result),
+    });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'failed to start job', 400);
   }

@@ -172,6 +172,43 @@ describe('ConfirmCard', () => {
     });
   });
 
+  it('shows the completion message and durable offer hyperlink after approval', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                textOffer: { offer: { num: 42 } },
+                message: 'Offer #42 created. Screening and evaluation started.',
+                links: [{ label: 'Offer #42', href: '/report/42' }],
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const { getByRole, findByText, findByRole } = render(
+      <ConfirmCard
+        token="tok-result"
+        summary="Create, screen, and evaluate offer"
+        meta=""
+        outcome="pending"
+        action="create-offer-from-text"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Create, screen, and evaluate offer' }));
+
+    await findByText('Offer #42 created. Screening and evaluation started.');
+    expect(await findByRole('link', { name: 'Offer #42' })).toHaveAttribute('href', '/report/42');
+  });
+
   it('surfaces the server reason when an approved action fails to execute', async () => {
     vi.stubGlobal(
       'fetch',

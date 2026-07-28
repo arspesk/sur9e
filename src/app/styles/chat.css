@@ -143,6 +143,22 @@
   margin: 0;
   font-size: 12px;
 }
+.chat-confirm__result {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chat-confirm__links {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.chat-confirm__link {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
 /* Three distinct terminal states — approved/cancelled/expired never share a
    color, so a resolved card is legible without reading its text. */
 .chat-confirm[data-outcome="approved"] .chat-confirm__resolved {
@@ -699,6 +715,69 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.chat-transcript--skeleton {
+  justify-content: flex-start;
+}
+.chat-skeleton-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 72%;
+}
+.chat-skeleton-message--user {
+  align-self: flex-end;
+  width: 58%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) var(--radius-2xs) var(--radius);
+  background: var(--accent-soft);
+}
+.chat-skeleton-line {
+  height: 10px;
+}
+.chat-skeleton-line--long {
+  width: 100%;
+}
+.chat-skeleton-line--medium {
+  width: 76%;
+}
+.chat-skeleton-line--short {
+  width: 44%;
+}
+.chat-composer-skeleton__input {
+  width: 54%;
+  height: 12px;
+  margin: 8px 2px;
+}
+.chat-composer-skeleton__tool,
+.chat-composer-skeleton__send {
+  width: 30px;
+  height: 30px;
+}
+.chat-composer-skeleton__model {
+  width: 88px;
+  height: 24px;
+}
+.chat-load-error {
+  align-self: center;
+  margin: auto;
+  width: min(100% - var(--space-8), 420px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.chat-load-error strong {
+  color: var(--text);
+  font-size: 15px;
+}
+.chat-load-error .chat-error__retry {
+  margin-top: var(--space-1);
 }
 .chat-msg--user {
   display: flex;
@@ -1427,15 +1506,21 @@
   padding: 0;
   flex-shrink: 0;
 }
+.chat-jobs__cancel {
+  color: var(--st-danger);
+}
 .chat-jobs__close {
   font-size: 14px;
   line-height: 1;
 }
 .chat-jobs__logs-toggle:hover,
-.chat-jobs__cancel:hover,
 .chat-jobs__close:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+.chat-jobs__cancel:hover {
+  background: var(--surface-danger-hover);
+  color: var(--st-danger);
 }
 .chat-jobs__logs-chev {
   transition: transform var(--dur-snappy);
@@ -1449,6 +1534,9 @@
 .chat-jobs__cancel:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.chat-jobs__cancel:disabled:hover {
+  background: transparent;
 }
 
 .chat-jobs__error {

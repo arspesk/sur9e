@@ -95,7 +95,7 @@ const ACTION_TOOLS = [
         params: {
           type: 'object',
           description:
-            'Job parameters: { "num": <tracker number> } for per-offer kinds, { "url": "https://…" } for screen kinds, {} for scan/batch-evaluate.',
+            'Job parameters: { "num": <tracker number> } for per-offer kinds; screen or screen-evaluate with { "num": <tracker number> } for a tracked pasted-text offer (does not require a URL), or { "url": "https://…" } for a URL offer; {} for scan/batch-evaluate.',
         },
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },
@@ -126,7 +126,8 @@ const ACTION_TOOLS = [
     description:
       'Create or reuse a normal tracked offer from pasted job-description text, without a URL. ' +
       'If company or role is missing, ask the user first; use Unknown only when the information is genuinely absent from the text. ' +
-      'Exact normalized text is deduplicated. Optionally start screen, evaluate, CV, cover letter, research, interview prep, outreach, or negotiation in the SAME approval. ' +
+      'Unless the user already chose, ask whether they want: Create + screen + evaluate (recommended), Create + screen, or Create only. ' +
+      'Exact normalized text is deduplicated. Optionally start screen + evaluate, screen, evaluate, CV, cover letter, research, interview prep, outreach, or negotiation in the SAME approval. ' +
       'ALWAYS requires user approval.',
     inputSchema: {
       type: 'object',
@@ -143,6 +144,7 @@ const ACTION_TOOLS = [
           type: 'string',
           enum: [
             'screen',
+            'screen-evaluate',
             'evaluate',
             'tailor-cv',
             'cover-letter',
@@ -151,7 +153,8 @@ const ACTION_TOOLS = [
             'reach-out',
             'negotiate',
           ],
-          description: 'Optional job to start after the offer is created or reused',
+          description:
+            'Optional job to start after creation; use screen-evaluate for the recommended Create + screen + evaluate workflow',
         },
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },

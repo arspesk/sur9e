@@ -1242,6 +1242,10 @@ div[data-running-mode][data-status="failed"] {
   background: color-mix(in srgb, var(--st-danger) 8%, transparent);
   border-color: var(--st-danger);
 }
+div[data-running-mode][data-status="cancelled"] {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
 .running-mode-card__icon {
   display: inline-flex;
   align-items: center;
@@ -1262,6 +1266,9 @@ div[data-running-mode][data-status="done"] .running-mode-card__icon {
 div[data-running-mode][data-status="failed"] .running-mode-card__icon {
   background: color-mix(in srgb, var(--st-danger) 18%, transparent);
   color: var(--st-danger);
+}
+div[data-running-mode][data-status="cancelled"] .running-mode-card__icon {
+  color: var(--text-3);
 }
 .running-mode-card__body {
   display: flex;

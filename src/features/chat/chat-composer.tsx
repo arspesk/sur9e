@@ -36,12 +36,16 @@ const EMPTY_FILES: File[] = [];
  * paste, and the card's drop target all stay live while streaming). */
 export function ChatComposer({
   streaming,
+  sendDisabled = false,
   files,
   onFilesChange,
   onSend,
   onStop,
 }: {
   streaming: boolean;
+  /** Keep the draft editable while preventing it from being sent to a thread
+   * whose messages have not resolved yet. */
+  sendDisabled?: boolean;
   /** Draft attachments (state lives in ChatCard — the drop target). */
   files: File[];
   onFilesChange: (files: File[]) => void;
@@ -145,6 +149,7 @@ export function ChatComposer({
   }
 
   function submit() {
+    if (sendDisabled) return;
     const text = value.trim();
     if (!text && files.length === 0) return;
     // Mentions surviving the user's edits (their inserted string is still in
@@ -428,7 +433,7 @@ export function ChatComposer({
               // Empty (no text, no attachments) → muted + not clickable; the
               // orange active look and hover come back the moment there's
               // something to send. Styling lives in .chat-composer__send[:disabled].
-              disabled={value.trim().length === 0 && files.length === 0}
+              disabled={sendDisabled || (value.trim().length === 0 && files.length === 0)}
             >
               ↑
             </button>

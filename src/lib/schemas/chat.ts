@@ -80,6 +80,12 @@ export type AgentSessionHandle = z.infer<typeof AgentSessionHandle>;
 // route can replay `?after=<seq>` on reconnect (spec §3.4).
 const seq = z.number().int().nonnegative();
 
+export const ChatActionLink = z.object({
+  label: z.string().min(1),
+  href: z.string().regex(/^\/[A-Za-z0-9\-_/]*$/),
+});
+export type ChatActionLink = z.infer<typeof ChatActionLink>;
+
 export const ChatTurnEvent = z.discriminatedUnion('type', [
   z.object({ seq, type: z.literal('text-delta'), text: z.string() }),
   z.object({ seq, type: z.literal('thinking'), text: z.string() }),
@@ -122,6 +128,8 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
     // gated action actually changed state. Optional for persisted events from
     // before execution outcomes were recorded.
     execution: z.enum(['succeeded', 'failed', 'unchanged']).optional(),
+    message: z.string().optional(),
+    links: z.array(ChatActionLink).optional(),
   }),
   z.object({
     seq,

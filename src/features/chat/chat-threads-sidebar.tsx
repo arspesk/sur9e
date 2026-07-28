@@ -11,7 +11,7 @@
 // two thread surfaces can never drift apart visually.
 
 import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
 import {
@@ -26,6 +26,15 @@ import { useChatStore } from '@/stores/chat-store';
 import { groupByRecency } from './thread-groups';
 
 const ICON = { size: 15, strokeWidth: 1.8 } as const;
+const THREAD_WIDTH_STORAGE_KEY = 'sur9e.chat.thread-width';
+const DEFAULT_THREAD_WIDTH = 256;
+const MIN_THREAD_WIDTH = 220;
+const MAX_THREAD_WIDTH = 360;
+const KEYBOARD_RESIZE_STEP = 8;
+
+function clampThreadWidth(value: number): number {
+  return Math.min(MAX_THREAD_WIDTH, Math.max(MIN_THREAD_WIDTH, Math.round(value)));
+}
 
 /** Per-row ⋮ trigger + its portaled actions menu. Own open state per row. */
 function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
@@ -69,6 +78,14 @@ function ThreadTitle({ children }: { children: string }) {
 }
 
 export function ChatThreadsSidebar() {
+  const navRef = useRef<HTMLElement>(null);
+  const widthRef = useRef(DEFAULT_THREAD_WIDTH);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const [threadWidth, setThreadWidth] = useState(DEFAULT_THREAD_WIDTH);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const activeId = useChatStore(s => s.activeConversationId);
@@ -87,6 +104,67 @@ export function ChatThreadsSidebar() {
     .filter(c => c.archived)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const groups = groupByRecency(recent, Date.now());
+
+  function applyThreadWidth(nextWidth: number, persist = false) {
+    const clamped = clampThreadWidth(nextWidth);
+    widthRef.current = clamped;
+    setThreadWidth(clamped);
+    if (persist) localStorage.setItem(THREAD_WIDTH_STORAGE_KEY, String(clamped));
+  }
+
+  useEffect(() => {
+    const saved = Number.parseInt(localStorage.getItem(THREAD_WIDTH_STORAGE_KEY) ?? '', 10);
+    if (Number.isFinite(saved)) applyThreadWidth(saved);
+  }, []);
+
+  useEffect(() => {
+    navRef.current?.parentElement?.style.setProperty('--chat-thread-width', `${threadWidth}px`);
+  }, [threadWidth]);
+
+  useEffect(
+    () => () => {
+      document.body.style.cursor = '';
+    },
+    [],
+  );
+
+  function startResize(e: React.PointerEvent<HTMLButtonElement>) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startWidth: widthRef.current,
+    };
+  }
+
+  function moveResize(e: React.PointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    applyThreadWidth(drag.startWidth + e.clientX - drag.startX);
+  }
+
+  function finishResize(e: React.PointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    e.currentTarget.classList.remove('dragging');
+    document.body.style.cursor = '';
+    dragRef.current = null;
+    localStorage.setItem(THREAD_WIDTH_STORAGE_KEY, String(widthRef.current));
+  }
+
+  function resizeWithKeyboard(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    applyThreadWidth(
+      widthRef.current + (e.key === 'ArrowLeft' ? -KEYBOARD_RESIZE_STEP : KEYBOARD_RESIZE_STEP),
+      true,
+    );
+  }
 
   function startRename(c: Conversation) {
     setRenamingId(c.id);
@@ -202,38 +280,55 @@ export function ChatThreadsSidebar() {
   }
 
   return (
-    <nav className="chat-threads" aria-label="Chat threads">
-      <div className="chat-threads__head">
-        <button
-          type="button"
-          className="chat-threads__new"
-          onClick={() => setActiveConversation(null)}
-          disabled={activeId === null}
-        >
-          <span className="chat-threads__new-chip" aria-hidden="true">
-            <Plus size={14} strokeWidth={2.4} />
-          </span>
-          <span className="chat-threads__new-label">New chat</span>
-        </button>
-      </div>
-      <div className="chat-threads__divider" role="presentation" />
-      <div className="chat-threads__list" id="chat-threads-list">
-        {groups.map(g => (
-          <Fragment key={g.label}>
-            <div className="chat-threads__group">{g.label}</div>
-            {g.items.map(row)}
-          </Fragment>
-        ))}
-        {recent.length === 0 && <p className="chat-threads__empty">No chats yet</p>}
-        {archived.length > 0 && (
-          <details className="chat-threads__archived">
-            <summary className="chat-threads__group chat-threads__archived-summary">
-              Archived ({archived.length})
-            </summary>
-            {archived.map(row)}
-          </details>
-        )}
-      </div>
-    </nav>
+    <>
+      <nav ref={navRef} className="chat-threads" aria-label="Chat threads">
+        <div className="chat-threads__head">
+          <button
+            type="button"
+            className="chat-threads__new"
+            onClick={() => setActiveConversation(null)}
+            disabled={activeId === null}
+          >
+            <span className="chat-threads__new-chip" aria-hidden="true">
+              <Plus size={14} strokeWidth={2.4} />
+            </span>
+            <span className="chat-threads__new-label">New chat</span>
+          </button>
+        </div>
+        <div className="chat-threads__divider" role="presentation" />
+        <div className="chat-threads__list" id="chat-threads-list">
+          {groups.map(g => (
+            <Fragment key={g.label}>
+              <div className="chat-threads__group">{g.label}</div>
+              {g.items.map(row)}
+            </Fragment>
+          ))}
+          {recent.length === 0 && <p className="chat-threads__empty">No chats yet</p>}
+          {archived.length > 0 && (
+            <details className="chat-threads__archived">
+              <summary className="chat-threads__group chat-threads__archived-summary">
+                Archived ({archived.length})
+              </summary>
+              {archived.map(row)}
+            </details>
+          )}
+        </div>
+      </nav>
+      <button
+        type="button"
+        role="separator"
+        aria-label="Resize thread list"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_THREAD_WIDTH}
+        aria-valuemax={MAX_THREAD_WIDTH}
+        aria-valuenow={threadWidth}
+        className="chat-threads__resize"
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={finishResize}
+        onPointerCancel={finishResize}
+        onKeyDown={resizeWithKeyboard}
+      />
+    </>
   );
 }

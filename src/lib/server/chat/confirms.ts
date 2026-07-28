@@ -141,16 +141,28 @@ export function createConfirm(_root: string, input: CreateConfirmInput): { token
 export type ConfirmOutcome = 'approved' | 'cancelled' | 'expired';
 export type ConfirmExecution = 'succeeded' | 'failed' | 'unchanged';
 
-export type ConfirmExecutionResult =
-  | { ok: true; job: JobRecord | JobConflictPayload | JobSetupRequiredPayload }
-  | { ok: true; updated: ApplicationRow | undefined }
-  | { ok: true; report: { num: number } }
-  | { ok: true; cancellation: CancelJobResult }
+export interface ConfirmResultLink {
+  label: string;
+  href: string;
+}
+
+export interface ConfirmResultPresentation {
+  message?: string;
+  links?: ConfirmResultLink[];
+}
+
+type ConfirmExecutionPayload =
+  | { job: JobRecord | JobConflictPayload | JobSetupRequiredPayload }
+  | { updated: ApplicationRow | undefined }
+  | { report: { num: number } }
+  | { cancellation: CancelJobResult }
   | {
-      ok: true;
       textOffer: TextOfferResult;
       job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload;
-    }
+    };
+
+export type ConfirmExecutionResult =
+  | ({ ok: true } & ConfirmExecutionPayload & ConfirmResultPresentation)
   | { ok: false; error: string };
 
 export interface ResolveConfirmResult {
@@ -210,7 +222,8 @@ export function resolveConfirm(
     try {
       if (rec.kind === 'start-job') {
         const p = rec.payload as StartJobPayload;
-        result = { ok: true, job: startJob(root, { kind: p.kind, params: p.params }) };
+        const job = startJob(root, { kind: p.kind, params: p.params });
+        result = { ok: true, job, ...describeStartedJob(p.kind, p.params, job) };
       } else if (rec.kind === 'cancel-job') {
         const p = rec.payload as CancelJobPayload;
         result = { ok: true, cancellation: cancelJob(root, p.jobId) };
@@ -220,7 +233,12 @@ export function resolveConfirm(
         const job = p.startKind
           ? startJob(root, { kind: p.startKind, params: { num: textOffer.offer.num } })
           : undefined;
-        result = { ok: true, textOffer, ...(job ? { job } : {}) };
+        result = {
+          ok: true,
+          textOffer,
+          ...(job ? { job } : {}),
+          ...describeTextOfferResult(textOffer, p.startKind, job),
+        };
       } else if (rec.kind === 'edit-report') {
         const p = rec.payload as EditReportPayload;
         // RE-READ at resolve time: the card may have sat open while the user
@@ -244,6 +262,13 @@ export function resolveConfirm(
     }
   }
   const execution = approve ? executionFor(rec.kind, result) : undefined;
+  const presentation =
+    result?.ok === true
+      ? {
+          ...(result.message ? { message: result.message } : {}),
+          ...(result.links ? { links: result.links } : {}),
+        }
+      : {};
 
   // Best-effort: the turn may have finished streaming by the time the
   // user clicks — the resolution itself still stands.
@@ -253,6 +278,7 @@ export function resolveConfirm(
       token,
       outcome,
       ...(execution ? { execution } : {}),
+      ...presentation,
     });
   } catch {
     // no live turn to notify
@@ -261,7 +287,7 @@ export function resolveConfirm(
   // turn's 'done' (the common case) never touches the persisted message.
   // Stamp the resolution onto that message too so a reload shows the resolved
   // card instead of re-armed buttons for an action that already ran.
-  persistResolution(root, token, outcome, execution);
+  persistResolution(root, token, outcome, execution, presentation);
   return { outcome, ...(execution ? { execution } : {}), result };
 }
 
@@ -273,9 +299,10 @@ function persistResolution(
   token: string,
   outcome: ConfirmOutcome,
   execution?: ConfirmExecution,
+  presentation?: ConfirmResultPresentation,
 ): void {
   try {
-    appendConfirmResolution(root, token, outcome, execution);
+    appendConfirmResolution(root, token, outcome, execution, presentation);
   } catch {
     // never let a persistence hiccup break resolution
   }
@@ -296,6 +323,51 @@ const KIND_LABELS: Record<JobType, string> = {
   screen: 'screening',
   'screen-evaluate': 'screen + evaluate',
 };
+
+function offerLink(num: number): ConfirmResultLink[] {
+  return [{ label: `Offer #${num}`, href: `/report/${num}` }];
+}
+
+export function describeStartedJob(
+  kind: JobType,
+  params: Record<string, unknown> | undefined,
+  job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload,
+): ConfirmResultPresentation {
+  const num = Number.isInteger(params?.num) ? (params?.num as number) : null;
+  const links = num == null ? undefined : offerLink(num);
+  if (job && 'conflict' in job) return { message: job.message, ...(links ? { links } : {}) };
+  const label = KIND_LABELS[kind] ?? kind;
+  return {
+    message:
+      num == null
+        ? `${label[0]?.toUpperCase()}${label.slice(1)} started.`
+        : `${label[0]?.toUpperCase()}${label.slice(1)} started for offer #${num}.`,
+    ...(links ? { links } : {}),
+  };
+}
+
+export function describeTextOfferResult(
+  textOffer: TextOfferResult,
+  startKind?: TextOfferStartKind,
+  job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload,
+): ConfirmResultPresentation {
+  const num = textOffer.offer.num;
+  const created = textOffer.reused ? 'reused' : 'created';
+  let followup = '';
+  if (startKind && job && 'conflict' in job) {
+    followup = ` ${job.message}`;
+  } else if (startKind === 'screen-evaluate') {
+    followup = ' Screening and evaluation started.';
+  } else if (startKind === 'screen') {
+    followup = ' Screening started.';
+  } else if (startKind) {
+    followup = ` ${(KIND_LABELS[startKind] ?? startKind).replace(/^./, c => c.toUpperCase())} started.`;
+  }
+  return {
+    message: `Offer #${num} ${created}.${followup}`,
+    links: offerLink(num),
+  };
+}
 
 /**
  * Confirm-card copy for a start-job action. Meta format:

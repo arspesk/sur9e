@@ -19,6 +19,7 @@ import {
   Target,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { isPendingOfferStatus } from '@/features/home/pending-offers-select';
 import { useApplications } from '@/hooks/use-applications';
 
 export interface SuggestionOffer {
@@ -27,10 +28,6 @@ export interface SuggestionOffer {
   /** Parsed numeric score, when the row has one. */
   score?: number;
 }
-
-/** Statuses that mean the ball is in the user's court (mirrors the table's
- * "waiting on you" count). */
-const WAITING = new Set(['screened', 'responded']);
 
 const GENERIC = [
   'What should I focus on this week?',
@@ -64,7 +61,7 @@ export function buildSuggestionPool(offers: SuggestionOffer[]): string[] {
   const named = offers.filter(o => o.company);
   const companies = [...new Set(named.map(o => o.company))];
   const total = offers.length;
-  const waiting = offers.filter(o => WAITING.has(norm(o.status))).length;
+  const waiting = offers.filter(o => isPendingOfferStatus(o.status)).length;
   const topByScore = [...named].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
 
   if (companies.length >= 2) pool.push(`Compare ${companies[0]} and ${companies[1]}`);

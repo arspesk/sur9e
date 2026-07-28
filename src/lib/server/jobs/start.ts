@@ -143,8 +143,9 @@ export function startJob(
     // ("Screen pending"): batch/screen.mjs screens every pending entry. Only
     // 'screen-evaluate' (add a specific offer + evaluate) requires a url.
     // When a url IS supplied it must be a valid http(s) URL either way.
-    const urlRequired = kind === 'screen-evaluate';
-    if (kind === 'screen' && Number.isInteger(num)) {
+    const numAllowed = kind === 'screen' || kind === 'screen-evaluate';
+    const urlRequired = kind === 'screen-evaluate' && !Number.isInteger(num);
+    if (numAllowed && Number.isInteger(num)) {
       if (!findByNum(rootPath, num as number)) throw new Error(`num not found: ${num}`);
     } else if (url === undefined || url === null) {
       if (urlRequired) throw new Error('url must start with http:// or https://');

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
 import { chatSessionKey } from '@/hooks/use-chat-sessions';
+import type { ChatActionLink } from '@/lib/schemas/chat';
 import { useChatStore } from '@/stores/chat-store';
 import { useChatJobsStore } from './chat-jobs-store';
 import type { ConfirmActionKind } from './fold-events';
@@ -66,6 +67,8 @@ interface ConfirmResponseResult {
   job?: ConfirmResponseJob;
   textOffer?: { offer?: { num?: number } };
   cancellation?: { job?: ConfirmResponseJob };
+  message?: string;
+  links?: ChatActionLink[];
 }
 
 /** Inline confirm card for gated actions (spec §3.2). Approval executes
@@ -79,6 +82,8 @@ export function ConfirmCard({
   outcome,
   execution,
   action,
+  message,
+  links,
 }: {
   token: string;
   summary: string;
@@ -87,6 +92,8 @@ export function ConfirmCard({
   execution?: ConfirmExecution;
   /** Which gated action this card confirms — varies the resolved label. */
   action?: ConfirmActionKind;
+  message?: string;
+  links?: ChatActionLink[];
 }) {
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
@@ -96,6 +103,8 @@ export function ConfirmCard({
   // disabled buttons with no resolved message. Resolve from the POST response.
   const [localOutcome, setLocalOutcome] = useState<ConfirmOutcome | null>(null);
   const [localExecution, setLocalExecution] = useState<ConfirmExecution | null>(null);
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const [localLinks, setLocalLinks] = useState<ChatActionLink[] | null>(null);
   const queryClient = useQueryClient();
 
   async function respond(approve: boolean) {
@@ -116,6 +125,8 @@ export function ConfirmCard({
       // Immediate feedback: swap the buttons for the resolved message now.
       setLocalOutcome(data?.outcome ?? (approve ? 'approved' : 'cancelled'));
       setLocalExecution(data?.execution ?? null);
+      setLocalMessage(data?.result?.message ?? null);
+      setLocalLinks(data?.result?.links ?? null);
       if (data?.result?.ok === false && data.result.error) {
         useToastStore.getState().push('danger', data.result.error);
       }
@@ -164,6 +175,8 @@ export function ConfirmCard({
 
   const effectiveOutcome = localOutcome ?? outcome;
   const effectiveExecution = localExecution ?? execution;
+  const effectiveMessage = localOutcome ? localMessage : message;
+  const effectiveLinks = localOutcome ? localLinks : links;
   if (effectiveOutcome !== 'pending') {
     return (
       <div className="chat-confirm" data-outcome={effectiveOutcome}>
@@ -171,6 +184,16 @@ export function ConfirmCard({
         <p className="chat-confirm__resolved">
           {resolvedLabel(effectiveOutcome, action, effectiveExecution)}
         </p>
+        {effectiveMessage && <p className="chat-confirm__result">{effectiveMessage}</p>}
+        {effectiveLinks && effectiveLinks.length > 0 && (
+          <div className="chat-confirm__links">
+            {effectiveLinks.map(link => (
+              <a key={link.href} className="chat-confirm__link" href={link.href}>
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

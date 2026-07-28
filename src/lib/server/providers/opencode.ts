@@ -315,7 +315,7 @@ const opencode: Provider = {
     const part = obj?.part ?? {};
     switch (obj?.type) {
       case 'reasoning':
-        return { kind: 'thinking', message: String(part.text ?? '').slice(0, 200), ts };
+        return { kind: 'thinking', message: String(part.text ?? ''), ts };
       case 'text':
         // Reply text — the chat layer extracts full-fidelity text separately
         // and suppresses this duplicate stage (see mapChatLine).

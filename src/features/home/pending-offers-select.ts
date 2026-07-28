@@ -18,6 +18,10 @@ export interface PendingOffer extends PendingOfferSource {
 
 const PENDING = new Set(['screened', 'evaluated']);
 
+export function isPendingOfferStatus(status: string): boolean {
+  return PENDING.has(status.trim().toLowerCase());
+}
+
 function scoreValue(score: string): number {
   const n = Number.parseFloat(score);
   return Number.isNaN(n) ? -1 : n; // 'N/A' / '-' sink below every real score
@@ -25,7 +29,7 @@ function scoreValue(score: string): number {
 
 export function selectPendingOffers(entries: PendingOfferSource[], limit = 6): PendingOffer[] {
   return entries
-    .filter(e => PENDING.has(e.status.trim().toLowerCase()))
+    .filter(e => isPendingOfferStatus(e.status))
     .map(e => ({ ...e, status: e.status.trim().toLowerCase() as PendingOffer['status'] }))
     .sort((a, b) => scoreValue(b.score) - scoreValue(a.score))
     .slice(0, limit);

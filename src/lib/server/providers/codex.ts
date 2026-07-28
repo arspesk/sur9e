@@ -375,9 +375,7 @@ const codex: Provider = {
       switch (it.type) {
         case 'reasoning':
           // Reasoning only ever arrives as item.completed (no paired start).
-          return started
-            ? null
-            : { kind: 'thinking', message: String(it.text ?? '').slice(0, 200), ts };
+          return started ? null : { kind: 'thinking', message: String(it.text ?? ''), ts };
         case 'agent_message':
           // Reply text — surfaced as a stage for the unified stream; the chat
           // layer extracts the full-fidelity text separately and suppresses

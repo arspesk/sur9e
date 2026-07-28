@@ -235,6 +235,17 @@ describe('claude provider', () => {
       });
       expect(claudeProvider.parseStreamLine(init)).toBeNull();
     });
+    it('preserves the complete thinking text', () => {
+      const thinking = `thinking-start ${'a'.repeat(500)} thinking-end`;
+      const line = JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'thinking', thinking }] },
+      });
+      expect(claudeProvider.parseStreamLine(line)).toMatchObject({
+        kind: 'thinking',
+        message: thinking,
+      });
+    });
     it('emits a tool START (with id) for tool_use and a matching DONE for tool_result', () => {
       const use = JSON.stringify({
         type: 'assistant',

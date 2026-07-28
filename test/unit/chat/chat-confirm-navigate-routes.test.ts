@@ -147,6 +147,8 @@ describe('navigate + confirm resolution routes', () => {
         token,
         outcome: 'approved',
         execution: 'succeeded',
+        message: 'Evaluation started for offer #1001.',
+        links: [{ label: 'Offer #1001', href: '/report/1001' }],
       });
     });
 

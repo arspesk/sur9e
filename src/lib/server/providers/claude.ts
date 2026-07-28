@@ -398,7 +398,7 @@ const claude: Provider = {
     if (obj.type === 'assistant' && obj.message?.content) {
       for (const p of obj.message.content) {
         if (p.type === 'thinking') {
-          return { kind: 'thinking', message: String(p.thinking ?? '').slice(0, 200), ts };
+          return { kind: 'thinking', message: String(p.thinking ?? ''), ts };
         }
         if (p.type === 'tool_use') {
           const summary = p.input?.url || p.input?.command || p.input?.file_path || '';

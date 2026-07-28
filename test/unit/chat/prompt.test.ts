@@ -62,6 +62,26 @@ describe('buildChatSystemPrompt', () => {
     }
   });
 
+  it('treats a pasted-text Screened/N/A offer as unscreened and screenable by number', () => {
+    expect(prompt).toContain('source_kind: text');
+    expect(prompt).toContain('score: N/A');
+    expect(prompt).toContain('screen with params.num');
+    expect(prompt).toContain('does not require a URL');
+  });
+
+  it('offers the approved pasted-text workflows and recommends screening plus evaluation', () => {
+    expect(prompt).toContain('Create + screen + evaluate');
+    expect(prompt).toContain('recommended');
+    expect(prompt).toContain('Create + screen');
+    expect(prompt).toContain('Create only');
+    expect(prompt).toContain('start_kind: screen-evaluate');
+  });
+
+  it('requires durable Markdown links when mentioning internal app pages', () => {
+    expect(prompt).toContain('[Offer #NUM](/report/NUM)');
+    expect(prompt).toContain('Do not wrap an app route in inline code');
+  });
+
   it('is provider-neutral — no vendor names', () => {
     expect(prompt).not.toMatch(/claude|codex|opencode|anthropic|openai/i);
   });

@@ -2,7 +2,7 @@
 //
 // AI thread titles. After a conversation's FIRST completed turn the runner
 // fire-and-forgets generateConversationTitle: one cheap-model CLI call
-// producing a 3-7 word title. applyFallbackTitle runs synchronously at first
+// producing a concise title. applyFallbackTitle runs synchronously at first
 // send so a thread never lingers as 'New chat'. Manual renames always win:
 // every write goes through setAutoTitle, which refuses on 'manual'.
 
@@ -107,7 +107,7 @@ export async function generateConversationTitle(opts: {
   try {
     const model = TITLE_MODELS[opts.provider.id] ?? opts.model;
     const prompt =
-      'Write a 3-7 word title summarizing this conversation. Reply with ONLY the title — no quotes, no trailing punctuation, no preamble.\n\n' +
+      'Write a concise title summarizing this conversation. Reply with ONLY the title — no quotes, no trailing punctuation, no preamble.\n\n' +
       `User: ${opts.userMessage.slice(0, SNIPPET_CHARS)}\n` +
       `Assistant: ${opts.assistantReply.slice(0, SNIPPET_CHARS)}`;
     const built = opts.provider.buildHeadlessArgs({

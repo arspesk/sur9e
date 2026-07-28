@@ -217,6 +217,17 @@ describe('codex provider', () => {
       expect(ev!.message).toContain('weighing options');
     });
 
+    it('preserves the complete reasoning text', () => {
+      const reasoning = `reasoning-start ${'a'.repeat(500)} reasoning-end`;
+      const ev = codex.parseStreamLine(
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'r1', type: 'reasoning', text: reasoning },
+        }),
+      );
+      expect(ev).toMatchObject({ kind: 'thinking', message: reasoning });
+    });
+
     it('returns null for unparseable lines', () => {
       expect(codex.parseStreamLine('garbage')).toBeNull();
       expect(codex.parseStreamLine('')).toBeNull();

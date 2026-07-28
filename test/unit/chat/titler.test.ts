@@ -48,6 +48,22 @@ describe('fallbackTitleFrom', () => {
 });
 
 describe('generateConversationTitle', () => {
+  it('asks for a concise title without imposing a word count', async () => {
+    const c = createConversation(root);
+    let capturedPrompt = '';
+    const fakeProvider = {
+      id: 'claude',
+      buildHeadlessArgs: ({ prompt }: { prompt: string }) => {
+        capturedPrompt = prompt;
+        return { cmd: 'fake-title', args: [] };
+      },
+    } as unknown as ReturnType<typeof getProvider>;
+    _setTitleExecImpl(async () => ({ stdout: 'Concise Conversation Title' }));
+    await generateConversationTitle({ ...baseOpts(c.id), provider: fakeProvider });
+    expect(capturedPrompt).toMatch(/concise/i);
+    expect(capturedPrompt).not.toMatch(/\d+\s*[-–]\s*\d+\s+words?/i);
+  });
+
   it('writes a sanitized AI title over the fallback', async () => {
     const c = createConversation(root);
     applyFallbackTitle(root, c.id, 'first message text');

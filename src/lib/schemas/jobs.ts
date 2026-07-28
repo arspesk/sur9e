@@ -93,12 +93,17 @@ export const JobParams = z.preprocess(
       .refine(p => typeof p.url === 'string' || typeof p.num === 'number' || p.queue === true, {
         message: 'screen requires a url, num, or queue:true to screen the whole pending pipeline',
       }),
-    z.object({
-      type: z.literal('screen-evaluate'),
-      url: z.string().url(),
-      generate_pdf: z.boolean().optional(),
-      generate_cover_letter: z.boolean().optional(),
-    }),
+    z
+      .object({
+        type: z.literal('screen-evaluate'),
+        url: z.string().url().optional(),
+        num: z.number().int().positive().optional(),
+        generate_pdf: z.boolean().optional(),
+        generate_cover_letter: z.boolean().optional(),
+      })
+      .refine(p => typeof p.url === 'string' || typeof p.num === 'number', {
+        message: 'screen-evaluate requires a url or tracked offer num',
+      }),
   ]),
 );
 export type JobParams = z.infer<typeof JobParams>;

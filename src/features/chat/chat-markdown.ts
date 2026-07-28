@@ -7,6 +7,11 @@
 import { Marked } from 'marked';
 import { escapeHtml } from '@/lib/escape-html';
 
+function renderSafeLink(href: string, text: string): string {
+  const safe = /^(https?:|mailto:|\/)/i.test(href) ? href : '#';
+  return `<a href="${escapeHtml(safe)}" target="_blank" rel="noreferrer noopener">${escapeHtml(text)}</a>`;
+}
+
 const markedChat = new Marked({
   async: false,
   gfm: true,
@@ -41,9 +46,16 @@ const markedChat = new Marked({
         '</div>'
       );
     },
+    codespan({ text }: { text: string }): string {
+      // Models historically wrapped app destinations in inline code after a
+      // navigate tool call (for example `/report/88`). Keep ordinary code
+      // untouched, but make the exact offer-detail route durable and clickable
+      // in both old and new messages.
+      if (/^\/report\/[1-9]\d*$/.test(text)) return renderSafeLink(text, text);
+      return `<code>${escapeHtml(text)}</code>`;
+    },
     link({ href, text }: { href: string; text: string }): string {
-      const safe = /^(https?:|mailto:|\/)/i.test(href) ? href : '#';
-      return `<a href="${escapeHtml(safe)}" target="_blank" rel="noreferrer noopener">${escapeHtml(text)}</a>`;
+      return renderSafeLink(href, text);
     },
     image({ href, title, text }: { href: string; title: string | null; text: string }): string {
       // Same scheme allowlist as links, plus data:image (inline images the

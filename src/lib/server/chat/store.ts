@@ -293,6 +293,10 @@ export function appendConfirmResolution(
   token: string,
   outcome: 'approved' | 'cancelled' | 'expired',
   execution?: 'succeeded' | 'failed' | 'unchanged',
+  presentation?: {
+    message?: string;
+    links?: Array<{ label: string; href: string }>;
+  },
 ): boolean {
   const db = openChatDb(root);
   const rows = db
@@ -323,6 +327,8 @@ export function appendConfirmResolution(
       token,
       outcome,
       ...(execution ? { execution } : {}),
+      ...(presentation?.message ? { message: presentation.message } : {}),
+      ...(presentation?.links ? { links: presentation.links } : {}),
     });
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
       JSON.stringify(events),

@@ -8,6 +8,8 @@
 web_search = "live"
 
 # Browser automation for SPA job-description rendering + offer liveness.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest", "--headless", "--isolated"]

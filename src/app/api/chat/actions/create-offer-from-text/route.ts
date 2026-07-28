@@ -3,7 +3,11 @@ export const runtime = 'nodejs';
 import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
 import { CreateOfferFromTextActionRequest } from '@/lib/schemas/chat-actions';
-import { createConfirm, describeCreateOfferFromText } from '@/lib/server/chat/confirms';
+import {
+  createConfirm,
+  describeCreateOfferFromText,
+  describeTextOfferResult,
+} from '@/lib/server/chat/confirms';
 import { startJob } from '@/lib/server/jobs';
 import { createOrReuseTextOffer, previewTextOffer } from '@/lib/server/text-offers';
 import { revalidatePath } from '@/server/revalidate';
@@ -36,12 +40,14 @@ export async function POST(request: Request) {
     const job = input.startKind
       ? startJob(ROOT, { kind: input.startKind, params: { num: textOffer.offer.num } })
       : undefined;
+    const presentation = describeTextOfferResult(textOffer, input.startKind, job);
     revalidatePath('/offers');
     return Response.json({
       created: !textOffer.reused,
       reused: textOffer.reused,
       offer: textOffer.offer,
       ...(job ? { job } : {}),
+      ...presentation,
     });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'failed to create text offer', 400);

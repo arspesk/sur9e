@@ -156,6 +156,37 @@ describe('foldEvents', () => {
     });
   });
 
+  it('carries a durable result message and offer link onto the resolved card', () => {
+    const items = foldEvents([
+      e(
+        {
+          type: 'confirm',
+          token: 'tok-offer',
+          summary: 'Create offer',
+          meta: 'local tracker write',
+          kind: 'create-offer-from-text',
+        },
+        1,
+      ),
+      e(
+        {
+          type: 'confirm-resolved',
+          token: 'tok-offer',
+          outcome: 'approved',
+          execution: 'succeeded',
+          message: 'Offer #42 created. Screening and evaluation started.',
+          links: [{ label: 'Offer #42', href: '/report/42' }],
+        },
+        2,
+      ),
+    ]);
+    expect(items[0]).toMatchObject({
+      kind: 'confirm',
+      message: 'Offer #42 created. Screening and evaluation started.',
+      links: [{ label: 'Offer #42', href: '/report/42' }],
+    });
+  });
+
   it('confirm-resolved with an expired outcome flips the matching confirm item', () => {
     const items = foldEvents([
       e(

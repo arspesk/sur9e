@@ -150,19 +150,29 @@ describe('confirm resolution persists to the owning message', () => {
 
     // foldEvents over the reloaded, re-validated events yields a resolved card.
     const confirm = foldEvents(reloadEvents(msg.events)).find(i => i.kind === 'confirm');
-    expect(confirm).toMatchObject({ kind: 'confirm', outcome: 'approved', action: 'start-job' });
+    expect(confirm).toMatchObject({
+      kind: 'confirm',
+      outcome: 'approved',
+      action: 'start-job',
+      message: 'Evaluation started for offer #1001.',
+      links: [{ label: 'Offer #1001', href: '/report/1001' }],
+    });
     if (confirm?.kind !== 'confirm') throw new Error('expected a confirm item');
 
-    const { getByText, queryByRole } = renderCard(
+    const { getByText, getByRole, queryByRole } = renderCard(
       <ConfirmCard
         token={confirm.token}
         summary={confirm.summary}
         meta={confirm.meta}
         outcome={confirm.outcome}
         action={confirm.action}
+        message={confirm.message}
+        links={confirm.links}
       />,
     );
     expect(getByText('✓ Started — running in the jobs strip')).toBeTruthy();
+    expect(getByText('Evaluation started for offer #1001.')).toBeTruthy();
+    expect(getByRole('link', { name: 'Offer #1001' })).toHaveAttribute('href', '/report/1001');
     expect(queryByRole('button')).toBeNull();
   });
 

@@ -173,6 +173,68 @@
   width: auto;
 }
 
+/* Route loading mirrors the live Home hierarchy so the page does not reflow
+   when its server data arrives. All animation comes from the global .sk
+   primitive; these rules only describe the existing layout's geometry. */
+.home-skeleton__greeting {
+  width: min(340px, 70%);
+  height: 28px;
+  margin: 0 auto var(--space-4);
+}
+.home-skeleton__chips {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.home-skeleton__chips .sk {
+  width: 132px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+}
+.home-skeleton__agenda {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.home-skeleton__count {
+  width: 36px;
+  height: 26px;
+}
+.home-skeleton__agenda-label {
+  width: 70%;
+  height: 11px;
+}
+.home-skeleton__agenda-cta {
+  width: 54px;
+  height: 11px;
+  margin-top: var(--space-1);
+}
+.home-skeleton__section-label {
+  width: 92px;
+  height: 11px;
+  margin-bottom: var(--space-2);
+}
+.home-skeleton__avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: var(--radius);
+}
+.home-skeleton__row-title {
+  width: 62%;
+  height: 12px;
+}
+.home-skeleton__row-meta {
+  width: 78%;
+  height: 10px;
+}
+.home-skeleton__row-action {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
 /* ─── Sections (follow-ups, pending offers) ─── */
 
 .home-columns {

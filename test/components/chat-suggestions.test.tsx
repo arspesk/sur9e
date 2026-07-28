@@ -37,6 +37,17 @@ describe('buildSuggestionPool', () => {
     expect(pool).toContain('Is Attio worth pursuing?');
   });
 
+  it('counts screened and evaluated offers as waiting on the user', () => {
+    const pool = buildSuggestionPool([
+      { company: 'Acme', status: 'Screened', score: 3.8 },
+      { company: 'Beta', status: 'Evaluated', score: 4.2 },
+      { company: 'Gamma', status: 'Applied', score: 4.5 },
+      { company: 'Delta', status: 'Interview', score: 3.6 },
+    ]);
+
+    expect(pool).toContain('I have 2 waiting on me — what should I do next?');
+  });
+
   it('falls back to generic starters for an empty tracker', () => {
     expect(buildSuggestionPool([])).toEqual([
       'What should I focus on this week?',

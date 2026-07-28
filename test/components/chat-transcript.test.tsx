@@ -71,6 +71,22 @@ describe('ChatTranscript', () => {
     expect(getByText('just sent')).toBeTruthy();
   });
 
+  it('reconciles the optimistic echo once its persisted user message lands', () => {
+    const pendingIdentity = { pendingUserMessageId: 'persisted' };
+    const { container, getAllByText } = render(
+      <ChatTranscript
+        messages={[userMsg('persisted', 'just sent')]}
+        pendingUserMessage="just sent"
+        live={{ events: [], status: 'streaming' }}
+        onRetry={() => {}}
+        {...pendingIdentity}
+      />,
+    );
+
+    expect(container.querySelectorAll('.chat-msg--user')).toHaveLength(1);
+    expect(getAllByText('just sent')).toHaveLength(1);
+  });
+
   it('renders a live turn as a busy assistant row while streaming', () => {
     const { container } = render(
       <ChatTranscript

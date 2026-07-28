@@ -67,6 +67,7 @@ async function openChatBubble(page: import('@playwright/test').Page, width: numb
 }
 
 async function mockChatApi(page: import('@playwright/test').Page): Promise<void> {
+  let messages: Array<Record<string, unknown>> = [];
   // Sessions collection: GET lists (empty — a brand-new chat), POST creates
   // conversation c1. The committed routes answer `{ sessions }` / `{ session }`
   // (not `{ conversations }` / `{ conversation }`) — see the doc comment atop
@@ -89,16 +90,31 @@ async function mockChatApi(page: import('@playwright/test').Page): Promise<void>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ session: CONVERSATION, messages: [] }),
+      body: JSON.stringify({ session: CONVERSATION, messages }),
     }),
   );
-  await page.route('**/api/chat/sessions/c1/turns', route =>
-    route.fulfill({
-      status: 200,
+  await page.route('**/api/chat/sessions/c1/turns', route => {
+    const { message } = route.request().postDataJSON() as { message: string };
+    messages = [
+      {
+        id: 'u1',
+        conversationId: 'c1',
+        role: 'user',
+        content: message,
+        events: null,
+        versionGroup: null,
+        attachments: null,
+        referencedOffers: null,
+        position: 0,
+        createdAt: '2026-07-18T10:01:00.000Z',
+      },
+    ];
+    return route.fulfill({
+      status: 202,
       contentType: 'application/json',
-      body: JSON.stringify({ turnId: 't1' }),
-    }),
-  );
+      body: JSON.stringify({ turnId: 't1', userMessageId: 'u1' }),
+    });
+  });
   await page.route('**/api/chat/turns/t1/events**', route =>
     route.fulfill({
       status: 200,
@@ -169,6 +185,8 @@ for (const viewport of VIEWPORTS) {
       await expect(dialog.getByText('3 offers')).toBeVisible({ timeout: 10_000 });
       await expect(dialog.getByText('get_tracker')).toBeVisible();
       await expect(dialog.getByText('· $0.14')).toBeVisible();
+      await expect(dialog.locator('.chat-msg--user')).toHaveCount(1);
+      await expect(dialog.getByText('how many offers?', { exact: true })).toHaveCount(1);
 
       // iOS rule: the document itself never scrolls horizontally. Polled
       // rather than a one-shot read — the (unmocked, real) offers table
@@ -200,6 +218,225 @@ for (const viewport of VIEWPORTS) {
       await page.keyboard.press('Enter');
       await expect(input).toHaveValue('/offers ');
     });
+  });
+}
+
+for (const viewport of VIEWPORTS) {
+  test(`new full-page thread never flashes the empty state @ ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const conversation = {
+      ...CONVERSATION,
+      id: '7f304111-b9e7-4cdd-9da9-63a6745d060d',
+      title: 'New response',
+    };
+    let messages: Array<Record<string, unknown>> = [];
+
+    await page.route('**/api/chat/sessions', async route => {
+      if (route.request().method() === 'POST') {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ session: conversation }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [] }),
+      });
+    });
+    await page.route(`**/api/chat/sessions/${conversation.id}`, route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ session: conversation, messages }),
+      }),
+    );
+    await page.route(`**/api/chat/sessions/${conversation.id}/turns`, async route => {
+      const { message } = route.request().postDataJSON() as { message: string };
+      // Keep the newly-created session genuinely empty long enough to expose the
+      // route-remount race. The UI must retain the optimistic turn meanwhile.
+      await new Promise(resolve => setTimeout(resolve, 600));
+      messages = [
+        {
+          id: 'u-new',
+          conversationId: conversation.id,
+          role: 'user',
+          content: message,
+          events: null,
+          versionGroup: null,
+          attachments: null,
+          referencedOffers: null,
+          position: 0,
+          createdAt: '2026-07-18T10:01:00.000Z',
+        },
+      ];
+      return route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ turnId: 't-new', userMessageId: 'u-new' }),
+      });
+    });
+    await page.route('**/api/chat/turns/t-new', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'running' }),
+      }),
+    );
+    await page.route('**/api/chat/turns/t-new/events**', async route => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: sse([{ seq: 1, type: 'text-delta', text: 'Replying now' }]),
+      });
+    });
+    await page.route('**/api/providers', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ providers: {} }),
+      }),
+    );
+
+    await page.goto('/chat');
+    const mobile = viewport.width <= 640;
+    if (mobile) {
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+      await expect(page.getByRole('dialog', { name: 'sur9e chat' })).toBeVisible();
+    }
+    const surface = mobile
+      ? page.getByRole('dialog', { name: 'sur9e chat' })
+      : page.locator('#main');
+    const input = surface.getByRole('textbox', { name: 'Message' });
+    await input.fill('start a fresh response');
+    await input.press('Enter');
+    await expect(surface.locator('.chat-empty')).toBeHidden();
+
+    await page.evaluate(() => {
+      Reflect.set(window, '__emptyChatFlashSeen', false);
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('.chat-empty')) {
+          Reflect.set(window, '__emptyChatFlashSeen', true);
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      Reflect.set(window, '__emptyChatFlashObserver', observer);
+    });
+
+    if (mobile) {
+      await page.waitForTimeout(1100);
+    } else {
+      await expect.poll(() => new URL(page.url()).pathname).toBe(`/chat/${conversation.id}`);
+      await page.waitForTimeout(300);
+    }
+    expect(await page.evaluate(() => Reflect.get(window, '__emptyChatFlashSeen'))).toBe(false);
+    await page.screenshot({ path: `test-results/chat-no-empty-flash-${viewport.name}.png` });
+  });
+}
+
+for (const viewport of VIEWPORTS) {
+  test(`resolved offer workflow keeps its result link readable @ ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const resultConversation = {
+      ...CONVERSATION,
+      id: '8d924992-e54e-464d-8432-f70be25b251f',
+      title: 'Created offer workflow',
+    };
+    const messages = [
+      {
+        id: 'u-result',
+        conversationId: resultConversation.id,
+        role: 'user',
+        content: 'Create and evaluate this offer',
+        events: null,
+        versionGroup: null,
+        attachments: null,
+        referencedOffers: null,
+        position: 0,
+        createdAt: '2026-07-18T10:01:00.000Z',
+      },
+      {
+        id: 'a-result',
+        conversationId: resultConversation.id,
+        role: 'assistant',
+        content: '',
+        events: [
+          {
+            seq: 1,
+            type: 'confirm',
+            token: 'tok-result',
+            summary: 'Create, screen, and evaluate offer',
+            meta: 'local tracker write · then start screen + evaluate',
+            kind: 'create-offer-from-text',
+          },
+          {
+            seq: 2,
+            type: 'confirm-resolved',
+            token: 'tok-result',
+            outcome: 'approved',
+            execution: 'succeeded',
+            message: 'Offer #42 created. Screening and evaluation started.',
+            links: [{ label: 'Offer #42', href: '/report/42' }],
+          },
+        ],
+        versionGroup: null,
+        attachments: null,
+        referencedOffers: null,
+        position: 1,
+        createdAt: '2026-07-18T10:02:00.000Z',
+      },
+    ];
+    await page.route('**/api/chat/sessions', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [resultConversation] }),
+      }),
+    );
+    await page.route(`**/api/chat/sessions/${resultConversation.id}`, route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ session: resultConversation, messages }),
+      }),
+    );
+    await page.route('**/api/providers', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ providers: {} }),
+      }),
+    );
+
+    await page.goto(`/chat/${resultConversation.id}`);
+    await suppressDevOverlay(page);
+    const surface =
+      viewport.width <= 640
+        ? page.getByRole('dialog', { name: 'sur9e chat' })
+        : page.locator('#main');
+    await expect(surface).toBeVisible();
+    if (viewport.width <= 640) {
+      await surface.getByRole('button', { name: 'Switch chat session' }).click();
+      await page.getByRole('button', { name: resultConversation.title, exact: true }).click();
+    }
+    const card = surface.locator('.chat-confirm');
+    await expect(card).toBeVisible();
+    await expect(
+      card.getByText('Offer #42 created. Screening and evaluation started.'),
+    ).toBeVisible();
+    const link = card.getByRole('link', { name: 'Offer #42' });
+    await expect(link).toHaveAttribute('href', '/report/42');
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(viewport.width + 1);
+    await page.screenshot({ path: `test-results/chat-offer-result-${viewport.name}.png` });
   });
 }
 

@@ -45,6 +45,14 @@ function okResponse(body: unknown, status = 200) {
   return { ok: status < 300, status, json: async () => body } as Response;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 /** Route-keyed fetch double covering everything ChatCard (+ the ChatHeader
  * it renders) touches. `turnResponses` lets a test queue a different body
  * per POST .../turns call — e.g. a turnId then a later setupRequired.
@@ -138,6 +146,76 @@ afterEach(() => {
 });
 
 describe('ChatCard', () => {
+  it('shows a conversation skeleton instead of the empty state while an uncached thread loads', async () => {
+    const sessionResponse = deferred<Response>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/providers') return okResponse({ providers: {} });
+        if (url === '/api/settings') return okResponse({});
+        if (url === '/api/applications') return okResponse({ entries: [], count: 0 });
+        if (url === '/api/chat/sessions') {
+          return okResponse({ sessions: [fakeSession('c1')] });
+        }
+        if (url === '/api/chat/sessions/c1') return sessionResponse.promise;
+        throw new Error(`unexpected fetch: ${url}`);
+      }),
+    );
+    useChatStore.setState({ activeConversationId: 'c1' });
+
+    const { container } = renderCard();
+
+    expect(await screen.findByRole('status', { name: 'Loading conversation' })).toBeInTheDocument();
+    expect(container.querySelector('.chat-empty')).toBeNull();
+
+    fireEvent.change(textarea(), { target: { value: 'draft while loading' } });
+    expect(textarea().value).toBe('draft while loading');
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    fireEvent.keyDown(textarea(), { key: 'Enter' });
+    expect(textarea().value).toBe('draft while loading');
+
+    sessionResponse.resolve(okResponse({ session: fakeSession('c1'), messages: [] }));
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading conversation' })).toBeNull(),
+    );
+  });
+
+  it('keeps a failed thread selected and offers retry instead of showing a new chat', async () => {
+    let sessionCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/providers') return okResponse({ providers: {} });
+        if (url === '/api/settings') return okResponse({});
+        if (url === '/api/applications') return okResponse({ entries: [], count: 0 });
+        if (url === '/api/chat/sessions') {
+          return okResponse({ sessions: [fakeSession('c1')] });
+        }
+        if (url === '/api/chat/sessions/c1') {
+          sessionCalls += 1;
+          if (sessionCalls === 1) {
+            return okResponse({ error: 'Thread unavailable' }, 500);
+          }
+          return okResponse({ session: fakeSession('c1'), messages: [] });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      }),
+    );
+    useChatStore.setState({ activeConversationId: 'c1' });
+
+    const { container } = renderCard();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Thread unavailable');
+    expect(container.querySelector('.chat-empty')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading conversation' }));
+    await waitFor(() => expect(sessionCalls).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   it('renders an aria-live status region, empty while idle', () => {
     stubFetch();
     renderCard();
@@ -285,6 +363,9 @@ describe('ChatCard', () => {
     typeAndEnter('hello A');
     await waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
     act(() => useChatStore.getState().setActiveConversation('b2'));
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading conversation' })).toBeNull(),
+    );
     typeAndEnter('hello B');
     await waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
     // Thread A's still-running turn must keep its record — the background

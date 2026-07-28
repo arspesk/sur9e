@@ -133,6 +133,18 @@ describe('command-registry Claude parity (lock command shape across the refactor
     expect(built!.args[1]).toContain('[4/4]');
   });
 
+  it('screen-evaluate by num — screens pasted text before evaluating the same offer', () => {
+    const built = buildCommand('screen-evaluate', { num: 42 }, root);
+    expect(built).not.toBeNull();
+    expect(built!.cmd).toBe('/bin/bash');
+    expect(built!.args[1]).toContain('node batch/screen-text.mjs --num 42');
+    expect(built!.args[1]).toContain('node batch/mode-runner.mjs evaluate --num 42');
+    expect(built!.args[1]).toContain('node cli/merge-tracker.mjs --re-eval=42');
+    expect(built!.args[1].indexOf('screen-text.mjs')).toBeLessThan(
+      built!.args[1].indexOf('mode-runner.mjs evaluate'),
+    );
+  });
+
   it('screen-evaluate with generate_pdf=true — chains tailor-cv before merge-tracker', () => {
     const built = buildCommand(
       'screen-evaluate',

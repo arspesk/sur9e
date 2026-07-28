@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { HomePage } from '@/features/home/home-page';
-import { selectPendingOffers } from '@/features/home/pending-offers-select';
+import { isPendingOfferStatus, selectPendingOffers } from '@/features/home/pending-offers-select';
 import { ROOT } from '@/lib/root';
 import { loadApplicationsWithSummary } from '@/lib/server/applications';
 import { loadFollowupState } from '@/lib/server/followups';
@@ -16,10 +16,6 @@ export const metadata: Metadata = {
 // requests (status moves, CLI writes), so the read happens per-request.
 export const dynamic = 'force-dynamic';
 
-/** Statuses where the ball is in the candidate's court — mirrors the
- * "waiting on you" count in the offers table header. */
-const WAITING_ON_YOU = new Set(['screened', 'responded']);
-
 export default function Page() {
   // First run has no tracker to summarize — keep the existing onboarding
   // flow, which lives on the Offers surface.
@@ -30,9 +26,7 @@ export default function Page() {
   const followups = loadFollowupState(ROOT);
   const scan = loadScanQueueStatus(ROOT);
 
-  const waitingOnYou = entries.filter(e =>
-    WAITING_ON_YOU.has(e.status.trim().toLowerCase()),
-  ).length;
+  const waitingOnYou = entries.filter(e => isPendingOfferStatus(e.status)).length;
 
   return (
     <HomePage

@@ -178,6 +178,27 @@ function _buildCommand(
     };
   }
   if (type === 'screen-evaluate') {
+    const num = params && params.num;
+    if (Number.isInteger(num)) {
+      const total = 4;
+      return {
+        cmd: '/bin/bash',
+        args: [
+          '-c',
+          [
+            'set -o pipefail',
+            `printf "[1/${total}] Screening pasted-text offer #${num}\\n"`,
+            `node batch/screen-text.mjs --num ${num}`,
+            `printf "[2/${total}] Merging the screening result\\n"`,
+            `node cli/merge-tracker.mjs --re-eval=${num}`,
+            `printf "[3/${total}] Running full evaluation for offer #${num}\\n"`,
+            `node batch/mode-runner.mjs evaluate --num ${num}`,
+            `printf "[4/${total}] Merging the evaluation result\\n"`,
+            `node cli/merge-tracker.mjs --re-eval=${num}`,
+          ].join(' && '),
+        ],
+      };
+    }
     // Single-URL "add + full evaluation" chain. Screening must finish first:
     // evaluate needs the tracker num, which only exists after screen.mjs
     // writes the report and merge-tracker inserts the row. num-by-url then

@@ -11,6 +11,7 @@ import { JobType } from './jobs';
 
 export const TextOfferStartKind = z.enum([
   'screen',
+  'screen-evaluate',
   'evaluate',
   'tailor-cv',
   'cover-letter',

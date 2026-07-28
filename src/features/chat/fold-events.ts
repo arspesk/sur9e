@@ -4,7 +4,7 @@
 // confirm-resolved flips its confirm item in place. `ui` (side-effect) and
 // `done` (terminal marker) never render. No DOM, safe for server + vitest.
 
-import type { ChatTurnEvent } from '@/lib/schemas/chat';
+import type { ChatActionLink, ChatTurnEvent } from '@/lib/schemas/chat';
 
 // Which gated action a confirm card stands for. Mirrors ConfirmKind in
 // src/lib/server/chat/confirms.ts (kept as a local type so this pure,
@@ -36,6 +36,8 @@ export type FoldedItem =
       // (src/lib/schemas/chat.ts) — 'pending' is the pre-resolution default.
       outcome: 'pending' | 'approved' | 'cancelled' | 'expired';
       execution?: 'succeeded' | 'failed' | 'unchanged';
+      message?: string;
+      links?: ChatActionLink[];
       // The gated action this card confirms, when the confirm event carried it
       // — drives the action-specific resolved label. Absent on confirm events
       // persisted before the kind field existed (card falls back to generic).
@@ -176,6 +178,8 @@ export function foldEvents(events: ChatTurnEvent[]): FoldedItem[] {
           if (it.kind === 'confirm' && it.token === event.token) {
             it.outcome = event.outcome;
             if (event.execution) it.execution = event.execution;
+            if (event.message) it.message = event.message;
+            if (event.links) it.links = event.links;
           }
         }
         break;
