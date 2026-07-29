@@ -473,3 +473,55 @@ describe('core CI workflow', () => {
     }
   });
 });
+
+describe('CodeRabbit policy', () => {
+  it('stays advisory and reviews every critical sur9e path', () => {
+    const path = resolve(ROOT, '.coderabbit.yaml');
+    const config = yaml.load(readFileSync(path, 'utf8'));
+
+    expect(config.reviews.request_changes_workflow).toBe(false);
+    expect(config.reviews.auto_review).toMatchObject({
+      enabled: true,
+      drafts: false,
+      base_branches: ['main'],
+    });
+
+    const pathInstructions = config.reviews.path_instructions;
+    expect(pathInstructions.every(item => item.instructions.trim().length > 0)).toBe(true);
+    expect(pathInstructions.map(item => item.path)).toEqual(
+      expect.arrayContaining([
+        'CLAUDE.md',
+        'AGENTS.md',
+        'docs/data-contract.md',
+        'src/lib/repo-path-policy.mjs',
+        'src/lib/check-user-data-boundary.mjs',
+        'content/modes/**',
+        'src/lib/server/**',
+        'src/server/actions/**',
+        'src/app/api/**',
+        'update-system.mjs',
+        '.github/**',
+        'test/e2e/**',
+      ]),
+    );
+
+    const instructionFor = path =>
+      pathInstructions.find(item => item.path === path)?.instructions ?? '';
+    expect(instructionFor('CLAUDE.md')).toMatch(/byte-identical to AGENTS\.md/i);
+    expect(instructionFor('AGENTS.md')).toMatch(/byte-identical to CLAUDE\.md/i);
+    expect(instructionFor('docs/data-contract.md')).toMatch(/system-versus-user boundary/i);
+    expect(instructionFor('src/lib/check-user-data-boundary.mjs')).toMatch(
+      /inspect Git paths losslessly/i,
+    );
+    expect(instructionFor('.github/**')).toMatch(/full-SHA action pinning/i);
+  });
+
+  it('does not let public comments automatically activate write-capable chat', () => {
+    const config = yaml.load(readFileSync(resolve(ROOT, '.coderabbit.yaml'), 'utf8'));
+
+    expect(config.chat).toEqual({
+      auto_reply: false,
+      allow_non_org_members: false,
+    });
+  });
+});
