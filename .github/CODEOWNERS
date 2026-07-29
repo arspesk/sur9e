@@ -1,0 +1,14 @@
+* @arspesk
+
+/CLAUDE.md @arspesk
+/AGENTS.md @arspesk
+/docs/data-contract.md @arspesk
+/content/modes/ @arspesk
+/update-system.mjs @arspesk
+/.github/ @arspesk
+/.release-please-manifest.json @arspesk
+/release-please-config.json @arspesk
+/package.json @arspesk
+/package-lock.json @arspesk
+/src/lib/repo-path-policy.mjs @arspesk
+/src/lib/check-user-data-boundary.mjs @arspesk
