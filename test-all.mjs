@@ -307,6 +307,7 @@ const requiredDocRefs = [
   'docs/architecture.md',
   'docs/setup.md',
   'docs/customization.md',
+  'docs/releasing.md',
 ];
 
 for (const ref of requiredDocRefs) {

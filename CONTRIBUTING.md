@@ -28,8 +28,10 @@ You don't need real personal data to develop — copy the templates from
 
 ## Quality gates
 
-Every commit runs the same gate three times: a post-edit lint hook (when
-working with an AI agent), a pre-commit hook, and CI.
+The feedback layers have deliberately different scopes: AI-agent edits get a
+fast Biome/Prettier check, pre-commit runs `npm run test:quick`, and core CI uses
+Node 24 + `npm ci` before running the quick gate and a production build as
+separate jobs.
 
 ```bash
 npm run lint         # Biome (TS/JS/CSS/JSON) + Prettier (MD/YAML)
@@ -37,11 +39,25 @@ npm run typecheck    # tsc over src/**
 npm run test:unit    # vitest
 npm run test:e2e     # Playwright (needs the dev server running)
 npm run test:quick   # the full pre-commit/CI gate
+npm run build        # production build
 ```
 
-A PR that fails `npm run test:quick` will not be merged. New behavior needs
-tests. Behavior-preserving refactors must leave existing tests passing
-unmodified.
+PR automation also runs the user-data boundary, title and path-label policy,
+high-severity dependency review, CodeQL, and a curated Playwright smoke suite
+against a fresh clone. That smoke suite deliberately avoids private fixtures;
+run relevant data-dependent browser coverage locally. External GitHub Actions
+stay pinned to full commit SHAs.
+
+CodeRabbit runs only if its GitHub App has been installed. If installed, it
+auto-reviews non-draft PRs to `main`; its findings remain actionable, but it is
+advisory for merge gating and not a required check. Its request-changes workflow
+and automatic/non-member chat stay disabled. During rollout it must not use
+Autofix, create direct commits or stacked PRs, or accept code-editing chat
+commands. Dependabot opens weekly npm and GitHub Actions update PRs; those PRs
+are never auto-merged.
+
+A PR that fails an applicable gate will not be merged. New behavior needs tests.
+Behavior-preserving refactors must leave existing tests passing unmodified.
 
 ## AI-assisted contributions
 
@@ -64,16 +80,26 @@ welcome — under these rules:
 
 - **No auto-submit features, ever.** PRs that automate the final
   Submit/Send/Apply step of a job application are rejected on principle.
-- **User data stays local and gitignored.** Nothing under `inputs/`, `data/`,
-  or `artifacts/` may become tracked, and no feature may ship it off-machine
-  beyond the user's own AI provider calls.
+- **User data stays local.** Paths classified as user-owned by
+  `src/lib/repo-path-policy.mjs` may not become tracked or be used as test
+  fixtures; only its explicitly enumerated scaffolding is exempt. No feature
+  may ship user data off-machine beyond the user's own AI provider calls.
 - **No telemetry.** Sur9e collects nothing.
 - **English only** in code, comments, and docs.
 
 ## Commit & PR style
 
-- Conventional-ish prefixes: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`
-  — scope in parentheses when useful (`fix(table): …`).
+- PR titles must follow
+  `<type>(<optional-scope>)!?: <description>`. Allowed types are `feat`, `fix`,
+  `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, and `revert`.
+  The validated title must remain the squash commit's Conventional header; only
+  GitHub's ` (#<number>)` suffix is allowed. That one commit drives deterministic
+  Release Please versioning and release notes.
+- Use squash merging only. Merge commits and rebase merges are not part of the
+  project workflow, and the squash body must stay blank so internal commit
+  messages cannot affect Release Please. Remote enforcement is a maintainer
+  prerequisite and must not be assumed active until the GitHub settings are
+  verified.
 - Logically grouped commits; one concern per PR.
 - Frontend changes: include desktop (1280×800), tablet (768×1024), and mobile
   (375×667) screenshots in the PR.
@@ -84,6 +110,10 @@ A few scripts exist for repo maintenance and are not part of the user
 workflow: `cli/refresh-openrouter-pricing.mjs` (refresh bundled pricing
 data) and the idempotent `scripts/migrate-*.mjs` data migrations. You can
 ignore them unless a change touches what they maintain.
+
+Do not manually bump `VERSION`, package metadata, the Release Please manifest,
+or `CHANGELOG.md` in an ordinary contribution. Maintainers release through
+[`docs/releasing.md`](docs/releasing.md).
 
 MCP servers ship pre-wired: the tracked `.mcp.json` (Claude), `opencode.json`
 (OpenCode), and `.codex/config.toml` (Codex) register a stdio Playwright MCP

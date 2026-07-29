@@ -4,8 +4,19 @@ The repo distinguishes between data **the user owns** and data **the system main
 
 **The rule:**
 
-- If a file is in the User Layer, **no update process may read, modify, or delete it.**
-- If a file is in the System Layer, it can be safely replaced with the latest version from the upstream repo.
+- No User Layer path may be replaced from upstream, staged, or uploaded. User
+  content and work product must never be modified or deleted by the updater.
+- One narrow local read is intentional: `update-system.mjs` reads
+  `inputs/config/config.yml` to resolve only `system.update_source` and
+  `system.update_branch`. The updater does not transmit that file or use its
+  other settings.
+- Two updater-owned control files are intentionally mutable:
+  `.update-lock` is created and removed around an update, and
+  `.update-dismissed` is written or cleared when the user dismisses or accepts
+  an update. They remain protected from upstream replacement, staging, and
+  upload.
+- A file is replaceable from upstream only when the executable policy
+  explicitly classifies it as System Layer.
 
 ## Bucket layout
 
@@ -14,65 +25,91 @@ The repo root has four sur9e-domain buckets, sorted by lifecycle:
 - **`content/`** — committed product content (modes, templates, examples). Ships with the repo. System Layer.
 - **`inputs/`** — user-authored, gitignored (personalization, config, jds). Each user fills these in. User Layer.
 - **`artifacts/`** — generated artifacts (per-offer reports + CV/cover-letter PDFs in `output/`, plus the shared `interview-prep/story-bank.md`). Research, interview-prep, outreach, and negotiation analyses live inside the report body, not as separate files. Output of background jobs. User Layer (the user's work product, even though sur9e wrote it).
-- **`data/`** — runtime state (applications.md, usage.json, pipeline.md, jobs/). Mutable databases. Stays at root. Mixed: tracker is User Layer; transient logs are System Layer.
+- **`data/`** — runtime state (applications.md, usage.json, pipeline.md, jobs/).
+  Mutable databases. All of it is updater-protected, including recreateable
+  scheduler and web-launcher state.
 
-`batch/` (Python+shell scan/screen subsystem) is code, not data — also at root, System Layer.
+`batch/` contains the Python+shell scan/screen subsystem. Only entries included
+in `SYSTEM_PATHS` are updateable; its logs, legacy JobSpy environment, tracker
+additions, PID locks, and state/result files are User Layer.
 
 The User/System split below uses paths from these buckets.
 
+## Machine-enforced path boundary
+
+This document explains the contract.
+[`src/lib/repo-path-policy.mjs`](../src/lib/repo-path-policy.mjs) is the
+canonical executable classification shared by the updater and CI:
+
+- `USER_PATH_PREFIXES` protects all current and future paths under `inputs/`,
+  `data/`, and `artifacts/`; batch logs, the legacy in-tree JobSpy environment,
+  and tracker additions; plus `.claude/memory/`, `.claude/worktrees/`,
+  local `.claude/skills/`, `.antigravitycli/`, `.playwright-mcp/`, `.serena/`,
+  `.trash/`, `test-results/`, and `tmp/`.
+- `USER_PATH_PATTERNS` protects generated names such as `.resolved-prompt-*`,
+  root `batch/*.pid`, `text_*.json`, and YAML backups ending in `.yml.bak` or
+  `.yaml.bak`, including backups nested under otherwise system-owned paths.
+- `USER_PATH_FILES` protects exact local files such as `.env`, updater locks and
+  dismissal state, `.claude/scheduled_tasks.lock`, local formatter/agent
+  settings, and batch state/result files.
+- `USER_PATH_EXCEPTIONS` keeps only the project-owned
+  `.claude/skills/sur9e/` outside the local-skill boundary.
+- `TRACKED_SCAFFOLDING` is the only exception. It enumerates the `.gitkeep` and
+  README files that may remain tracked inside protected directories.
+- `SYSTEM_PATHS` is the explicit upstream-update allowlist. All of `content/`
+  is system-owned, including examples and future content paths.
+
+`npm run test:quick` rejects any protected path already tracked by Git.
+[`.github/workflows/user-data-boundary.yml`](../.github/workflows/user-data-boundary.yml)
+runs [`src/lib/check-user-data-boundary.mjs`](../src/lib/check-user-data-boundary.mjs)
+on pull-request diffs, including both sides of copies and renames. A boundary
+change must update this document, the executable policy, and its tests in the
+same PR.
+
 ## User Layer (NEVER auto-updated)
 
-These files contain personal data, customizations, and work product. Updates will NEVER modify them.
+These paths contain personal data, customizations, work product, or local
+runtime state. The updater never modifies or deletes user content or work
+product; only its two control-state files described above are mutable.
 
-| File                                       | Purpose                                                                    |
-| ------------------------------------------ | -------------------------------------------------------------------------- |
-| `inputs/personalization/cv.md`             | Your CV in markdown                                                        |
-| `inputs/personalization/profile.yml`       | Your identity, targets, comp range                                         |
-| `inputs/personalization/narrative.md`      | Per-archetype framing, cross-cutting advantage, negotiation scripts, voice |
-| `inputs/personalization/article-digest.md` | Your proof points from portfolio                                           |
-| `inputs/personalization/portals.yml`       | ATS portal scanner company list (`tracked_companies`); optional            |
-| `inputs/config/config.yml`                 | Tool settings (API keys, preferences, schedule config)                     |
-| `artifacts/interview-prep/story-bank.md`   | Your accumulated STAR+R stories                                            |
-| `data/applications.md`                     | Your application tracker                                                   |
-| `data/pipeline.md`                         | Your URL inbox                                                             |
-| `data/scan-history.tsv`                    | Your scan history                                                          |
-| `data/follow-ups.md`                       | Your follow-up history                                                     |
-| `artifacts/reports/*`                      | Your evaluation reports                                                    |
-| `artifacts/output/*`                       | Your generated PDFs                                                        |
-| `inputs/jds/*`                             | Your saved job descriptions                                                |
+| File/category                         | Purpose                                                                                                                           |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `inputs/*`                            | All personalization, configuration, saved JDs, parsers, and future user inputs                                                    |
+| `data/*`                              | Tracker, pipeline, usage, jobs, launcher state, and all future runtime data                                                       |
+| `artifacts/*`                         | Reports, PDFs, interview prep, Lighthouse output, and all future generated work product                                           |
+| `batch/logs/*`                        | Local worker logs                                                                                                                 |
+| `batch/jobspy-env/*`                  | Legacy in-tree JobSpy Python environment                                                                                          |
+| `batch/tracker-additions/*`           | Pending tracker writes                                                                                                            |
+| Batch state/results and `batch/*.pid` | Local scan, screen, evaluation, and process-lock state                                                                            |
+| Generated files at any depth          | `.resolved-prompt-*` and `text_*.json`                                                                                            |
+| Local tool, test, and scratch state   | `.env`, updater/agent locks and settings, custom Claude skills, agent/browser/worktree caches, `tmp/`, trash, and `test-results/` |
+| YAML backup files                     | `*.yml.bak` and `*.yaml.bak` at any repository depth                                                                              |
+
+The scaffolding enumerated by `TRACKED_SCAFFOLDING` remains the only exception
+inside these broad buckets. Unknown future paths under `inputs/`, `data/`, or
+`artifacts/` are protected by default.
 
 ## System Layer (safe to auto-update)
 
-These files contain system logic, scripts, templates, and instructions that improve with each release.
+These files contain system logic, scripts, templates, and instructions that
+improve with each release. This table is illustrative; `SYSTEM_PATHS` in the
+executable policy is the exact allowlist.
 
-| File                              | Purpose                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `content/modes/_shared.md`        | Scoring system, global rules, tools                                                                                                   |
-| `content/modes/evaluate.md`       | Evaluation mode instructions                                                                                                          |
-| `content/modes/tailor-cv.md`      | CV tailoring instructions                                                                                                             |
-| `content/modes/batch-evaluate.md` | Bulk two-stage (screen → evaluate) processing instructions                                                                            |
-| `content/modes/apply.md`          | Application assistant instructions                                                                                                    |
-| `content/modes/evaluate-offer.md` | Full-pipeline (evaluate + report + tracker) instructions                                                                              |
-| `content/modes/reach-out.md`      | LinkedIn outreach instructions                                                                                                        |
-| `content/modes/research.md`       | Research prompt instructions                                                                                                          |
-| `content/modes/offers.md`         | Comparison instructions                                                                                                               |
-| `content/modes/process-queue.md`  | URL-inbox queue-draining (screen-all) instructions                                                                                    |
-| `content/modes/project.md`        | Project evaluation instructions                                                                                                       |
-| `content/modes/tracker.md`        | Tracker instructions                                                                                                                  |
-| `content/modes/training.md`       | Training evaluation instructions                                                                                                      |
-| `content/modes/patterns.md`       | Pattern analysis instructions                                                                                                         |
-| `content/modes/follow-up.md`      | Follow-up cadence instructions                                                                                                        |
-| `CLAUDE.md`                       | Agent instructions                                                                                                                    |
-| `*.mjs`                           | Utility scripts                                                                                                                       |
-| `batch/batch-prompt.md`           | Batch worker prompt                                                                                                                   |
-| `batch/batch-runner.sh`           | Batch orchestrator                                                                                                                    |
-| `content/templates/*`             | Base templates                                                                                                                        |
-| `fonts/*`                         | Self-hosted fonts                                                                                                                     |
-| `.claude/skills/*`                | Skill definitions                                                                                                                     |
-| `docs/*`                          | Documentation                                                                                                                         |
-| `VERSION`                         | Current version number                                                                                                                |
-| `data/schedule-state.json`        | Scheduler runtime state (`last_planned`, `last_run`, `last_result`) — system-managed, safe to delete; scheduler re-seeds on next tick |
-| `data/web/`                       | Web-launcher runtime state (`web.pid`, `web.json`, `web.log`) — system-managed, safe to delete when the server is stopped             |
+| File                               | Purpose                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `content/*`                        | All tracked modes, templates, examples, and future product content         |
+| `CLAUDE.md`                        | Agent instructions                                                         |
+| `AGENTS.md`                        | Agent instructions for non-Claude runtimes                                 |
+| `update-system.mjs`                | Update, rollback, and update-check logic                                   |
+| `test-all.mjs`                     | Local and CI quick gate                                                    |
+| `scripts/sync-release-version.mjs` | Release version synchronizer                                               |
+| `batch/batch-prompt.md`            | Batch worker prompt                                                        |
+| `batch/batch-runner.sh`            | Batch orchestrator                                                         |
+| `.claude/skills/sur9e/*`           | Project-owned sur9e skill                                                  |
+| `docs/*`                           | Documentation                                                              |
+| `VERSION`                          | Current version number                                                     |
+| Release Please metadata            | Package metadata, lockfile, manifest, changelog, and release configuration |
+| `.github/*`                        | Repository automation and policy                                           |
 
 ## Config keys — `scanning.schedule.*`
 

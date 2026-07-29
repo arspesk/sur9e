@@ -20,9 +20,28 @@ Sur9e is a **single-user, local-first** application:
   as the template.
 - The test gate (`test-all.mjs`) scans tracked files for common credential
   patterns (Anthropic, OpenAI, GitHub, AWS, Google, Slack) on every commit.
-- Personal data (`inputs/`, `data/`, `artifacts/`) is gitignored by design.
-  Verify before pushing a fork public: `git ls-files | grep -E 'inputs/|data/'`
-  should return nothing personal.
+- `src/lib/repo-path-policy.mjs` classifies protected personal and runtime paths;
+  only its enumerated scaffolding may be tracked. Verify the complete boundary
+  before making a fork public:
+
+  ```bash
+  node src/lib/check-user-data-boundary.mjs --tracked
+  ```
+
+## Automated repository checks
+
+- The local quick gate scans every tracked path, and pull requests run the same
+  policy over changed, copied, and renamed Git paths.
+- Dependency Review rejects newly introduced high-severity vulnerable
+  dependencies.
+- CodeQL analyzes JavaScript/TypeScript on pull requests, pushes to `main`, and
+  weekly.
+- The tracked Dependabot configuration requests weekly npm and GitHub Actions
+  update PRs. Repository alerts and security updates still require the
+  maintainer to enable the corresponding GitHub settings; Dependabot PRs are
+  never auto-merged.
+- If the CodeRabbit App is installed, its feedback is advisory for merge gating
+  and is not a security control.
 
 ## Reporting a Vulnerability
 
@@ -55,7 +74,8 @@ Security issues in the following are in scope:
 
 ## Supported versions
 
-Only the latest `main` is supported. Sur9e ships continuously; there are no maintained release branches.
+Only the latest published release is supported. `main` is the development
+branch; there are no maintained release branches.
 
 ## Disclosure Policy
 

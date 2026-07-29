@@ -26,6 +26,7 @@ know" rather than guess.
 | Architecture (system flow)     | [`docs/architecture.md`](docs/architecture.md)                    |
 | Setup & prerequisites          | [`docs/setup.md`](docs/setup.md)                                  |
 | Personalization guide          | [`docs/customization.md`](docs/customization.md)                  |
+| Releases & repo automation     | [`docs/releasing.md`](docs/releasing.md)                          |
 | Bugs / feature requests        | GitHub Issues in this repo                                        |
 | Your CV                        | `inputs/personalization/cv.md` (gitignored)                       |
 | Your profile & targets         | `inputs/personalization/profile.yml` (gitignored)                 |
@@ -95,17 +96,26 @@ Dev server: `npm run web` → http://localhost:3000
 - **Reads use the right cache layer.** RSC pages call `loadX(ROOT)` directly (wrapped in React `cache()` per request). Client components use TanStack Query hooks in `src/hooks/use-*`. Cross-component UI state goes in a Zustand store in `src/stores/`.
 - **Design tokens live in `src/app/styles/tokens.css`.** New colors, spacing, radii, shadows, durations, and z-index tiers go there first; component CSS consumes `var(--token)`.
 
-## Code-quality gates (always running)
-
-Three layers, all wired to the same `node test-all.mjs --quick` check:
+## Code-quality gates
 
 | Layer                | Where                                                                    | What it does                                                                                                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **PostToolUse hook** | [`.claude/hooks/post-edit-check.mjs`](.claude/hooks/post-edit-check.mjs) | Runs Biome on `.ts/.tsx/.mjs/.cjs/.js/.json/.css` and Prettier on `.md/.yml/.yaml` after every Edit/Write/MultiEdit. Errors come back as `additionalContext` next turn — the agent's "editor squigglies." |
-| **Pre-commit hook**  | [`.githooks/pre-commit`](.githooks/pre-commit)                           | Runs `node test-all.mjs --quick` before every commit. Wired by `npm install`'s postinstall.                                                                                                               |
-| **CI**               | [`.github/workflows/test.yml`](.github/workflows/test.yml)               | `npm install → npm run lint → npm run typecheck → node test-all.mjs --quick` on every PR + push to `main`.                                                                                                |
+| **Pre-commit hook**  | [`.githooks/pre-commit`](.githooks/pre-commit)                           | Runs `npm run test:quick` before every commit. Wired by `npm install`'s postinstall.                                                                                                                      |
+| **Core CI**          | [`.github/workflows/test.yml`](.github/workflows/test.yml)               | Uses Node 24 + `npm ci`, then runs the quick gate and production build as separate jobs on every PR and push to `main`.                                                                                   |
 
 The full gate (`test-all.mjs`) covers syntax, scripts, data-contract invariants, parser fixtures, **lint + format** (Biome on TS/JS/CSS/JSON, Prettier on MD/YAML), **type-check** (`tsc` on `src/**`), and **vitest** (React + lib unit tests).
+
+PR automation also runs a fresh-clone, data-independent Playwright smoke subset;
+the user-data boundary; PR title and path-label policy; high-severity dependency
+review; and CodeQL. External actions stay pinned to full commit SHAs. CodeRabbit
+is conditional on its GitHub App being installed. If installed, it reviews
+non-draft PRs to `main`; its findings remain actionable, but it is advisory for
+merge gating and not a required check. Its request-changes workflow and
+automatic/non-member chat stay disabled. During rollout, prohibit Autofix,
+direct commits, stacked PRs, and code-editing chat commands. Dependabot opens
+weekly npm and GitHub Actions PRs; never auto-merge them. See
+[`docs/releasing.md`](docs/releasing.md) for the maintainer workflow.
 
 **Bypass for genuine emergencies:** `git commit --no-verify` for the pre-commit hook, `CLAUDE_SKIP_HOOK=1` for the PostToolUse hook. Use sparingly.
 
@@ -155,12 +165,25 @@ are welcome. The rules:
 
 - **You own what you submit.** Review and understand every AI-generated line
   before opening a PR. "The agent wrote it" is not a review.
-- **Run the gate.** `npm run test:quick` must pass locally; CI runs the same
-  check. New behavior needs tests; behavior-preserving refactors must prove
-  nothing changed (existing tests pass unmodified).
-- **Never commit user data.** Everything under `inputs/`, `data/`, and
-  `artifacts/` is gitignored by design — keep it that way. Never inject test
-  data into a user's real files.
+- **Run the gates.** `npm run test:quick` and `npm run build` must pass before a
+  PR. New behavior needs tests; behavior-preserving refactors must prove nothing
+  changed (existing tests pass unmodified).
+- **Protect the user-data boundary.** `src/lib/repo-path-policy.mjs` is the
+  executable source of truth shared by updates and CI. Protected paths must
+  never be tracked or used as test fixtures; only its enumerated scaffolding is
+  exempt. Keep the policy, [`docs/data-contract.md`](docs/data-contract.md), and
+  their tests aligned.
+- **Use Conventional Commit PR titles.** Format:
+  `<type>(<optional-scope>)!?: <description>`; allowed types are `feat`, `fix`,
+  `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, and `revert`.
+- **Use squash merges only.** The validated PR title must become the squash
+  commit's Conventional header; only GitHub's ` (#<number>)` suffix is allowed.
+  Keep the squash body blank so internal commit messages cannot affect Release
+  Please. Remote enforcement is a maintainer prerequisite; do not assume it is
+  enabled until the GitHub settings are verified.
+- **Leave releases to Release Please.** Ordinary PRs must not manually edit
+  generated release metadata. Maintainers follow
+  [`docs/releasing.md`](docs/releasing.md).
 - **Match the existing patterns** (see Critical rules above) instead of
   introducing parallel ones. One source of truth per concern.
 - **No auto-submit features, ever.** PRs that automate the final
