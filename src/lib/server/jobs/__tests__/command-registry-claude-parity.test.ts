@@ -90,17 +90,15 @@ describe('command-registry Claude parity (lock command shape across the refactor
     expect(buildCommand('evaluate', { num: 'x' as unknown as number }, root)).toBeNull();
   });
 
-  it.each([
-    'research',
-    'interview-prep',
-    'reach-out',
-    'negotiate',
-  ] as const)('%s — routes through mode-runner', type => {
-    const built = buildCommand(type, { num: 42 }, root);
-    expect(built).not.toBeNull();
-    expect(built!.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
-    expect(built!.args[1]).toContain('set -o pipefail');
-  });
+  it.each(['research', 'interview-prep', 'reach-out', 'negotiate'] as const)(
+    '%s — routes through mode-runner',
+    type => {
+      const built = buildCommand(type, { num: 42 }, root);
+      expect(built).not.toBeNull();
+      expect(built!.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
+      expect(built!.args[1]).toContain('set -o pipefail');
+    },
+  );
 
   it('tailor-cv — routes through mode-runner', () => {
     const built = buildCommand('tailor-cv', { num: 42 }, root);

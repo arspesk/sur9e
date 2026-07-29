@@ -23,19 +23,20 @@ describe('mode-prompt portability', () => {
     expect(Object.keys(manifest).length).toBeGreaterThanOrEqual(17);
   });
 
-  it.each(
-    readdirSync(MODES_DIR).filter(n => n.endsWith('.md')),
-  )('%s — body contains no Claude-isms', filename => {
-    const path = join(MODES_DIR, filename);
-    const text = readFileSync(path, 'utf-8');
-    // _shared.md intentionally NAMES the Claude tools in the meta-guidance
-    // sentence that tells mode authors NOT to use them. Strip that sentence
-    // before linting so the file doesn't trip its own rule. The carve-out is
-    // anchored to a substring unique to _shared.md so it doesn't accidentally
-    // mask Claude-isms in real mode bodies.
-    const cleaned = text.replace(/Do \*\*not\*\* name Claude-specific tools[^\n]*/g, '');
-    for (const re of CLAUDE_ISMS) {
-      expect(cleaned).not.toMatch(re);
-    }
-  });
+  it.each(readdirSync(MODES_DIR).filter(n => n.endsWith('.md')))(
+    '%s — body contains no Claude-isms',
+    filename => {
+      const path = join(MODES_DIR, filename);
+      const text = readFileSync(path, 'utf-8');
+      // _shared.md intentionally NAMES the Claude tools in the meta-guidance
+      // sentence that tells mode authors NOT to use them. Strip that sentence
+      // before linting so the file doesn't trip its own rule. The carve-out is
+      // anchored to a substring unique to _shared.md so it doesn't accidentally
+      // mask Claude-isms in real mode bodies.
+      const cleaned = text.replace(/Do \*\*not\*\* name Claude-specific tools[^\n]*/g, '');
+      for (const re of CLAUDE_ISMS) {
+        expect(cleaned).not.toMatch(re);
+      }
+    },
+  );
 });

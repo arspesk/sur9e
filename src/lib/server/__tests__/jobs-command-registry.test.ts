@@ -154,18 +154,16 @@ describe('jobs/command-registry', () => {
       expect(script).toContain('[6/6] Merging');
     });
 
-    it.each([
-      'research',
-      'interview-prep',
-      'reach-out',
-      'negotiate',
-    ] as const)('%s — routes through mode-runner', type => {
-      const cmd = buildCommand(type, { num: 42 }, root);
-      expect(cmd).not.toBeNull();
-      expect(() => JobCommand.parse(cmd)).not.toThrow();
-      expect(cmd?.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
-      expect(cmd?.args[1]).toContain('set -o pipefail');
-    });
+    it.each(['research', 'interview-prep', 'reach-out', 'negotiate'] as const)(
+      '%s — routes through mode-runner',
+      type => {
+        const cmd = buildCommand(type, { num: 42 }, root);
+        expect(cmd).not.toBeNull();
+        expect(() => JobCommand.parse(cmd)).not.toThrow();
+        expect(cmd?.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
+        expect(cmd?.args[1]).toContain('set -o pipefail');
+      },
+    );
 
     it.each(['tailor-cv', 'cover-letter'] as const)('%s — routes through mode-runner', type => {
       const cmd = buildCommand(type, { num: 42 }, root);
