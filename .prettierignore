@@ -10,5 +10,6 @@ jds
 .claude/worktrees
 interview-prep
 package-lock.json
+CHANGELOG.md
 **/*.bak
 **/*.tmp
