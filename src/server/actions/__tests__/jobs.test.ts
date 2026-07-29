@@ -117,26 +117,27 @@ describe('jobs.ts server action', () => {
       'reach-out',
     ] as const;
 
-    it.each(
-      PER_NUM_KINDS,
-    )('creates a queued job record for kind=%s when num exists', async kind => {
-      const result = await actions.startJobAction({ kind, params: { num: 1001 } });
-      expect('conflict' in result).toBe(false);
-      if ('conflict' in result) return;
-      expect(result.type).toBe(kind);
-      expect(result.status).toBe('queued');
-      expect(result.params.num).toBe(1001);
-      // file actually written
-      const files = readdirSync(join(root, 'data/jobs')).filter(f => f.endsWith('.json'));
-      expect(files.length).toBe(1);
-      const persisted = JSON.parse(readFileSync(join(root, 'data/jobs', files[0]), 'utf-8'));
-      expect(persisted.id).toBe(result.id);
-      expect(persisted.type).toBe(kind);
-      // spawn was scheduled
-      await flushImmediate();
-      expect(spawnJobMock).toHaveBeenCalledTimes(1);
-      expect(spawnJobMock.mock.calls[0][1].id).toBe(result.id);
-    });
+    it.each(PER_NUM_KINDS)(
+      'creates a queued job record for kind=%s when num exists',
+      async kind => {
+        const result = await actions.startJobAction({ kind, params: { num: 1001 } });
+        expect('conflict' in result).toBe(false);
+        if ('conflict' in result) return;
+        expect(result.type).toBe(kind);
+        expect(result.status).toBe('queued');
+        expect(result.params.num).toBe(1001);
+        // file actually written
+        const files = readdirSync(join(root, 'data/jobs')).filter(f => f.endsWith('.json'));
+        expect(files.length).toBe(1);
+        const persisted = JSON.parse(readFileSync(join(root, 'data/jobs', files[0]), 'utf-8'));
+        expect(persisted.id).toBe(result.id);
+        expect(persisted.type).toBe(kind);
+        // spawn was scheduled
+        await flushImmediate();
+        expect(spawnJobMock).toHaveBeenCalledTimes(1);
+        expect(spawnJobMock.mock.calls[0][1].id).toBe(result.id);
+      },
+    );
 
     it('rejects per-num kinds when num is missing', async () => {
       await expect(actions.startJobAction({ kind: 'evaluate', params: {} })).rejects.toThrow(

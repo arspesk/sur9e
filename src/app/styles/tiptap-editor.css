@@ -275,7 +275,8 @@ html:has(.be-prose) {
 /* Keep the toolbar visible while the language dropdown is open — opening it
    moves focus off the code block, which would otherwise fade the trigger out
    and leave the dropdown anchored to nothing. */
-  .be-prose .be-codeblock-wrap.menu-open
+  .be-prose
+  .be-codeblock-wrap.menu-open
   .be-codeblock-tools {
   opacity: 1;
 }
