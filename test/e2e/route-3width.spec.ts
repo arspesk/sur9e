@@ -19,10 +19,14 @@ const VIEWPORTS = [
 ] as const;
 
 type Viewport = (typeof VIEWPORTS)[number];
+const SMOKE_MODE = process.env.PLAYWRIGHT_SMOKE_MODE === '1';
 
 interface RouteCase {
   // Path that goes into page.goto() — root is special-cased for the redirect.
   path: string;
+  // Fresh clones redirect onboarding-only aliases before the route landmark
+  // renders. Omit when the pathname should remain unchanged.
+  expectedPath?: string;
   // Stable name used in test titles.
   name: string;
   // Function that returns a locator for the route-specific landmark. Receives
@@ -39,15 +43,22 @@ interface RouteCase {
 
 const ROUTES: RouteCase[] = [
   {
-    // / is the Home control center now — it no longer redirects to /offers.
+    // The CI smoke contract is an empty clone, while the shared local suite
+    // normally runs against an initialized profile-backed Home dashboard.
     path: '/',
-    name: '/ (home)',
-    identifier: page => page.locator('.home .agenda-grid'),
+    expectedPath: SMOKE_MODE ? '/offers' : undefined,
+    name: SMOKE_MODE ? '/ (onboarding redirect to /offers)' : '/ (home)',
+    identifier: page =>
+      SMOKE_MODE ? page.locator('.offers-empty-banner') : page.locator('.home .agenda-grid'),
   },
   {
     path: '/table',
+    expectedPath: '/offers',
     name: '/table (redirect to /offers)',
-    identifier: page => page.locator('table.offers'),
+    identifier: (page, viewport) =>
+      viewport.width <= 640
+        ? page.locator('.offers-shell .table-wrap')
+        : page.locator('table.offers'),
   },
   {
     path: '/pipeline',
@@ -62,7 +73,7 @@ const ROUTES: RouteCase[] = [
   {
     path: '/settings',
     name: '/settings',
-    identifier: page => page.locator('section#theme'),
+    identifier: page => page.getByRole('heading', { name: 'Job scanning', exact: true }),
   },
   // /report is appended below only when a fixture exists on disk.
   {
@@ -145,11 +156,36 @@ for (const viewport of VIEWPORTS) {
         // Collect console errors so we can surface them with the failure
         // (cuts the next-page hunt by half).
         const consoleErrors: string[] = [];
+        const pageErrors: string[] = [];
         page.on('console', msg => {
           if (msg.type() === 'error') consoleErrors.push(msg.text());
         });
+        page.on('pageerror', error => pageErrors.push(error.message));
 
-        await page.goto(route.path);
+        let navigationPath = route.path;
+        if (SMOKE_MODE && route.path === '/') {
+          // Verify the first-run redirect at the HTTP boundary. Next App
+          // Router encodes streamed server-component redirects in a 200 HTML
+          // response with both a refresh marker and the original 307 digest.
+          // Hydrating that intermediate response throws React #310 even in
+          // production, so the browser goes directly to the destination only
+          // after both redirect signals have been proven.
+          const response = await page.request.get('/', { maxRedirects: 0 });
+          const body = await response.text();
+          expect(response.status(), 'fresh-clone streamed redirect response').toBe(200);
+          expect(body, 'fresh-clone / redirect refresh marker').toContain(
+            '<meta id="__next-page-redirect" http-equiv="refresh" content="1;url=/offers"/>',
+          );
+          expect(body, 'fresh-clone / redirect digest').toContain(
+            'NEXT_REDIRECT;replace;/offers;307;',
+          );
+          navigationPath = '/offers';
+        }
+
+        await page.goto(navigationPath);
+        if (route.expectedPath) {
+          await expect.poll(() => new URL(page.url()).pathname).toBe(route.expectedPath);
+        }
 
         // Topbar landmark — every route in the app shell renders <header class="topbar">.
         const topbar = page.locator('header.topbar');
@@ -182,6 +218,8 @@ for (const viewport of VIEWPORTS) {
           scrollWidth,
           `horizontal overflow on ${route.path} @ ${viewport.name}`,
         ).toBeLessThanOrEqual(viewport.width + 1);
+
+        expect(pageErrors, `uncaught page errors on ${route.path} @ ${viewport.name}`).toEqual([]);
 
         // Surface any console errors as a soft assertion — we don't fail on
         // them (Next dev mode emits a lot of noisy warnings), but a hard error

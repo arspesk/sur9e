@@ -12,6 +12,8 @@ const VIEWPORTS = [
   { name: 'mobile', width: 375, height: 667 },
 ] as const;
 
+const SMOKE_MODE = process.env.PLAYWRIGHT_SMOKE_MODE === '1';
+
 const CONVERSATION = {
   id: 'c1',
   title: 'Chat',
@@ -64,6 +66,28 @@ async function openChatBubble(page: import('@playwright/test').Page, width: numb
   } else {
     await bubble.click();
   }
+}
+
+async function expectOffersReady(page: import('@playwright/test').Page): Promise<void> {
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/offers');
+
+  if (SMOKE_MODE) {
+    // CI smoke is intentionally an empty clone: accepting a private tracker
+    // row here would hide an accidental dependency on uncommitted user data.
+    await expect(page.locator('.offers-empty-banner')).toBeVisible();
+  } else {
+    // The shared e2e suite also runs in initialized local checkouts. Treat
+    // either the real-data table or the empty-clone banner as the ready state.
+    await expect
+      .poll(async () => {
+        const hasRows = (await page.locator('table.offers tbody tr').count()) > 0;
+        const hasEmptyBanner = await page.locator('.offers-empty-banner').isVisible();
+        return hasRows || hasEmptyBanner;
+      })
+      .toBe(true);
+  }
+
+  await expect(page.locator('html')).toHaveClass(/boot-ready/);
 }
 
 async function mockChatApi(page: import('@playwright/test').Page): Promise<void> {
@@ -157,15 +181,7 @@ for (const viewport of VIEWPORTS) {
       await mockChatApi(page);
       await page.goto('/offers');
       await suppressDevOverlay(page);
-      // The (unmocked, real) offers table's own loading skeleton can be
-      // wider than the viewport for the brief instant before real rows
-      // land — unrelated to chat, and the same reason route-3width.spec.ts
-      // waits for a real row before its own scrollWidth check. Match that
-      // so this test measures what chat itself contributes, not incidental
-      // table-load timing noise.
-      await expect(page.locator('table.offers tbody tr').first()).toBeVisible({
-        timeout: 15_000,
-      });
+      await expectOffersReady(page);
 
       await openChatBubble(page, viewport.width);
 
@@ -210,6 +226,7 @@ for (const viewport of VIEWPORTS) {
       await mockChatApi(page);
       await page.goto('/offers');
       await suppressDevOverlay(page);
+      await expectOffersReady(page);
       await openChatBubble(page, viewport.width);
       const input = page.getByRole('textbox', { name: 'Message' });
       await input.fill('/');
@@ -306,7 +323,11 @@ for (const viewport of VIEWPORTS) {
     await page.goto('/chat');
     const mobile = viewport.width <= 640;
     if (mobile) {
-      await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+      const expectedPath = SMOKE_MODE ? '/offers' : '/';
+      await expect.poll(() => new URL(page.url()).pathname).toBe(expectedPath);
+      if (SMOKE_MODE) {
+        await expect(page.locator('.offers-empty-banner')).toBeVisible();
+      }
       await expect(page.getByRole('dialog', { name: 'sur9e chat' })).toBeVisible();
     }
     const surface = mobile
@@ -448,9 +469,7 @@ test('collapsed bubble screenshot @ desktop', async ({ page }) => {
   await mockChatApi(page);
   await page.goto('/offers');
   await suppressDevOverlay(page);
-  // Wait past the table's loading skeleton so the convenience shot reflects
-  // real data, not a mid-transition frame.
-  await expect(page.locator('table.offers tbody tr').first()).toBeVisible({ timeout: 15_000 });
+  await expectOffersReady(page);
   const bubble = page.getByRole('button', { name: 'Open chat' });
   await expect(bubble).toBeVisible();
   await page.screenshot({ path: 'test-results/chat-bubble-desktop.png' });

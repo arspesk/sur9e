@@ -9,6 +9,7 @@ const WORKFLOWS_DIRECTORY = resolve(ROOT, '.github/workflows');
 const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/;
 const CHECKOUT_ACTION = 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1';
 const SETUP_NODE_ACTION = 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38';
+const UPLOAD_ARTIFACT_ACTION = 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a';
 
 function workflowPaths(directory = WORKFLOWS_DIRECTORY) {
   return readdirSync(directory, { withFileTypes: true })
@@ -523,5 +524,41 @@ describe('CodeRabbit policy', () => {
       auto_reply: false,
       allow_non_org_members: false,
     });
+  });
+});
+
+describe('browser smoke workflow', () => {
+  it('builds once and runs the curated smoke with explicit mode and local binaries', () => {
+    const path = resolve(WORKFLOWS_DIRECTORY, 'browser-smoke.yml');
+    const { source, workflow } = loadWorkflow(path);
+    const job = workflow.jobs.smoke;
+    const runs = job.steps.map(step => step.run).filter(Boolean);
+
+    expect(
+      job.env,
+      `${displayPath(path)}:${sourceLine(source, 'env:')} must enable deterministic empty-clone smoke mode`,
+    ).toEqual({
+      CI: 'true',
+      PLAYWRIGHT_SMOKE_MODE: '1',
+      PLAYWRIGHT_START_SERVER: '1',
+      PLAYWRIGHT_PORT: '3109',
+      PLAYWRIGHT_BASE_URL: 'http://127.0.0.1:3109',
+    });
+    expect(runs, `${displayPath(path)} must build the production application`).toContain(
+      'npm run build',
+    );
+    expect(
+      runs,
+      `${displayPath(path)} must install Chromium through the local package binary`,
+    ).toContain('./node_modules/.bin/playwright install --with-deps chromium');
+    expect(
+      runs.some(run => run.includes('./node_modules/.bin/playwright test')),
+      `${displayPath(path)} must execute Playwright through the local package binary`,
+    ).toBe(true);
+    expect(
+      runs.some(run => /\bnpx\b/.test(run)),
+      `${displayPath(path)} must never auto-resolve packages through npx`,
+    ).toBe(false);
+    expect(job.steps.at(-1).uses).toBe(UPLOAD_ARTIFACT_ACTION);
   });
 });
