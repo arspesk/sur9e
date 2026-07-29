@@ -132,8 +132,9 @@
     "typescript": "^5.7.3",
     "vitest": "^4.1.6"
   },
-  "overridesComment": "postcss: next@16.2.6 (latest) bundles postcss 8.4.31, flagged by GHSA-qx2v-qp2m-jg93 (XSS in the CSS stringifier — build-time only, not exploitable on our first-party CSS). Force the patched 8.5.x; remove once Next ships a fixed postcss.",
+  "overridesComment": "postcss: Next bundles vulnerable 8.4.31; force patched 8.5.x until Next updates. sharp: Next 16.2.12 allows vulnerable 0.34.5 (GHSA-f88m-g3jw-g9cj); force patched 0.35.x until stable Next depends on it.",
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.15",
+    "sharp": "^0.35.3"
   }
 }

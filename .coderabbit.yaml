@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+early_access: false
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_instructions:
+    - path: "CLAUDE.md"
+      instructions: "This operating manual must remain byte-identical to AGENTS.md. Require both files to change together and flag conflicting instructions."
+    - path: "AGENTS.md"
+      instructions: "This operating manual must remain byte-identical to CLAUDE.md. Require both files to change together and flag conflicting instructions."
+    - path: "docs/data-contract.md"
+      instructions: "Protect the system-versus-user boundary. Reject changes that could track, overwrite, upload, or expose personalization, tracker, report, or artifact data."
+    - path: "src/lib/repo-path-policy.mjs"
+      instructions: "This is the shared updater and CI path policy. Flag missing private paths, unsafe broadening, mutability, or drift from docs/data-contract.md."
+    - path: "src/lib/check-user-data-boundary.mjs"
+      instructions: "This privacy gate must inspect Git paths losslessly, fail closed, and remain consistent with src/lib/repo-path-policy.mjs."
+    - path: "content/modes/**"
+      instructions: "Check honesty, source attribution, user-specific data loading, and the permanent prohibition on automatic application submission."
+    - path: "src/lib/server/**"
+      instructions: "Check filesystem confinement, command injection, path traversal, SSRF, schema validation, atomic writes, and preservation of local private data."
+    - path: "src/server/actions/**"
+      instructions: "Server Actions must remain thin, validate inputs, call src/lib/server logic, and revalidate every affected surface."
+    - path: "src/app/api/**"
+      instructions: "API routes are compatibility glue. Flag business logic, missing schema validation, unsafe paths, or mutation behavior that belongs in a Server Action."
+    - path: "update-system.mjs"
+      instructions: "Updates may replace only system files, must preserve all user files, and must keep backup and rollback behavior recoverable."
+    - path: ".github/**"
+      instructions: "Check fork safety, least-privilege permissions, full-SHA action pinning, secret exposure, shell or template injection, and release integrity."
+    - path: "test/e2e/**"
+      instructions: "Browser tests must not mutate a developer's real personalization, tracker, reports, or generated artifacts."
+
+chat:
+  auto_reply: false
+  allow_non_org_members: false

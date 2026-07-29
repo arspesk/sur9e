@@ -1,0 +1,71 @@
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/*.tsx"
+          - "src/app/**/*.css"
+          - "src/components/**"
+          - "src/features/**"
+          - "src/app/styles/**"
+          - "src/hooks/**"
+          - "src/stores/**"
+
+server:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/lib/server/**"
+          - "src/server/**"
+          - "src/app/api/**"
+          - "src/lib/schemas/**"
+
+agent-behavior:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "CLAUDE.md"
+          - "AGENTS.md"
+          - ".claude/skills/**"
+          - ".agents/skills/**"
+          - ".codex/**"
+          - ".claude/hooks/**"
+          - ".claude/settings.json"
+
+modes:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "content/modes/**"
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "cli/**"
+          - "scripts/**"
+          - "batch/**"
+          - "*.mjs"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "test/**"
+          - "src/**/*.test.ts"
+          - "src/**/*.test.tsx"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "README.md"
+          - "CONTRIBUTING.md"
+          - "SECURITY.md"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - ".coderabbit*"
+          - ".release-please-manifest.json"
+          - "release-please-config.json"

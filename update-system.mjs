@@ -21,6 +21,8 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import yaml from 'js-yaml';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { parseNulPaths, parsePorcelainV1Z } from './src/lib/git-porcelain.mjs';
+import { isSystemPath, isUserPath, SYSTEM_PATHS } from './src/lib/repo-path-policy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -98,48 +100,6 @@ function resolveUpdateRemote() {
 }
 const REMOTE = resolveUpdateRemote();
 
-// System layer paths — ONLY these files get updated
-const SYSTEM_PATHS = [
-  // Claude mode prompts (content)
-  'content/modes/',
-  // Server + CLI source (under src/)
-  'src/',
-  // Static frontend assets
-  'public/',
-  // Templates (PDF, CV, states)
-  'content/templates/',
-  // Batch worker
-  'batch/batch-prompt.md',
-  'batch/batch-runner.sh',
-  // Skills + docs + version + license + repo metadata
-  '.claude/skills/',
-  'docs/',
-  'VERSION',
-  'README.md',
-  'LICENSE',
-  'CLAUDE.md',
-  '.github/',
-  'package.json',
-  'biome.json',
-  'tsconfig.json',
-  '.prettierrc.json',
-  '.prettierignore',
-  '.env.example',
-  // Update mechanism + test gate (these update themselves)
-  'update-system.mjs',
-  'test-all.mjs',
-];
-
-// User layer paths — NEVER touch these (safety check)
-const USER_PATHS = [
-  'inputs/personalization/',
-  'artifacts/interview-prep/story-bank.md',
-  'data/',
-  'artifacts/reports/',
-  'artifacts/output/',
-  'inputs/jds/',
-];
-
 function localVersion() {
   const vPath = join(ROOT, 'VERSION');
   return existsSync(vPath) ? readFileSync(vPath, 'utf-8').trim() : '0.0.0';
@@ -160,20 +120,11 @@ function git(...args) {
 }
 
 function gitStatusEntries() {
-  // No git() here: its trim() strips the leading status char/space off the
-  // FIRST porcelain line, shifting slice(0,2)/slice(3) off by one.
-  const status = execFileSync('git', ['status', '--porcelain'], {
+  const status = execFileSync('git', ['status', '--porcelain=v1', '-z'], {
     cwd: ROOT,
-    encoding: 'utf-8',
     timeout: 30000,
   });
-  return status
-    .split('\n')
-    .filter(Boolean)
-    .map(line => ({
-      code: line.slice(0, 2),
-      path: line.slice(3),
-    }));
+  return parsePorcelainV1Z(status);
 }
 
 function revertPaths(paths) {
@@ -184,44 +135,28 @@ function revertPaths(paths) {
   git('checkout', 'HEAD', '--', ...paths);
 }
 
-function isSystemFile(file) {
-  return SYSTEM_PATHS.some(p => (p.endsWith('/') ? file.startsWith(p) : file === p));
-}
-
-function isUserFile(file) {
-  return USER_PATHS.some(p => (p.endsWith('/') ? file.startsWith(p) : file === p));
-}
-
 // True sync for one system path: `git checkout <ref> -- <path>` only
 // overwrites/creates, so files deleted or renamed in the target tree would
 // otherwise linger (stale duplicate Next.js routes can brick the build).
 // Lists tracked files that exist in fromRef but not in toRef under `path`
 // and removes them. Safety by construction: the diff is pathspec-scoped to a
 // SYSTEM_PATH, only tracked files can appear (gitignored user content never
-// does), and each candidate is re-checked against SYSTEM_PATHS / USER_PATHS
-// before removal.
+// does), and each candidate is re-checked against the shared system/user path
+// policy before removal.
 function removeFilesAbsentInTarget(fromRef, toRef, path) {
   const removed = [];
   let deleted;
   try {
-    deleted = git(
-      'diff',
-      '--name-only',
-      '--no-renames',
-      '--diff-filter=D',
-      fromRef,
-      toRef,
-      '--',
-      path,
+    deleted = execFileSync(
+      'git',
+      ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=D', fromRef, toRef, '--', path],
+      { cwd: ROOT, timeout: 30000 },
     );
   } catch {
     return removed; // ref/pathspec problems — skip deletion sync for this path
   }
-  for (const file of deleted
-    .split('\n')
-    .map(f => f.trim())
-    .filter(Boolean)) {
-    if (!isSystemFile(file) || isUserFile(file)) continue; // defense in depth
+  for (const file of parseNulPaths(deleted)) {
+    if (!isSystemPath(file) || isUserPath(file)) continue; // defense in depth
     try {
       git('rm', '-f', '--ignore-unmatch', '--', file);
       removed.push(file);
@@ -230,6 +165,14 @@ function removeFilesAbsentInTarget(fromRef, toRef, path) {
     }
   }
   return removed;
+}
+
+function privatePathsInTree(ref) {
+  const tracked = execFileSync('git', ['ls-tree', '-r', '--name-only', '-z', ref], {
+    cwd: ROOT,
+    timeout: 30000,
+  });
+  return [...new Set(parseNulPaths(tracked).filter(isUserPath))].sort();
 }
 
 function addPaths(paths) {
@@ -297,9 +240,7 @@ async function apply() {
   // Refuse to overwrite uncommitted local edits in system paths — the backup
   // branch is created from HEAD, so checkout FETCH_HEAD would clobber them
   // with no recovery path.
-  const dirtySystem = initialStatusEntries.filter(entry =>
-    SYSTEM_PATHS.some(p => (p.endsWith('/') ? entry.path.startsWith(p) : entry.path === p)),
-  );
+  const dirtySystem = initialStatusEntries.filter(entry => isSystemPath(entry.path));
   if (dirtySystem.length > 0) {
     console.error('Uncommitted changes in system files — commit or stash them first:');
     for (const entry of dirtySystem) console.error(`  ${entry.code} ${entry.path}`);
@@ -319,7 +260,23 @@ async function apply() {
   writeFileSync(lockFile, new Date().toISOString());
 
   try {
-    // 1. Backup: create branch
+    // 1. Fetch from canonical repo
+    console.log('Fetching latest from upstream...');
+    git('fetch', REMOTE.repo, REMOTE.branch);
+
+    // 2. Fail closed before checkout if a custom/future upstream contains
+    // protected user paths. A broad checkout such as `content/` could
+    // otherwise overwrite an ignored local backup before the post-check can
+    // recover it.
+    const upstreamPrivatePaths = privatePathsInTree('FETCH_HEAD');
+    if (upstreamPrivatePaths.length > 0) {
+      console.error('Upstream update contains protected user paths — aborting before checkout:');
+      for (const path of upstreamPrivatePaths) console.error(`  ${path}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    // 3. Backup: create branch only after the fetched tree passes preflight.
     const backupBranch = `backup-pre-update-${local}`;
     try {
       git('branch', backupBranch);
@@ -328,11 +285,7 @@ async function apply() {
       console.log(`Backup branch already exists (${backupBranch}), continuing...`);
     }
 
-    // 2. Fetch from canonical repo
-    console.log('Fetching latest from upstream...');
-    git('fetch', REMOTE.repo, REMOTE.branch);
-
-    // 3. Checkout system files only, then sync deletions: checkout alone
+    // 4. Checkout system files only, then sync deletions: checkout alone
     // never removes files, so anything deleted/renamed upstream must be
     // explicitly removed or it lingers (stale routes break the build).
     console.log('Updating system files...');
@@ -351,17 +304,15 @@ async function apply() {
       console.log(`Removed ${removed.length} file(s) deleted upstream.`);
     }
 
-    // 4. Validate: check NO user files were touched
+    // 5. Validate: check NO user files were touched
     let userFileTouched = false;
     try {
       for (const entry of gitStatusEntries()) {
         const file = entry.path;
         if (initialStatusPaths.has(file)) continue;
-        for (const userPath of USER_PATHS) {
-          if (file.startsWith(userPath)) {
-            console.error(`SAFETY VIOLATION: User file was modified: ${file}`);
-            userFileTouched = true;
-          }
+        if (isUserPath(file)) {
+          console.error(`SAFETY VIOLATION: User file was modified: ${file}`);
+          userFileTouched = true;
         }
       }
     } catch {
@@ -375,14 +326,14 @@ async function apply() {
       process.exit(1);
     }
 
-    // 5. Install any new dependencies
+    // 6. Install any new dependencies
     try {
       execSync('npm install --silent', { cwd: ROOT, timeout: 60000 });
     } catch {
       console.log('npm install skipped (may need manual run)');
     }
 
-    // 6. Commit the update
+    // 7. Commit the update
     const remote = localVersion(); // Re-read after checkout updated VERSION
     const dismissFile = join(ROOT, '.update-dismissed');
     if (existsSync(dismissFile)) unlinkSync(dismissFile); // gitignored — never staged
@@ -429,21 +380,31 @@ function rollback() {
     }
 
     const latest = branchList[0];
+    const backupPrivatePaths = privatePathsInTree(latest);
+    if (backupPrivatePaths.length > 0) {
+      console.error('Backup contains protected user paths — aborting before checkout:');
+      for (const path of backupPrivatePaths) console.error(`  ${path}`);
+      process.exitCode = 1;
+      return;
+    }
     console.log(`Rolling back to: ${latest}`);
 
     // Checkout system files from backup branch, then sync deletions: files
     // the bad update ADDED don't exist in the backup, so checkout alone
     // leaves them behind — remove anything absent from the backup tree.
+    const updated = [];
     for (const path of SYSTEM_PATHS) {
       try {
         git('checkout', latest, '--', path);
+        updated.push(path);
       } catch {
         // File may not have existed in backup
       }
       removeFilesAbsentInTarget('HEAD', latest, path);
     }
 
-    addPaths(SYSTEM_PATHS);
+    // removeFilesAbsentInTarget uses `git rm`, so deletions are already staged.
+    addPaths([...new Set(updated)]);
     git('commit', '-m', `chore: rollback system files from ${latest}`);
 
     console.log(`Rollback complete. System files restored from ${latest}.`);

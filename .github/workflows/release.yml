@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to repair (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release Please
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Check out release PR branch
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Synchronize VERSION
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: node scripts/sync-release-version.mjs
+
+      - name: Commit synchronized VERSION
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$RELEASE_BRANCH" || "$RELEASE_BRANCH" == "main" ]]; then
+            echo "Refusing to update invalid release branch: $RELEASE_BRANCH" >&2
+            exit 1
+          fi
+          git check-ref-format "refs/heads/$RELEASE_BRANCH" >/dev/null
+
+          current_branch="$(git branch --show-current)"
+          if [[ "$current_branch" != "$RELEASE_BRANCH" ]]; then
+            echo "Expected release branch $RELEASE_BRANCH, found $current_branch" >&2
+            exit 1
+          fi
+
+          if git diff --quiet -- VERSION; then
+            echo "VERSION is already synchronized"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- VERSION
+          if git diff --cached --quiet -- VERSION; then
+            echo "No VERSION change to commit"
+            exit 0
+          fi
+          git commit -m "chore(release): sync VERSION"
+          git push origin "HEAD:refs/heads/$RELEASE_BRANCH"
+
+  sbom:
+    name: Release SBOM
+    needs: release
+    if: ${{ always() && ((github.event_name == 'push' && needs.release.result == 'success' && needs.release.outputs.release_created == 'true') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve SBOM target
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          AUTOMATIC_RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
+          AUTOMATIC_RELEASE_SHA: ${{ needs.release.outputs.release_sha }}
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            release_tag="$MANUAL_RELEASE_TAG"
+            if ! [[ "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "release_tag must be strict SemVer in vX.Y.Z form" >&2
+              exit 1
+            fi
+            checkout_ref="refs/tags/$release_tag"
+            release_sha=""
+          else
+            release_tag="$AUTOMATIC_RELEASE_TAG"
+            release_sha="$AUTOMATIC_RELEASE_SHA"
+            if ! [[ "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "Release Please returned an invalid tag: $release_tag" >&2
+              exit 1
+            fi
+            if ! [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Release Please returned an invalid release SHA" >&2
+              exit 1
+            fi
+            checkout_ref="$release_sha"
+          fi
+
+          gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+          {
+            echo "release_tag=$release_tag"
+            echo "checkout_ref=$checkout_ref"
+            echo "release_sha=$release_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.target.outputs.checkout_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Verify release provenance
+        env:
+          RELEASE_TAG: ${{ steps.target.outputs.release_tag }}
+          EXPECTED_RELEASE_SHA: ${{ steps.target.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          tag_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ "$tag_commit" != "$head_sha" ]]; then
+            echo "Release tag $RELEASE_TAG resolves to $tag_commit, not checked-out $head_sha" >&2
+            exit 1
+          fi
+          if [[ -n "$EXPECTED_RELEASE_SHA" && "$EXPECTED_RELEASE_SHA" != "$head_sha" ]]; then
+            echo "Release Please reported $EXPECTED_RELEASE_SHA, not checked-out $head_sha" >&2
+            exit 1
+          fi
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: "."
+          format: spdx-json
+          output-file: sur9e.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attach SBOM to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ steps.target.outputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" sur9e.spdx.json --clobber
