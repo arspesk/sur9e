@@ -15,13 +15,12 @@ const PR_CREATED = "${{ steps.release.outputs.prs_created == 'true' }}";
 const PUSH_EVENT = "${{ github.event_name == 'push' }}";
 const SBOM_JOB_CONDITION =
   "${{ always() && ((github.event_name == 'push' && needs.release.result == 'success' && needs.release.outputs.release_created == 'true') || github.event_name == 'workflow_dispatch') }}";
+const CURRENT_BRANCH_ASSIGNMENT = 'RELEASE_BRANCH="$(git branch --show-current)"';
 const INVALID_BRANCH_GUARD = 'if [[ -z "$RELEASE_BRANCH" || "$RELEASE_BRANCH" == "main" ]]; then';
-const CURRENT_BRANCH_GUARD = 'if [[ "$current_branch" != "$RELEASE_BRANCH" ]]; then';
 const COMMIT_SCRIPT_ORDER = [
+  CURRENT_BRANCH_ASSIGNMENT,
   INVALID_BRANCH_GUARD,
   'git check-ref-format "refs/heads/$RELEASE_BRANCH"',
-  'current_branch="$(git branch --show-current)"',
-  CURRENT_BRANCH_GUARD,
   'if git diff --quiet -- VERSION; then',
   'git add -- VERSION',
   'if git diff --cached --quiet -- VERSION; then',
@@ -65,7 +64,7 @@ function commitScriptPolicyViolations(script) {
     previousIndex = index;
   }
 
-  for (const guard of [INVALID_BRANCH_GUARD, CURRENT_BRANCH_GUARD]) {
+  for (const guard of [INVALID_BRANCH_GUARD]) {
     const start = script.indexOf(guard);
     const end = start === -1 ? -1 : script.indexOf('\nfi', start);
     const block = start === -1 || end === -1 ? '' : script.slice(start, end + 3);
@@ -120,11 +119,8 @@ function createCommitFixture(branch = 'release-please--branches--main') {
   };
 }
 
-function runCommitScript(script, fixture, releaseBranch = fixture.branch) {
-  return run('bash', ['-c', script], fixture.checkout, {
-    ...process.env,
-    RELEASE_BRANCH: releaseBranch,
-  });
+function runCommitScript(script, fixture) {
+  return run('bash', ['-c', script], fixture.checkout);
 }
 
 describe('release workflow policy', () => {
@@ -203,13 +199,11 @@ describe('release workflow policy', () => {
     const commit = stepByName(steps, 'Commit synchronized VERSION');
 
     expect(commit.if).toBe(PR_CREATED);
-    expect(commit.env).toEqual({
-      RELEASE_BRANCH: '${{ fromJSON(steps.release.outputs.pr).headBranchName }}',
-    });
+    expect(commit.env).toBeUndefined();
     expect(commit.run).toContain('set -euo pipefail');
+    expect(commit.run).toContain(CURRENT_BRANCH_ASSIGNMENT);
     expect(commit.run).toMatch(/RELEASE_BRANCH.*main/);
     expect(commit.run).toContain('git check-ref-format "refs/heads/$RELEASE_BRANCH"');
-    expect(commit.run).toContain('git branch --show-current');
     expect(commit.run).toContain('git diff --quiet -- VERSION');
     expect(commit.run).toContain('git add -- VERSION');
     expect(commit.run).toContain('git diff --cached --quiet -- VERSION');
@@ -392,14 +386,17 @@ describe('release commit-script policy validator', () => {
   });
 
   it.each([
-    ['main', 'main'],
-    ['a malformed ref', '../unsafe'],
-  ])('rejects %s before committing or pushing', (_name, releaseBranch) => {
-    const fixture = createCommitFixture(releaseBranch === 'main' ? 'main' : undefined);
+    ['main', 'main', false],
+    ['a detached HEAD', undefined, true],
+  ])('rejects %s before committing or pushing', (_name, branch, detach) => {
+    const fixture = createCommitFixture(branch);
     try {
       const before = runChecked('git', ['rev-parse', 'HEAD'], fixture.checkout);
+      if (detach) {
+        runChecked('git', ['checkout', '--detach'], fixture.checkout);
+      }
       writeFileSync(resolve(fixture.checkout, 'VERSION'), '0.3.0\n');
-      const result = runCommitScript(script, fixture, releaseBranch);
+      const result = runCommitScript(script, fixture);
 
       expect(result.status).not.toBe(0);
       expect(runChecked('git', ['rev-parse', 'HEAD'], fixture.checkout)).toBe(before);
