@@ -144,6 +144,7 @@ describe('update-system bootstrap migration', () => {
 
     copyTargetFile(directory, 'update-system.mjs');
     copyTargetFile(directory, 'scripts/repo-path-policy.mjs');
+    copyTargetFile(directory, 'src/lib/git-porcelain.mjs');
     copyTargetFile(directory, 'src/lib/repo-path-policy.mjs');
     git(directory, ['add', '--all']);
     git(directory, ['commit', '--quiet', '-m', 'target release']);
@@ -166,6 +167,7 @@ describe('update-system bootstrap migration', () => {
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ status: 'dismissed' });
+    expect(existsSync(resolve(directory, 'src/lib/git-porcelain.mjs'))).toBe(true);
     expect(existsSync(resolve(directory, 'src/lib/repo-path-policy.mjs'))).toBe(true);
     expect(existsSync(resolve(directory, 'scripts/repo-path-policy.mjs'))).toBe(false);
   });

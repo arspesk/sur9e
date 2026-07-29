@@ -2,13 +2,12 @@
 
 // Repository-owned paths updated by update-system.mjs.
 export const SYSTEM_PATHS = Object.freeze([
-  'content/modes/',
+  'content/',
   'src/',
   'public/',
-  'content/templates/',
   'batch/batch-prompt.md',
   'batch/batch-runner.sh',
-  '.claude/skills/',
+  '.claude/skills/sur9e/',
   'docs/',
   'VERSION',
   'README.md',
@@ -30,6 +29,7 @@ export const SYSTEM_PATHS = Object.freeze([
   '.prettierrc.json',
   '.prettierignore',
   '.env.example',
+  'src/lib/git-porcelain.mjs',
   'src/lib/repo-path-policy.mjs',
   'src/lib/check-user-data-boundary.mjs',
   'scripts/sync-release-version.mjs',
@@ -38,22 +38,38 @@ export const SYSTEM_PATHS = Object.freeze([
 ]);
 
 export const USER_PATH_PREFIXES = Object.freeze([
-  'inputs/personalization/',
-  'inputs/config/',
-  'inputs/jds/',
-  'inputs/parsers/',
+  'inputs/',
   'data/',
-  'artifacts/interview-prep/',
-  'artifacts/reports/',
-  'artifacts/output/',
-  'artifacts/lighthouse/',
+  'artifacts/',
   'batch/logs/',
+  'batch/jobspy-env/',
   'batch/tracker-additions/',
   '.claude/memory/',
+  '.claude/skills/',
   '.claude/worktrees/',
+  '.antigravitycli/',
+  '.playwright-mcp/',
   '.serena/',
   '.trash/',
+  'test-results/',
+  'tmp/',
 ]);
+
+// Gitignore-style globs for private runtime files that cannot be represented
+// as exact paths or whole-directory prefixes. Slashless patterns match a
+// basename at any depth; slash-containing patterns are repository-relative.
+// `*` never crosses `/`.
+export const USER_PATH_PATTERNS = Object.freeze([
+  '.resolved-prompt-*',
+  '*.yaml.bak',
+  '*.yml.bak',
+  'batch/*.pid',
+  'text_*.json',
+]);
+
+// Narrow project-owned paths nested inside a protected user prefix. These are
+// explicit exceptions; SYSTEM_PATHS never overrides user ownership generally.
+export const USER_PATH_EXCEPTIONS = Object.freeze(['.claude/skills/sur9e/']);
 
 function readonlySet(values) {
   const target = new Set(values);
@@ -108,6 +124,7 @@ export const USER_PATH_FILES = readonlySet([
   '.update-dismissed',
   '.update-lock',
   '.prettierignore.local',
+  '.claude/scheduled_tasks.lock',
   '.claude/settings.local.json',
   '.codex/hooks.json',
   'batch/batch-state.tsv',
@@ -156,10 +173,26 @@ function matchesPath(path, candidates) {
   );
 }
 
+function matchesPattern(path, patterns) {
+  return patterns.some(pattern => {
+    const candidate = pattern.includes('/') ? path : path.slice(path.lastIndexOf('/') + 1);
+    const source = pattern
+      .split('*')
+      .map(segment => segment.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&'))
+      .join('[^/]*');
+    return new RegExp(`^${source}$`, 'u').test(candidate);
+  });
+}
+
 export function isUserPath(path) {
   const normalized = normalizeRepoPath(path);
-  if (TRACKED_SCAFFOLDING.has(normalized)) return false;
-  return USER_PATH_FILES.has(normalized) || matchesPath(normalized, USER_PATH_PREFIXES);
+  if (USER_PATH_FILES.has(normalized) || matchesPattern(normalized, USER_PATH_PATTERNS)) {
+    return true;
+  }
+  if (TRACKED_SCAFFOLDING.has(normalized) || matchesPath(normalized, USER_PATH_EXCEPTIONS)) {
+    return false;
+  }
+  return matchesPath(normalized, USER_PATH_PREFIXES);
 }
 
 export function isSystemPath(path) {

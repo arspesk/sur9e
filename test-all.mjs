@@ -146,6 +146,7 @@ const systemFiles = [
   'content/templates/cv-template.html',
   '.claude/skills/sur9e/SKILL.md',
   'content/examples/personalization/profile.yml',
+  'src/lib/git-porcelain.mjs',
   'src/lib/repo-path-policy.mjs',
   'src/lib/check-user-data-boundary.mjs',
 ];

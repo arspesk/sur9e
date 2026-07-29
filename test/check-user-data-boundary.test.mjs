@@ -18,6 +18,7 @@ import {
   SYSTEM_PATHS,
   TRACKED_SCAFFOLDING,
   USER_PATH_FILES,
+  USER_PATH_PATTERNS,
   USER_PATH_PREFIXES,
 } from '../src/lib/repo-path-policy.mjs';
 
@@ -121,16 +122,52 @@ describe('user-data boundary', () => {
     expect(boundaryViolations(privateExamples)).toEqual([...privateExamples].sort());
   });
 
+  it('guards durable buckets and local-runtime patterns without consuming system content', () => {
+    const privateExamples = [
+      'inputs/future-bucket/private.txt',
+      'data/future-bucket/private.txt',
+      'artifacts/future-bucket/private.txt',
+      'batch/jobspy-env/bin/python',
+      'batch/screen.pid',
+      '.claude/scheduled_tasks.lock',
+      'tmp/local-notes.md',
+      '.claude/skills/custom/SKILL.md',
+      '.claude/skills/sur9e/private.yml.bak',
+      '.claude/skills/sur9e/text_private.json',
+      'content/private.yml.bak',
+      'src/nested/private.yaml.bak',
+    ];
+
+    expect(USER_PATH_PATTERNS).toContain('batch/*.pid');
+    expect(boundaryViolations(privateExamples)).toEqual([...privateExamples].sort());
+    expect(boundaryViolations(['content/examples/profile.yml'])).toEqual([]);
+    expect(boundaryViolations([...TRACKED_SCAFFOLDING])).toEqual([]);
+  });
+
   it('permits repository-owned system paths', () => {
     expect(boundaryViolations([...SYSTEM_PATHS])).toEqual([]);
   });
 
   it('checks the complete tracked-file set and reports private paths', () => {
     const directory = createGitFixture();
+    const privatePaths = [
+      'inputs/future-bucket/private.txt',
+      'data/future-bucket/private.txt',
+      'artifacts/future-bucket/private.txt',
+      'batch/screen.pid',
+      '.claude/scheduled_tasks.lock',
+      '.claude/skills/custom/SKILL.md',
+      '.claude/skills/sur9e/private.yml.bak',
+      '.claude/skills/sur9e/text_private.json',
+      'content/private.yml.bak',
+      'src/nested/private.yaml.bak',
+    ];
     try {
       writeFixtureFile(directory, 'src/app/page.tsx');
+      writeFixtureFile(directory, 'content/examples/profile.yml');
       writeFixtureFile(directory, 'data/.gitkeep', '');
-      writeFixtureFile(directory, 'inputs/personalization/cv.md', '# Private CV\n');
+      writeFixtureFile(directory, 'inputs/parsers/README.md');
+      for (const path of privatePaths) writeFixtureFile(directory, path);
       git(directory, ['add', '--all']);
 
       const result = runChecker(directory, ['--tracked']);
@@ -138,7 +175,7 @@ describe('user-data boundary', () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('');
       expect(result.stdout).toBe(
-        'Private user-data paths detected:\ninputs/personalization/cv.md\n',
+        `Private user-data paths detected:\n${[...privatePaths].sort().join('\n')}\n`,
       );
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -193,6 +230,8 @@ describe('user-data boundary', () => {
 
       writeFixtureFile(directory, 'src/app/page.tsx', 'after\n');
       writeFixtureFile(directory, 'data/applications.md', '# Private tracker\n');
+      writeFixtureFile(directory, 'content/private.yml.bak', 'private: true\n');
+      writeFixtureFile(directory, 'src/nested/private.yaml.bak', 'private: true\n');
       git(directory, ['add', '--all']);
       git(directory, ['commit', '--quiet', '-m', 'head']);
       const headSha = git(directory, ['rev-parse', 'HEAD']);
@@ -204,7 +243,15 @@ describe('user-data boundary', () => {
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe('');
-      expect(result.stdout).toBe('Private user-data paths detected:\ndata/applications.md\n');
+      expect(result.stdout).toBe(
+        [
+          'Private user-data paths detected:',
+          'content/private.yml.bak',
+          'data/applications.md',
+          'src/nested/private.yaml.bak',
+          '',
+        ].join('\n'),
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
