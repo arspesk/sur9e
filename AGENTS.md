@@ -151,10 +151,10 @@ weekly npm and GitHub Actions PRs; never auto-merge them. See
    **CodeQL analysis**. Do not bypass, mark complete, or merge while a required
    check is pending or failing.
 5. **Squash merge and clean up.** Keep the validated PR title as the squash
-   header and the squash body blank. After verifying the merge, GitHub may
-   remove the remote head branch when automatic deletion is enabled; otherwise
-   branch deletion requires an explicit ask. Remove local branches or worktrees
-   only after confirming they are clean and contain no unique work.
+   header and the squash body blank. After verifying the merge, do not assume
+   the PR removed its remote head branch: delete any remote or local branch only
+   with explicit user authorization. Before removing a local worktree, confirm
+   it is clean and contains no unique work.
 6. **Let Release Please prepare releases.** Every push to `main` runs
    [`.github/workflows/release.yml`](.github/workflows/release.yml).
    Releasable Conventional Commits create or update a Release Please PR; an
