@@ -49,22 +49,15 @@ jobs:
 
       - name: Commit synchronized VERSION
         if: ${{ steps.release.outputs.prs_created == 'true' }}
-        env:
-          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
         run: |
           set -euo pipefail
 
+          RELEASE_BRANCH="$(git branch --show-current)"
           if [[ -z "$RELEASE_BRANCH" || "$RELEASE_BRANCH" == "main" ]]; then
             echo "Refusing to update invalid release branch: $RELEASE_BRANCH" >&2
             exit 1
           fi
           git check-ref-format "refs/heads/$RELEASE_BRANCH" >/dev/null
-
-          current_branch="$(git branch --show-current)"
-          if [[ "$current_branch" != "$RELEASE_BRANCH" ]]; then
-            echo "Expected release branch $RELEASE_BRANCH, found $current_branch" >&2
-            exit 1
-          fi
 
           if git diff --quiet -- VERSION; then
             echo "VERSION is already synchronized"
