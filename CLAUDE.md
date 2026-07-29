@@ -132,6 +132,45 @@ weekly npm and GitHub Actions PRs; never auto-merge them. See
 | jobs            | `scan` · `jobs:liveness`                                                   |
 | other           | `doctor` · `setup` · `lighthouse`                                          |
 
+## Development and release lifecycle
+
+1. **Branch from current `main`.** Fetch first, then use a short-lived branch or
+   isolated worktree. Never commit or push implementation work directly to
+   `main`, and never overwrite unrelated user changes.
+2. **Implement and verify locally.** Add or update tests with behavior changes.
+   Before a PR, run `npm run test:quick` and `npm run build`; visual frontend
+   changes also require the three screenshot widths in Critical rules.
+3. **Open a reviewable PR.** Push only when explicitly asked. Use a valid
+   Conventional Commit PR title, review the complete diff, and resolve
+   actionable human or CodeRabbit findings. CodeRabbit is advisory. Review
+   Dependabot PRs individually for compatibility and provenance; never
+   auto-merge them.
+4. **Wait for the protected checks.** Required checks are **Quick quality
+   gate**, **Production build**, **Fresh-clone Playwright smoke**, **No private
+   user data**, **Validate PR title**, **High-severity dependency gate**, and
+   **CodeQL analysis**. Do not bypass, mark complete, or merge while a required
+   check is pending or failing.
+5. **Squash merge and clean up.** Keep the validated PR title as the squash
+   header and the squash body blank. After verifying the merge, GitHub may
+   remove the remote head branch when automatic deletion is enabled; otherwise
+   branch deletion requires an explicit ask. Remove local branches or worktrees
+   only after confirming they are clean and contain no unique work.
+6. **Let Release Please prepare releases.** Every push to `main` runs
+   [`.github/workflows/release.yml`](.github/workflows/release.yml).
+   Releasable Conventional Commits create or update a Release Please PR; an
+   ordinary merge does not create a tag or GitHub release. `fix` and `perf`
+   propose patch bumps, `feat` proposes a minor bump, and with the current
+   pre-1.0 configuration a breaking change also proposes a minor bump. Other
+   allowed types do not normally initiate a release. Never manually edit
+   release-owned version files in an ordinary PR.
+7. **Release by merging the release PR.** A maintainer reviews the proposed
+   version, deterministic changelog, version-file synchronization, and checks,
+   then squash-merges it. The workflow automatically creates `vX.Y.Z`, the
+   GitHub release, non-AI release notes, and `sur9e.spdx.json`. Verify all four.
+   Manual workflow dispatch is only for repairing the SBOM on an existing
+   strict tag; it must not create a competing tag or release. This lifecycle
+   does not publish npm packages, containers, or deployments.
+
 ## sur9e modes (route incoming requests)
 
 | If the user...                                              | Mode                                                              |
