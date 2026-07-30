@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/arspesk/sur9e/compare/v0.3.0...v0.3.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* **chat:** add dependency-aware MCP mode orchestration ([8ca039f](https://github.com/arspesk/sur9e/commit/8ca039f5c972a7717baae9c24be1e6f1c8590a3a))
+
 ## [0.3.0](https://github.com/arspesk/sur9e/compare/v0.2.0...v0.3.0) (2026-07-29)
 
 
