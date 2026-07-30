@@ -25,6 +25,45 @@ describe('LaTeX compiler sandbox', () => {
     ).toThrow(/install bubblewrap/);
   });
 
+  it.each(['linux', 'darwin'])('fails closed when pdflatex is unavailable on %s', platform => {
+    const root = mkdtempSync(join(tmpdir(), 'latex-sandbox-'));
+    const bin = join(root, 'bin');
+    const work = join(root, 'work');
+    mkdirSync(bin);
+    mkdirSync(work);
+
+    expect(() =>
+      buildLatexSandboxInvocation({
+        sandboxDir: work,
+        platform,
+        envPath: bin,
+        sandboxExecPath: join(bin, 'sandbox-exec'),
+      }),
+    ).toThrow(/pdflatex is required/);
+  });
+
+  it('builds a network-isolated Linux bubblewrap invocation', () => {
+    const root = mkdtempSync(join(tmpdir(), 'latex-sandbox-'));
+    const bin = join(root, 'bin');
+    const work = join(root, 'work');
+    mkdirSync(bin);
+    mkdirSync(work);
+    writeFileSync(join(bin, 'pdflatex'), '');
+    writeFileSync(join(bin, 'bwrap'), '');
+
+    const invocation = buildLatexSandboxInvocation({
+      sandboxDir: work,
+      platform: 'linux',
+      envPath: bin,
+    });
+
+    expect(invocation.args).toContain('--unshare-all');
+    expect(invocation.args).toContain('--clearenv');
+    expect(invocation.args).toEqual(
+      expect.arrayContaining(['--bind', expect.any(String), '/work', '--chdir', '/work']),
+    );
+  });
+
   it('uses macOS sandbox-exec with network denied and a scrubbed environment', () => {
     const root = mkdtempSync(join(tmpdir(), 'latex-sandbox-'));
     const bin = join(root, 'bin');

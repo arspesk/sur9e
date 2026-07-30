@@ -9,7 +9,11 @@ import {
   describeTextOfferResult,
 } from '@/lib/server/chat/confirms';
 import { startChatJob } from '@/lib/server/chat/job-start';
-import { createOrReuseTextOffer, previewTextOffer } from '@/lib/server/text-offers';
+import {
+  createOrReuseTextOffer,
+  previewTextOffer,
+  reserveTextOfferPreview,
+} from '@/lib/server/text-offers';
 import {
   assertWorkflowStartable,
   createWorkflow,
@@ -26,7 +30,11 @@ export async function POST(request: Request) {
   }
   const { terminalApproved, ...input } = parsed.data;
   try {
-    const preview = previewTextOffer(ROOT, input.text);
+    const turnId = request.headers.get('x-sur9e-turn');
+    const preview =
+      turnId || terminalApproved === true
+        ? reserveTextOfferPreview(ROOT, input.text)
+        : previewTextOffer(ROOT, input.text);
     if (input.modes) {
       const plan = planWorkflowForTargets(
         ROOT,
@@ -42,12 +50,12 @@ export async function POST(request: Request) {
       assertWorkflowStartable(ROOT, plan);
     }
     const { summary, meta } = describeCreateOfferFromText(preview, input);
-    const turnId = request.headers.get('x-sur9e-turn');
+    const reservedNum = preview.reused ? undefined : preview.anticipatedNum;
     if (turnId) {
       const { token } = createConfirm(ROOT, {
         turnId,
         kind: 'create-offer-from-text',
-        payload: input,
+        payload: { ...input, reservedNum },
         summary,
         meta,
       });
@@ -56,7 +64,7 @@ export async function POST(request: Request) {
     if (terminalApproved !== true) {
       return Response.json({ needsConfirm: true, summary, meta });
     }
-    const textOffer = createOrReuseTextOffer(ROOT, input);
+    const textOffer = createOrReuseTextOffer(ROOT, { ...input, reservedNum });
     const job = input.startKind
       ? startChatJob(ROOT, input.startKind, { num: textOffer.offer.num })
       : undefined;

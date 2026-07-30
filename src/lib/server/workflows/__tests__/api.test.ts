@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { JobRecord } from '../../../schemas/jobs';
 import {
   advanceWorkflow,
@@ -10,6 +10,7 @@ import {
   createWorkflow,
   getWorkflow,
   planWorkflowForTargets,
+  reconcileWorkflows,
   type WorkflowRuntimeDeps,
   workflowChildJobs,
 } from '../api';
@@ -465,5 +466,30 @@ describe('workflow persistence and execution', () => {
     const workflow = createWorkflow(repo, { targets: [{ num: 12 }], modes: ['evaluate'] }, h.deps);
 
     expect(workflowChildJobs(repo, workflow, h.deps)).toEqual([h.starts[0]]);
+  });
+
+  it('continues boot reconciliation after one workflow fails', () => {
+    const repo = root();
+    const h = harness();
+    const first = createWorkflow(repo, { targets: [{ num: 12 }], modes: ['evaluate'] }, h.deps);
+    const second = createWorkflow(repo, { targets: [{ num: 13 }], modes: ['evaluate'] }, h.deps);
+    const firstJobId = first.steps[0]?.jobId;
+    const getJob = h.deps.getJob;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const reconciled = reconcileWorkflows(repo, {
+      ...h.deps,
+      getJob: id => {
+        if (id === firstJobId) throw new Error('damaged workflow');
+        return getJob(id);
+      },
+    });
+
+    expect(reconciled.map(workflow => workflow.id)).toContain(second.id);
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Failed to reconcile workflow ${first.id}:`,
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
   });
 });

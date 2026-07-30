@@ -312,14 +312,16 @@ describe('spawnJob cancellation interleaving', () => {
     };
     persistJobRecord(root, job);
     const child = fakeChild();
+    const advanceWorkflow = vi.fn().mockRejectedValue(new Error('damaged workflow'));
 
     await spawnJob(root, job, {
       spawnProcess: vi.fn(() => child),
-      advanceWorkflow: vi.fn().mockRejectedValue(new Error('damaged workflow')),
+      advanceWorkflow,
     });
     child.emit('close', 0);
     await new Promise<void>(resolve => setImmediate(resolve));
 
     expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
   });
 });

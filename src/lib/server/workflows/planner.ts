@@ -1,6 +1,5 @@
 import { MODE_CATALOG, type ModeDefinition, type ModeId, resolveModeId } from '../../modes/catalog';
-
-export type WorkflowTarget = { num: number } | { url: string; num?: number };
+import type { WorkflowTarget } from '../../schemas/workflows';
 
 export interface PlannedWorkflowStep {
   id: string;

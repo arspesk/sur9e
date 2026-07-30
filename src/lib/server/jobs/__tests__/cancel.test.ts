@@ -136,14 +136,17 @@ describe('cancelJob', () => {
       ),
     );
 
+    const advanceWorkflow = vi.fn(() => {
+      throw new Error('damaged workflow');
+    });
+
     expect(() =>
       cancelJob(root, JOB_ID, {
         signal: vi.fn(),
         scheduleForce: vi.fn(),
-        advanceWorkflow: () => {
-          throw new Error('damaged workflow');
-        },
+        advanceWorkflow,
       }),
     ).not.toThrow();
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
   });
 });

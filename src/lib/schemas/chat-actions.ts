@@ -8,13 +8,7 @@
 import { z } from 'zod';
 import { ApplicationStatus } from './applications';
 import { JobType } from './jobs';
-
-const HttpUrl = z
-  .string()
-  .url()
-  .refine(value => value.startsWith('http://') || value.startsWith('https://'), {
-    message: 'URL must use http or https',
-  });
+import { HttpUrl } from './urls';
 
 export const TextOfferStartKind = z.enum([
   'screen',

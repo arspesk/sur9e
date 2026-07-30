@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HttpUrl } from './urls';
 
 export const WorkflowStatus = z.enum([
   'queued',
@@ -24,12 +25,7 @@ export type WorkflowStepStatus = z.infer<typeof WorkflowStepStatus>;
 export const WorkflowTarget = z.union([
   z
     .object({
-      url: z
-        .string()
-        .url()
-        .refine(value => value.startsWith('http://') || value.startsWith('https://'), {
-          message: 'URL must use http or https',
-        }),
+      url: HttpUrl,
       num: z.number().int().positive().optional(),
     })
     .strict(),

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JobRecord, JobType } from '../../schemas/jobs';
+import type { WorkflowTarget } from '../../schemas/workflows';
 import {
   WorkflowRecord,
   type WorkflowRecord as WorkflowRecordType,
@@ -17,7 +18,7 @@ import {
   type JobConflictPayload,
   startJob as startPersistedJob,
 } from '../jobs/start';
-import { planWorkflow, type WorkflowPlan, type WorkflowTarget } from './planner';
+import { planWorkflow, type WorkflowPlan } from './planner';
 
 type StartedJob =
   | JobRecord
@@ -417,7 +418,14 @@ export function advanceWorkflowsForJob(
 }
 
 export function reconcileWorkflows(root: string, deps?: WorkflowRuntimeDeps): WorkflowRecordType[] {
-  return listWorkflows(root)
-    .filter(workflow => workflow.status === 'queued' || workflow.status === 'running')
-    .map(workflow => advanceWorkflow(root, workflow.id, deps));
+  const reconciled: WorkflowRecordType[] = [];
+  for (const workflow of listWorkflows(root)) {
+    if (workflow.status !== 'queued' && workflow.status !== 'running') continue;
+    try {
+      reconciled.push(advanceWorkflow(root, workflow.id, deps));
+    } catch (error) {
+      console.error(`Failed to reconcile workflow ${workflow.id}:`, error);
+    }
+  }
+  return reconciled;
 }

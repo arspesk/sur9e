@@ -70,6 +70,7 @@ export interface CreateOfferFromTextPayload {
   role?: string;
   startKind?: TextOfferStartKind;
   modes?: string[];
+  reservedNum?: number;
 }
 
 export interface EditReportPayload {

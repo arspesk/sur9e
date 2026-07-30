@@ -15,6 +15,7 @@ import {
   createOrReuseTextOffer,
   hashJobDescription,
   normalizeJobDescription,
+  reserveTextOfferPreview,
 } from '../text-offers';
 
 const TRACKER = [
@@ -99,6 +100,20 @@ describe('text offers', () => {
     expect(
       readFileSync(join(root, 'data/applications.md'), 'utf-8').match(/^\| 1 \|/gm),
     ).toHaveLength(1);
+  });
+
+  it('creates with the exact number reserved during confirmation planning', () => {
+    const root = seedRoot();
+    roots.push(root);
+    const preview = reserveTextOfferPreview(root, 'Build a reliable platform.');
+    const created = createOrReuseTextOffer(root, {
+      company: 'Acme',
+      role: 'Platform Engineer',
+      text: 'Build a reliable platform.',
+      reservedNum: preview.anticipatedNum,
+    });
+
+    expect(created.offer.num).toBe(preview.anticipatedNum);
   });
 
   it('uses explicit Unknown labels when identity is genuinely absent', () => {
