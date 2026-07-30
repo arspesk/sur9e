@@ -3,27 +3,17 @@ export const runtime = 'nodejs';
 import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
 import { StartWorkflowActionRequest } from '@/lib/schemas/chat-actions';
-import { findByNum, normalizeStatus } from '@/lib/server/applications';
 import {
   createConfirm,
   describeStartedWorkflow,
   describeStartWorkflow,
 } from '@/lib/server/chat/confirms';
-import { getJob } from '@/lib/server/jobs';
-import { assertWorkflowStartable, createWorkflow, planWorkflow } from '@/lib/server/workflows';
-
-function validatePlan(targets: Array<{ num: number } | { url: string }>, modes: string[]) {
-  const evaluated = new Set<number>();
-  for (const target of targets) {
-    if (!('num' in target)) continue;
-    const row = findByNum(ROOT, target.num);
-    if (!row) throw new Error(`num not found: ${target.num}`);
-    if (row.reportPath && !['screened', 'discarded'].includes(normalizeStatus(row.status))) {
-      evaluated.add(target.num);
-    }
-  }
-  return planWorkflow({ targets, modes, evaluatedOfferNums: evaluated });
-}
+import {
+  assertWorkflowStartable,
+  createWorkflow,
+  planWorkflowForTargets,
+  workflowChildJobs,
+} from '@/lib/server/workflows';
 
 export async function POST(request: Request) {
   const raw = await request.json().catch(() => null);
@@ -33,7 +23,7 @@ export async function POST(request: Request) {
   }
   const { terminalApproved, ...input } = parsed.data;
   try {
-    const plan = validatePlan(input.targets, input.modes);
+    const plan = planWorkflowForTargets(ROOT, input);
     assertWorkflowStartable(ROOT, plan);
     const { summary, meta } = describeStartWorkflow(input, plan);
     const turnId = request.headers.get('x-sur9e-turn');
@@ -51,11 +41,7 @@ export async function POST(request: Request) {
       return Response.json({ needsConfirm: true, summary, meta });
     }
     const workflow = createWorkflow(ROOT, input);
-    const jobs = workflow.steps.flatMap(step => {
-      if (!step.jobId) return [];
-      const job = getJob(ROOT, step.jobId);
-      return job ? [job] : [];
-    });
+    const jobs = workflowChildJobs(ROOT, workflow);
     return Response.json({
       started: true,
       workflow,

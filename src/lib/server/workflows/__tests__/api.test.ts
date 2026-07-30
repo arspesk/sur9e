@@ -9,7 +9,9 @@ import {
   cancelWorkflow,
   createWorkflow,
   getWorkflow,
+  planWorkflowForTargets,
   type WorkflowRuntimeDeps,
+  workflowChildJobs,
 } from '../api';
 import { planWorkflow } from '../planner';
 
@@ -133,6 +135,24 @@ describe('workflow persistence and execution', () => {
     expect(h.starts.map(job => job.type)).toEqual(['screen', 'evaluate']);
     expect(h.starts[1]?.params).toMatchObject({ num: 44 });
     expect(advanced.targets[0]).toMatchObject({ url: 'https://example.com/jobs/1', num: 44 });
+    expect(getWorkflow(repo, workflow.id)?.targets[0]).toMatchObject({
+      url: 'https://example.com/jobs/1',
+      num: 44,
+    });
+  });
+
+  it('uses one canonical evaluation rule for confirmation and execution plans', () => {
+    const repo = root();
+    const h = harness();
+    h.deps.isEvaluated = num => num === 12;
+
+    const plan = planWorkflowForTargets(
+      repo,
+      { targets: [{ num: 12 }], modes: ['cover-letter'] },
+      h.deps,
+    );
+
+    expect(plan.steps.map(step => step.mode)).toEqual(['cover-letter']);
   });
 
   it('limits selected-offer bulk work to four active children', () => {
@@ -405,8 +425,9 @@ describe('workflow persistence and execution', () => {
 
     const cancelled = cancelWorkflow(repo, workflow.id, h.deps);
 
-    expect(cancelled.status).toBe('cancelled');
-    expect(cancelled.steps.every(step => step.status === 'cancelled')).toBe(true);
+    expect(cancelled.cancelled).toBe(true);
+    expect(cancelled.workflow.status).toBe('cancelled');
+    expect(cancelled.workflow.steps.every(step => step.status === 'cancelled')).toBe(true);
     expect(h.cancellations).toEqual([h.starts[0]?.id]);
     expect(getWorkflow(repo, workflow.id)?.status).toBe('cancelled');
   });
@@ -426,7 +447,23 @@ describe('workflow persistence and execution', () => {
     const unchanged = cancelWorkflow(repo, workflow.id, h.deps);
 
     expect(finished.status).toBe('done');
-    expect(unchanged.status).toBe('done');
+    expect(unchanged).toMatchObject({ cancelled: false, workflow: { status: 'done' } });
     expect(h.cancellations).toEqual([]);
+  });
+
+  it('rejects invalid workflow ids before filesystem access', () => {
+    const repo = root();
+    expect(getWorkflow(repo, '../../../../etc/passwd')).toBeNull();
+    expect(() => cancelWorkflow(repo, '../../../../etc/passwd')).toThrow(
+      'workflow not found: ../../../../etc/passwd',
+    );
+  });
+
+  it('materializes only persisted child jobs for a workflow response', () => {
+    const repo = root();
+    const h = harness();
+    const workflow = createWorkflow(repo, { targets: [{ num: 12 }], modes: ['evaluate'] }, h.deps);
+
+    expect(workflowChildJobs(repo, workflow, h.deps)).toEqual([h.starts[0]]);
   });
 });

@@ -27,7 +27,7 @@ export const JOB_KIND_BY_NUM = new Set<JobType>([
 // both write reports + TSVs to the same paths, then race on the
 // merge-tracker rename (the second hits ENOENT because the first
 // already moved the TSV). Serializing fixes the data corruption.
-const JOB_KIND_SINGLETON = new Set<JobType>([
+export const JOB_KIND_SINGLETON = new Set<JobType>([
   'scan',
   'batch-evaluate',
   'screen',
@@ -92,8 +92,7 @@ export function findJobConflict(
   }
 
   if (JOB_KIND_SINGLETON.has(kind)) {
-    const kindsToCheck: JobType[] = ['scan', 'screen', 'screen-evaluate', 'batch-evaluate'];
-    for (const activeKind of kindsToCheck) {
+    for (const activeKind of JOB_KIND_SINGLETON) {
       const active = findActiveJob(rootPath, activeKind);
       if (active) {
         const noun =

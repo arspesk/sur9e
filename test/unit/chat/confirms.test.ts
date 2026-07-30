@@ -351,6 +351,34 @@ describe('chat confirms store', () => {
     expect(spawnJobMock).toHaveBeenCalledTimes(1);
   });
 
+  it('defensively rejects a persisted text-offer payload that combines legacy and workflow modes', () => {
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-1',
+      kind: 'create-offer-from-text',
+      payload: {
+        text: 'Build durable infrastructure.',
+        company: 'Acme',
+        role: 'Infrastructure Engineer',
+        startKind: 'screen',
+        modes: ['evaluate'],
+      },
+      summary: 'Create offer and run modes',
+      meta: 'invalid persisted payload',
+    });
+
+    const res = confirms.resolveConfirm(root, token, true);
+
+    expect(res).toMatchObject({
+      outcome: 'approved',
+      execution: 'failed',
+      result: { ok: false, error: 'startKind and modes cannot be combined' },
+    });
+    expect(readdirSync(join(root, 'data/jobs'))).toHaveLength(0);
+    expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).not.toContain(
+      'Infrastructure Engineer',
+    );
+  });
+
   it('cancel executes nothing and emits confirm-resolved cancelled', () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',

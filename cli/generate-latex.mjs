@@ -16,8 +16,10 @@
 
 import { execFileSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
-import { copyFile, readFile, rm, stat } from 'fs/promises';
+import { copyFile, mkdtemp, readFile, rm, stat } from 'fs/promises';
+import { tmpdir } from 'os';
 import { basename, dirname, join, resolve } from 'path';
+import { buildLatexSandboxInvocation } from './lib/latex-sandbox.mjs';
 
 const REQUIRED_SECTIONS = [
   '\\\\section{Education}',
@@ -116,9 +118,8 @@ async function main() {
   }
 
   // --- Compile .tex → .pdf via pdflatex ---
-  const texDir = dirname(absPath);
   const texBase = basename(absPath, '.tex');
-  const defaultPdf = join(texDir, `${texBase}.pdf`);
+  const defaultPdf = join(dirname(absPath), `${texBase}.pdf`);
   const targetPdf = outputPath ? resolve(outputPath) : defaultPdf;
 
   // Ensure output directory exists
@@ -127,37 +128,28 @@ async function main() {
     mkdirSync(targetDir, { recursive: true });
   }
 
+  const sandboxDir = await mkdtemp(join(tmpdir(), 'sur9e-latex-'));
+  const sandboxTex = join(sandboxDir, 'document.tex');
+  const sandboxPdf = join(sandboxDir, 'document.pdf');
+  const sandboxLog = join(sandboxDir, 'document.log');
   try {
-    // Run pdflatex twice for cross-references (standard practice)
-    const pdflatexArgs = [
-      '-no-shell-escape',
-      '-interaction=nonstopmode',
-      '-halt-on-error',
-      `-output-directory=${texDir}`,
-      absPath,
-    ];
-
-    // First pass
-    execFileSync('pdflatex', pdflatexArgs, {
-      cwd: texDir,
+    await copyFile(absPath, sandboxTex);
+    const invocation = buildLatexSandboxInvocation({ sandboxDir });
+    const options = {
+      ...invocation.options,
       stdio: 'pipe',
       timeout: 120_000,
-    });
-
-    // Second pass (resolves references)
-    execFileSync('pdflatex', pdflatexArgs, {
-      cwd: texDir,
-      stdio: 'pipe',
-      timeout: 120_000,
-    });
-
+    };
+    // Run twice for cross-references. Only the isolated document and
+    // system TeX files are visible; the process environment is scrubbed.
+    execFileSync(invocation.command, invocation.args, options);
+    execFileSync(invocation.command, invocation.args, options);
     report.compiled = true;
   } catch (err) {
     // Try to extract useful error from pdflatex log
-    const logPath = join(texDir, `${texBase}.log`);
     let latexError = err.message;
     try {
-      const log = await readFile(logPath, 'utf-8');
+      const log = await readFile(sandboxLog, 'utf-8');
       const errorLines = log.split('\n').filter(l => l.startsWith('!'));
       if (errorLines.length > 0) {
         latexError = errorLines.join('\n');
@@ -173,12 +165,7 @@ async function main() {
   // Post-compile: move PDF and clean up (separate from compile errors)
   if (report.compiled) {
     try {
-      // Move PDF to target location if different
-      if (resolve(defaultPdf) !== resolve(targetPdf)) {
-        await copyFile(defaultPdf, targetPdf);
-        await rm(defaultPdf).catch(() => {});
-      }
-
+      await copyFile(sandboxPdf, targetPdf);
       const pdfStat = await stat(targetPdf);
       report.pdf = {
         path: targetPdf,
@@ -187,14 +174,9 @@ async function main() {
     } catch (err) {
       report.postCompileError = `Failed to finalize PDF: ${err.message}`;
     }
-
-    // Clean up auxiliary files (best-effort)
-    const auxExts = ['.aux', '.log', '.out', '.fls', '.fdb_latexmk', '.synctex.gz'];
-    for (const ext of auxExts) {
-      await rm(join(texDir, `${texBase}${ext}`)).catch(() => {});
-    }
   }
 
+  await rm(sandboxDir, { recursive: true, force: true });
   console.log(JSON.stringify(report, null, 2));
   // A post-compile failure (e.g. copyFile to the requested output path) means
   // the deliverable isn't where the caller asked — that's a failure too.

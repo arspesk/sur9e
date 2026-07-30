@@ -9,6 +9,13 @@ import { z } from 'zod';
 import { ApplicationStatus } from './applications';
 import { JobType } from './jobs';
 
+const HttpUrl = z
+  .string()
+  .url()
+  .refine(value => value.startsWith('http://') || value.startsWith('https://'), {
+    message: 'URL must use http or https',
+  });
+
 export const TextOfferStartKind = z.enum([
   'screen',
   'screen-evaluate',
@@ -25,7 +32,7 @@ export type TextOfferStartKind = z.infer<typeof TextOfferStartKind>;
 
 export const WorkflowTargetInput = z.union([
   z.object({ num: z.number().int().positive() }).strict(),
-  z.object({ url: z.string().url() }).strict(),
+  z.object({ url: HttpUrl }).strict(),
 ]);
 
 export const StartWorkflowActionRequest = z.object({

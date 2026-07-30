@@ -122,4 +122,28 @@ describe('cancelJob', () => {
 
     expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
   });
+
+  it('contains a workflow notification failure after cancellation', () => {
+    writeFileSync(
+      join(root, 'data/jobs', `${JOB_ID}.json`),
+      JSON.stringify(
+        {
+          ...record('queued'),
+          params: { num: 1, workflow_id: '0123456789abcdef', workflow_step_id: 'step-1' },
+        },
+        null,
+        2,
+      ),
+    );
+
+    expect(() =>
+      cancelJob(root, JOB_ID, {
+        signal: vi.fn(),
+        scheduleForce: vi.fn(),
+        advanceWorkflow: () => {
+          throw new Error('damaged workflow');
+        },
+      }),
+    ).not.toThrow();
+  });
 });

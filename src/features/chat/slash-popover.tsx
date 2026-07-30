@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { useActiveOptionScroll } from '@/hooks/use-active-option-scroll';
-import { CHAT_DISCOVERABLE_MODES } from '@/lib/modes/catalog';
+import { CHAT_DISCOVERABLE_MODES, type ModeId } from '@/lib/modes/catalog';
 
 export interface SlashItem {
   command: string;
@@ -10,7 +10,7 @@ export interface SlashItem {
   description: string;
 }
 
-const MODE_HINTS: Readonly<Record<string, string>> = {
+const MODE_HINTS: Partial<Record<ModeId, string>> = {
   apply: '<num>',
   'cover-letter': '<num>',
   'evaluate-offer': '<url-or-num>',
@@ -29,7 +29,7 @@ const MODE_HINTS: Readonly<Record<string, string>> = {
  * prompt, so adding or reclassifying a mode cannot leave slash commands stale. */
 export const SLASH_ITEMS: SlashItem[] = CHAT_DISCOVERABLE_MODES.map(mode => ({
   command: mode.id,
-  hint: MODE_HINTS[mode.id],
+  hint: MODE_HINTS[mode.id as ModeId],
   description: mode.description,
 }));
 

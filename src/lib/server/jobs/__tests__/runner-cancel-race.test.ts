@@ -291,4 +291,35 @@ describe('spawnJob cancellation interleaving', () => {
 
     expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
   });
+
+  it('contains a rejected workflow notification after job completion', async () => {
+    const job: JobRecord = {
+      id: JOB_ID,
+      type: 'evaluate',
+      status: 'queued',
+      params: {
+        num: 1,
+        workflow_id: '0123456789abcdef',
+        workflow_step_id: 'step-1',
+      },
+      workflowId: '0123456789abcdef',
+      workflowStepId: 'step-1',
+      startedAt: '2026-07-28T10:00:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    };
+    persistJobRecord(root, job);
+    const child = fakeChild();
+
+    await spawnJob(root, job, {
+      spawnProcess: vi.fn(() => child),
+      advanceWorkflow: vi.fn().mockRejectedValue(new Error('damaged workflow')),
+    });
+    child.emit('close', 0);
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
+  });
 });

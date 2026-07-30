@@ -444,6 +444,42 @@ describe('chat action routes', () => {
         expect.objectContaining({ kind: 'cancel-workflow' }),
       );
     });
+
+    it('terminal approval cancels an active workflow', async () => {
+      const started = await startWorkflowRoute.POST(
+        postJson('http://localhost/api/chat/actions/start-workflow', {
+          targets: [{ num: 1001 }],
+          modes: ['evaluate'],
+          terminalApproved: true,
+        }),
+      );
+      const workflowId = (await started.json()).workflow.id;
+
+      const res = await cancelWorkflowRoute.POST(
+        postJson('http://localhost/api/chat/actions/cancel-workflow', {
+          workflowId,
+          terminalApproved: true,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        cancelled: true,
+        workflow: { id: workflowId, status: 'cancelled' },
+      });
+    });
+
+    it('returns 404 when cancelling an unknown workflow', async () => {
+      const res = await cancelWorkflowRoute.POST(
+        postJson('http://localhost/api/chat/actions/cancel-workflow', {
+          workflowId: '0000000000000000',
+          terminalApproved: true,
+        }),
+      );
+
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toContain('workflow not found');
+    });
   });
 
   describe('POST /api/chat/actions/set-status', () => {

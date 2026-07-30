@@ -278,7 +278,12 @@ async function advanceWorkflowForJob(rootPath: string, jobId: string): Promise<v
 async function notifyWorkflow(rootPath: string, job: JobRecord, deps: SpawnJobDeps): Promise<void> {
   const persisted = readJobRecord(rootPath, job.id);
   if (!persisted?.workflowId && typeof persisted?.params.workflow_id !== 'string') return;
-  await (deps.advanceWorkflow ?? advanceWorkflowForJob)(rootPath, job.id);
+  try {
+    await (deps.advanceWorkflow ?? advanceWorkflowForJob)(rootPath, job.id);
+  } catch {
+    // The child job record is authoritative. Boot/list reconciliation retries
+    // advancing its parent without turning this completed child into a crash.
+  }
 }
 
 export async function spawnJob(

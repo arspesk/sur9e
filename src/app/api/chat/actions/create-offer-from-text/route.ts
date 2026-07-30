@@ -9,9 +9,13 @@ import {
   describeTextOfferResult,
 } from '@/lib/server/chat/confirms';
 import { startChatJob } from '@/lib/server/chat/job-start';
-import { getJob } from '@/lib/server/jobs';
 import { createOrReuseTextOffer, previewTextOffer } from '@/lib/server/text-offers';
-import { assertWorkflowStartable, createWorkflow, planWorkflow } from '@/lib/server/workflows';
+import {
+  assertWorkflowStartable,
+  createWorkflow,
+  planWorkflowForTargets,
+  workflowChildJobs,
+} from '@/lib/server/workflows';
 import { revalidatePath } from '@/server/revalidate';
 
 export async function POST(request: Request) {
@@ -24,12 +28,17 @@ export async function POST(request: Request) {
   try {
     const preview = previewTextOffer(ROOT, input.text);
     if (input.modes) {
-      const previewNum = preview.offer?.num ?? Number.MAX_SAFE_INTEGER;
-      const plan = planWorkflow({
-        targets: [{ num: previewNum }],
-        modes: input.modes,
-        evaluatedOfferNums: new Set(),
-      });
+      const plan = planWorkflowForTargets(
+        ROOT,
+        {
+          targets: [{ num: preview.anticipatedNum }],
+          modes: input.modes,
+        },
+        undefined,
+        {
+          allowMissingOfferNums: preview.reused ? undefined : new Set([preview.anticipatedNum]),
+        },
+      );
       assertWorkflowStartable(ROOT, plan);
     }
     const { summary, meta } = describeCreateOfferFromText(preview, input);
@@ -57,13 +66,7 @@ export async function POST(request: Request) {
           modes: input.modes,
         })
       : undefined;
-    const jobs = workflow
-      ? workflow.steps.flatMap(step => {
-          if (!step.jobId) return [];
-          const child = getJob(ROOT, step.jobId);
-          return child ? [child] : [];
-        })
-      : undefined;
+    const jobs = workflow ? workflowChildJobs(ROOT, workflow) : undefined;
     const presentation = describeTextOfferResult(textOffer, input.startKind, job, workflow);
     revalidatePath('/offers');
     return Response.json({

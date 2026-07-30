@@ -22,11 +22,18 @@ export const WorkflowStepStatus = z.enum([
 export type WorkflowStepStatus = z.infer<typeof WorkflowStepStatus>;
 
 export const WorkflowTarget = z.union([
-  z.object({ num: z.number().int().positive() }),
-  z.object({
-    url: z.string().url(),
-    num: z.number().int().positive().optional(),
-  }),
+  z
+    .object({
+      url: z
+        .string()
+        .url()
+        .refine(value => value.startsWith('http://') || value.startsWith('https://'), {
+          message: 'URL must use http or https',
+        }),
+      num: z.number().int().positive().optional(),
+    })
+    .strict(),
+  z.object({ num: z.number().int().positive() }).strict(),
 ]);
 export type WorkflowTarget = z.infer<typeof WorkflowTarget>;
 
@@ -43,7 +50,7 @@ export const WorkflowStep = z.object({
 export type WorkflowStep = z.infer<typeof WorkflowStep>;
 
 export const WorkflowRecord = z.object({
-  id: z.string().length(16),
+  id: z.string().regex(/^[a-f0-9]{16}$/),
   status: WorkflowStatus,
   targets: z.array(WorkflowTarget),
   requestedModes: z.array(z.string().min(1)),

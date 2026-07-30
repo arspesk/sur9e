@@ -1,6 +1,6 @@
 import { MODE_CATALOG, type ModeDefinition, type ModeId, resolveModeId } from '../../modes/catalog';
 
-export type WorkflowTarget = { num: number } | { url: string };
+export type WorkflowTarget = { num: number } | { url: string; num?: number };
 
 export interface PlannedWorkflowStep {
   id: string;
@@ -111,7 +111,8 @@ function planTarget(
   const needsEvaluation =
     expanded.includes('evaluate') ||
     expanded.some(mode => definitionFor(mode).requiresEvaluation === true);
-  const alreadyEvaluated = 'num' in target && evaluatedOfferNums.has(target.num);
+  const alreadyEvaluated =
+    'num' in target && typeof target.num === 'number' && evaluatedOfferNums.has(target.num);
   if (needsEvaluation && !alreadyEvaluated && !expanded.includes('evaluate')) {
     const screenIndex = expanded.indexOf('screen');
     expanded.splice(screenIndex >= 0 ? screenIndex + 1 : 0, 0, 'evaluate');

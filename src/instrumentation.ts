@@ -10,6 +10,10 @@ export async function register() {
   const { startScheduler } = await import('./lib/server/jobs/scheduler');
   const { reconcileWorkflows } = await import('./lib/server/workflows');
   const { ROOT } = await import('./lib/root');
-  reconcileWorkflows(ROOT);
+  try {
+    reconcileWorkflows(ROOT);
+  } catch (error) {
+    console.error('Failed to reconcile workflows during startup:', error);
+  }
   startScheduler(ROOT);
 }

@@ -39,11 +39,28 @@ export interface CreateWorkflowInput {
   guidance?: string;
 }
 
+export interface CancelWorkflowResult {
+  cancelled: boolean;
+  workflow: WorkflowRecordType;
+}
+
+const TERMINAL_WORKFLOW_STATUSES = new Set<WorkflowRecordType['status']>([
+  'done',
+  'partial',
+  'error',
+  'cancelled',
+]);
+
+export function isWorkflowTerminal(status: WorkflowRecordType['status']): boolean {
+  return TERMINAL_WORKFLOW_STATUSES.has(status);
+}
+
 function workflowsDir(root: string): string {
   return join(root, 'data', 'workflows');
 }
 
 function workflowPath(root: string, id: string): string {
+  if (!/^[a-f0-9]{16}$/.test(id)) throw new Error('invalid workflow id');
   return join(workflowsDir(root), `${id}.json`);
 }
 
@@ -70,6 +87,7 @@ function defaultDeps(root: string): WorkflowRuntimeDeps {
 }
 
 export function getWorkflow(root: string, id: string): WorkflowRecordType | null {
+  if (!/^[a-f0-9]{16}$/.test(id)) return null;
   const path = workflowPath(root, id);
   if (!existsSync(path)) return null;
   try {
@@ -77,6 +95,54 @@ export function getWorkflow(root: string, id: string): WorkflowRecordType | null
   } catch {
     return null;
   }
+}
+
+export function planWorkflowForTargets(
+  root: string,
+  input: CreateWorkflowInput,
+  providedDeps?: WorkflowRuntimeDeps,
+  options: { allowMissingOfferNums?: ReadonlySet<number> } = {},
+): WorkflowPlan {
+  const deps = providedDeps ?? defaultDeps(root);
+  for (const target of input.targets) {
+    if (
+      'num' in target &&
+      typeof target.num === 'number' &&
+      !('url' in target) &&
+      !options.allowMissingOfferNums?.has(target.num) &&
+      !deps.offerExists(target.num)
+    ) {
+      throw new Error(`num not found: ${target.num}`);
+    }
+  }
+  const evaluatedOfferNums = new Set(
+    input.targets.flatMap(target =>
+      'num' in target &&
+      typeof target.num === 'number' &&
+      Number.isInteger(target.num) &&
+      deps.isEvaluated(target.num)
+        ? [target.num]
+        : [],
+    ),
+  );
+  return planWorkflow({
+    targets: input.targets,
+    modes: input.modes,
+    evaluatedOfferNums,
+  });
+}
+
+export function workflowChildJobs(
+  root: string,
+  workflow: WorkflowRecordType,
+  providedDeps?: Pick<WorkflowRuntimeDeps, 'getJob'>,
+): JobRecord[] {
+  const getJob = providedDeps?.getJob ?? ((id: string) => getPersistedJob(root, id));
+  return workflow.steps.flatMap(step => {
+    if (!step.jobId) return [];
+    const job = getJob(step.jobId);
+    return job ? [job] : [];
+  });
 }
 
 export function listWorkflows(root: string): WorkflowRecordType[] {
@@ -188,7 +254,7 @@ export function advanceWorkflow(
   const deps = providedDeps ?? defaultDeps(root);
   const stored = getWorkflow(root, id);
   if (!stored) throw new Error(`workflow not found: ${id}`);
-  if (['done', 'partial', 'error', 'cancelled'].includes(stored.status)) return stored;
+  if (isWorkflowTerminal(stored.status)) return stored;
 
   const workflow: WorkflowRecordType = {
     ...stored,
@@ -284,9 +350,7 @@ export function advanceWorkflow(
 
   workflow.status = deriveStatus(workflow);
   workflow.updatedAt = new Date().toISOString();
-  workflow.finishedAt = ['done', 'partial', 'error', 'cancelled'].includes(workflow.status)
-    ? workflow.updatedAt
-    : null;
+  workflow.finishedAt = isWorkflowTerminal(workflow.status) ? workflow.updatedAt : null;
   persist(root, workflow);
   return workflow;
 }
@@ -297,23 +361,7 @@ export function createWorkflow(
   providedDeps?: WorkflowRuntimeDeps,
 ): WorkflowRecordType {
   const deps = providedDeps ?? defaultDeps(root);
-  for (const target of input.targets) {
-    if ('num' in target && !('url' in target) && !deps.offerExists(target.num)) {
-      throw new Error(`num not found: ${target.num}`);
-    }
-  }
-  const evaluatedOfferNums = new Set(
-    input.targets.flatMap(target =>
-      'num' in target && Number.isInteger(target.num) && deps.isEvaluated(target.num)
-        ? [target.num]
-        : [],
-    ),
-  );
-  const plan = planWorkflow({
-    targets: input.targets,
-    modes: input.modes,
-    evaluatedOfferNums,
-  });
+  const plan = planWorkflowForTargets(root, input, deps);
   const now = new Date().toISOString();
   const workflow = WorkflowRecord.parse({
     id: randomBytes(8).toString('hex'),
@@ -339,11 +387,11 @@ export function cancelWorkflow(
   root: string,
   id: string,
   providedDeps?: WorkflowRuntimeDeps,
-): WorkflowRecordType {
+): CancelWorkflowResult {
   const deps = providedDeps ?? defaultDeps(root);
   const workflow = getWorkflow(root, id);
   if (!workflow) throw new Error(`workflow not found: ${id}`);
-  if (['done', 'partial', 'error', 'cancelled'].includes(workflow.status)) return workflow;
+  if (isWorkflowTerminal(workflow.status)) return { cancelled: false, workflow };
   for (const step of workflow.steps) {
     if (step.status === 'running' && step.jobId) deps.cancelJob(step.jobId);
     if (['running', 'queued', 'blocked'].includes(step.status)) {
@@ -355,7 +403,7 @@ export function cancelWorkflow(
   workflow.updatedAt = new Date().toISOString();
   workflow.finishedAt = workflow.updatedAt;
   persist(root, workflow);
-  return workflow;
+  return { cancelled: true, workflow };
 }
 
 export function advanceWorkflowsForJob(

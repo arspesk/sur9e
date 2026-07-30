@@ -19,17 +19,12 @@ import type { TextOfferStartKind } from '../../schemas/chat-actions';
 import type { JobType } from '../../schemas/jobs';
 import type { WorkflowRecord } from '../../schemas/workflows';
 import { updateStatus } from '../applications';
-import {
-  getJob,
-  type JobConflictPayload,
-  type JobRecord,
-  type JobSetupRequiredPayload,
-} from '../jobs';
+import { type JobConflictPayload, type JobRecord, type JobSetupRequiredPayload } from '../jobs';
 import { type CancelJobResult, cancelJob } from '../jobs/lifecycle';
 import { resolveModeRuntime } from '../providers/registry';
 import { applyReportBodyEdit, parseFrontmatter, saveReport } from '../reports';
 import { createOrReuseTextOffer, type TextOfferResult } from '../text-offers';
-import { cancelWorkflow, createWorkflow, getWorkflow, type WorkflowPlan } from '../workflows';
+import { cancelWorkflow, createWorkflow, type WorkflowPlan, workflowChildJobs } from '../workflows';
 import { startChatJob } from './job-start';
 import { appendConfirmResolution } from './store';
 import { emitTurnEvent } from './turn-runner';
@@ -220,11 +215,7 @@ function executionFor(
 }
 
 function jobsForWorkflow(root: string, workflow: WorkflowRecord): JobRecord[] {
-  return workflow.steps.flatMap(step => {
-    if (!step.jobId) return [];
-    const job = getJob(root, step.jobId);
-    return job ? [job] : [];
-  });
+  return workflowChildJobs(root, workflow);
 }
 
 /**
@@ -275,20 +266,21 @@ export function resolveConfirm(
         result = { ok: true, cancellation: cancelJob(root, p.jobId) };
       } else if (rec.kind === 'cancel-workflow') {
         const p = rec.payload as CancelWorkflowPayload;
-        const before = getWorkflow(root, p.workflowId);
-        if (!before) throw new Error(`workflow not found: ${p.workflowId}`);
-        const wasActive = before.status === 'queued' || before.status === 'running';
-        const workflow = cancelWorkflow(root, p.workflowId);
+        const cancellation = cancelWorkflow(root, p.workflowId);
+        const { workflow } = cancellation;
         result = {
           ok: true,
           workflow,
-          cancelledWorkflow: wasActive,
-          message: wasActive
+          cancelledWorkflow: cancellation.cancelled,
+          message: cancellation.cancelled
             ? `Workflow ${workflow.id} cancelled.`
             : `Workflow ${workflow.id} was already ${workflow.status}.`,
         };
       } else if (rec.kind === 'create-offer-from-text') {
         const p = rec.payload as CreateOfferFromTextPayload;
+        if (p.startKind && p.modes) {
+          throw new Error('startKind and modes cannot be combined');
+        }
         const textOffer = createOrReuseTextOffer(root, p);
         const job = p.startKind
           ? startChatJob(root, p.startKind, { num: textOffer.offer.num })

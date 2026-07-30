@@ -4,7 +4,7 @@ import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
 import { CancelWorkflowActionRequest } from '@/lib/schemas/chat-actions';
 import { createConfirm, describeCancelWorkflow } from '@/lib/server/chat/confirms';
-import { cancelWorkflow, getWorkflow } from '@/lib/server/workflows';
+import { cancelWorkflow, getWorkflow, isWorkflowTerminal } from '@/lib/server/workflows';
 
 export async function POST(request: Request) {
   const raw = await request.json().catch(() => null);
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const { workflowId, terminalApproved } = parsed.data;
   const workflow = getWorkflow(ROOT, workflowId);
   if (!workflow) return jsonError(`workflow not found: ${workflowId}`, 404);
-  if (['done', 'partial', 'error', 'cancelled'].includes(workflow.status)) {
+  if (isWorkflowTerminal(workflow.status)) {
     return Response.json({ cancelled: false, workflow });
   }
   const { summary, meta } = describeCancelWorkflow(workflow);
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return Response.json({ needsConfirm: true, summary, meta });
   }
   try {
-    return Response.json({ cancelled: true, workflow: cancelWorkflow(ROOT, workflowId) });
+    return Response.json(cancelWorkflow(ROOT, workflowId));
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'failed to cancel workflow', 400);
   }

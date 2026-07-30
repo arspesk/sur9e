@@ -17,14 +17,11 @@ export async function GET(_request: Request, context: { params: Promise<{ mode: 
   if (!mode) return jsonError(`unknown mode: ${rawMode}`, 404);
   const definition = MODE_CATALOG[mode];
   let instructions = '';
-  try {
+  if (mode !== 'screen-evaluate') {
     const modePath = join(ROOT, 'content', 'modes', `${mode}.md`);
     const shared =
       mode === 'screen' ? '' : readFileSync(join(ROOT, 'content', 'modes', '_shared.md'), 'utf-8');
     instructions = `${shared}${shared ? '\n\n' : ''}${readFileSync(modePath, 'utf-8')}`;
-  } catch {
-    // Synthetic composites such as screen-evaluate intentionally have no
-    // prompt file; the catalog's expandsTo contract is their instruction.
   }
   return Response.json({
     ...definition,

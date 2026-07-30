@@ -127,13 +127,21 @@ function stopProcess(job: JobRecordType, deps: CancellationDeps): void {
 function notifyWorkflow(rootPath: string, job: JobRecordType, deps: CancellationDeps): void {
   if (!job.workflowId && typeof job.params.workflow_id !== 'string') return;
   if (deps.advanceWorkflow) {
-    deps.advanceWorkflow(rootPath, job.id);
+    try {
+      deps.advanceWorkflow(rootPath, job.id);
+    } catch {
+      // The cancelled child is persisted; reconciliation can retry the parent.
+    }
     return;
   }
   setImmediate(() => {
-    void import('../workflows/api').then(({ advanceWorkflowsForJob }) => {
-      advanceWorkflowsForJob(rootPath, job.id);
-    });
+    void import('../workflows/api')
+      .then(({ advanceWorkflowsForJob }) => {
+        advanceWorkflowsForJob(rootPath, job.id);
+      })
+      .catch(() => {
+        // The cancelled child is persisted; reconciliation can retry the parent.
+      });
   });
 }
 

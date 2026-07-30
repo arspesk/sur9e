@@ -27,6 +27,7 @@ export interface TextOfferResult {
 export interface TextOfferPreview {
   reused: boolean;
   offer: ApplicationRow | null;
+  anticipatedNum: number;
   jdHash: string;
   jdPath: string;
 }
@@ -87,6 +88,7 @@ export function previewTextOffer(rootPath: string, text: string): TextOfferPrevi
   return {
     reused: offer !== null,
     offer,
+    anticipatedNum: offer?.num ?? nextOfferNum(rootPath),
     jdHash,
     jdPath: `inputs/jds/${jdHash}.md`,
   };
