@@ -21,7 +21,9 @@ export type ConfirmOutcome = 'pending' | 'approved' | 'cancelled' | 'expired';
 // the kind field existed (foldEvents leaves `action` undefined there).
 const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
   'start-job': '✓ Started — running in the jobs strip',
+  'start-workflow': '✓ Workflow started — child jobs are running',
   'cancel-job': '✓ Job cancelled',
+  'cancel-workflow': '✓ Workflow cancelled',
   'create-offer-from-text': '✓ Offer ready',
   'set-status': '✓ Status updated',
   'edit-report': '✓ Report updated',
@@ -37,6 +39,7 @@ function resolvedLabel(
   if (execution === 'failed') return '✕ Action failed';
   if (execution === 'unchanged') {
     if (action === 'cancel-job') return 'Job already finished';
+    if (action === 'cancel-workflow') return 'Workflow already finished';
     if (action === 'start-job') return 'Job not started';
     return 'No changes made';
   }
@@ -65,6 +68,8 @@ interface ConfirmResponseResult {
   ok?: boolean;
   error?: string;
   job?: ConfirmResponseJob;
+  workflow?: { id?: string; status?: string };
+  jobs?: ConfirmResponseJob[];
   textOffer?: { offer?: { num?: number } };
   cancellation?: { job?: ConfirmResponseJob };
   message?: string;
@@ -147,6 +152,12 @@ export function ConfirmCard({
               ? started.params.num
               : data.result.textOffer?.offer?.num;
           useChatJobsStore.getState().startJob(started.id, started.type, num);
+        }
+        for (const child of data.result.jobs ?? []) {
+          if (child.id && child.type && (child.status === 'queued' || child.status === 'running')) {
+            const num = typeof child.params?.num === 'number' ? child.params.num : undefined;
+            useChatJobsStore.getState().startJob(child.id, child.type, num);
+          }
         }
         const cancelled = data.result.cancellation?.job;
         if (cancelled?.id && cancelled.status === 'cancelled') {

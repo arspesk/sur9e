@@ -8,6 +8,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   const { startScheduler } = await import('./lib/server/jobs/scheduler');
+  const { reconcileWorkflows } = await import('./lib/server/workflows');
   const { ROOT } = await import('./lib/root');
+  reconcileWorkflows(ROOT);
   startScheduler(ROOT);
 }

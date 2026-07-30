@@ -186,7 +186,8 @@ describe('ConfirmCard', () => {
               result: {
                 ok: true,
                 textOffer: { offer: { num: 42 } },
-                message: 'Offer #42 created. Screening and evaluation started.',
+                message:
+                  'Offer #42 created. Screening started; evaluation will start after screening succeeds.',
                 links: [{ label: 'Offer #42', href: '/report/42' }],
               },
             }),
@@ -205,8 +206,67 @@ describe('ConfirmCard', () => {
 
     fireEvent.click(getByRole('button', { name: 'Create, screen, and evaluate offer' }));
 
-    await findByText('Offer #42 created. Screening and evaluation started.');
+    await findByText(
+      'Offer #42 created. Screening started; evaluation will start after screening succeeds.',
+    );
     expect(await findByRole('link', { name: 'Offer #42' })).toHaveAttribute('href', '/report/42');
+  });
+
+  it('registers every initially running child returned by a workflow approval', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                workflow: { id: 'fedcba9876543210', status: 'running' },
+                jobs: [
+                  {
+                    id: '0123456789abcdef',
+                    type: 'evaluate',
+                    status: 'queued',
+                    params: { num: 42 },
+                  },
+                  {
+                    id: '1111111111111111',
+                    type: 'evaluate',
+                    status: 'running',
+                    params: { num: 43 },
+                  },
+                ],
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const { getByRole } = render(
+      <ConfirmCard
+        token="tok-workflow"
+        summary="Run evaluation for 2 targets"
+        meta=""
+        outcome="pending"
+        action="start-workflow"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Run evaluation for 2 targets' }));
+
+    await waitFor(() => {
+      expect(useChatJobsStore.getState().jobs['0123456789abcdef']).toMatchObject({
+        kind: 'evaluate',
+        num: 42,
+      });
+      expect(useChatJobsStore.getState().jobs['1111111111111111']).toMatchObject({
+        kind: 'evaluate',
+        num: 43,
+      });
+    });
   });
 
   it('surfaces the server reason when an approved action fails to execute', async () => {

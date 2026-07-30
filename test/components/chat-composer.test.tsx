@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from '@/features/chat/chat-composer';
 import { filterSlashItems, SLASH_ITEMS } from '@/features/chat/slash-popover';
+import { CHAT_DISCOVERABLE_MODES } from '@/lib/modes/catalog';
 import { DRAFT_OVERRIDE_KEY, useChatStore } from '@/stores/chat-store';
 
 // The composer mounts useApplications (a TanStack Query hook) for the
@@ -188,6 +189,12 @@ describe('ChatComposer', () => {
     expect(listbox.querySelectorAll('[role="option"]').length).toBe(SLASH_ITEMS.length);
   });
 
+  it('keeps slash discovery in parity with the canonical mode catalog', () => {
+    expect(SLASH_ITEMS.map(item => item.command)).toEqual(
+      CHAT_DISCOVERABLE_MODES.map(mode => mode.id),
+    );
+  });
+
   it('arrow keys move the active option and Enter inserts the command', () => {
     const onSend = vi.fn();
     render(
@@ -202,8 +209,7 @@ describe('ChatComposer', () => {
     fireEvent.change(textarea(), { target: { value: '/' } });
     fireEvent.keyDown(textarea(), { key: 'ArrowDown' });
     fireEvent.keyDown(textarea(), { key: 'Enter' });
-    // Second item in SLASH_ITEMS is /offers.
-    expect(textarea().value).toBe('/offers ');
+    expect(textarea().value).toBe(`/${SLASH_ITEMS[1]?.command} `);
     expect(onSend).not.toHaveBeenCalled();
   });
 

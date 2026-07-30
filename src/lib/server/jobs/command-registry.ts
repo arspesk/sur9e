@@ -294,10 +294,11 @@ function _buildCommand(
     ].join(' && ');
     return { cmd: '/bin/bash', args: ['-c', script] };
   }
-  if (type === 'tailor-cv' || type === 'cover-letter') {
+  if (type === 'tailor-cv' || type === 'cover-letter' || type === 'latex') {
     const num = params && params.num;
     if (!Number.isInteger(num)) return null;
-    const label = type === 'tailor-cv' ? 'tailored CV' : 'cover letter';
+    const label =
+      type === 'tailor-cv' ? 'tailored CV' : type === 'latex' ? 'LaTeX CV' : 'cover letter';
     const script = [
       `set -o pipefail`,
       `printf "[1/2] Generating ${label} for offer #${num}\\n"`,

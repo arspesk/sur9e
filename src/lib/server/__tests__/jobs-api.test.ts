@@ -84,6 +84,19 @@ describe('jobs/api — schema boundary', () => {
     await waitForTerminal(root, job.id);
   });
 
+  it('stamps parent workflow metadata onto child job records', async () => {
+    const job = createJob(root, 'evaluate', {
+      num: 42,
+      workflow_id: '0123456789abcdef',
+      workflow_step_id: 'target-0-0-evaluate',
+    });
+
+    expect(job).toMatchObject({
+      workflowId: '0123456789abcdef',
+      workflowStepId: 'target-0-0-evaluate',
+    });
+  });
+
   it('createJob with invalid num persists an error record', async () => {
     const job = createJob(root, 'tailor-cv', { num: 'oops' as unknown as number });
     // Poll instead of a fixed sleep — under full-suite parallel load a 50ms

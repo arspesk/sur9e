@@ -8,8 +8,10 @@ import {
   describeCreateOfferFromText,
   describeTextOfferResult,
 } from '@/lib/server/chat/confirms';
-import { startJob } from '@/lib/server/jobs';
+import { startChatJob } from '@/lib/server/chat/job-start';
+import { getJob } from '@/lib/server/jobs';
 import { createOrReuseTextOffer, previewTextOffer } from '@/lib/server/text-offers';
+import { assertWorkflowStartable, createWorkflow, planWorkflow } from '@/lib/server/workflows';
 import { revalidatePath } from '@/server/revalidate';
 
 export async function POST(request: Request) {
@@ -21,6 +23,15 @@ export async function POST(request: Request) {
   const { terminalApproved, ...input } = parsed.data;
   try {
     const preview = previewTextOffer(ROOT, input.text);
+    if (input.modes) {
+      const previewNum = preview.offer?.num ?? Number.MAX_SAFE_INTEGER;
+      const plan = planWorkflow({
+        targets: [{ num: previewNum }],
+        modes: input.modes,
+        evaluatedOfferNums: new Set(),
+      });
+      assertWorkflowStartable(ROOT, plan);
+    }
     const { summary, meta } = describeCreateOfferFromText(preview, input);
     const turnId = request.headers.get('x-sur9e-turn');
     if (turnId) {
@@ -38,15 +49,29 @@ export async function POST(request: Request) {
     }
     const textOffer = createOrReuseTextOffer(ROOT, input);
     const job = input.startKind
-      ? startJob(ROOT, { kind: input.startKind, params: { num: textOffer.offer.num } })
+      ? startChatJob(ROOT, input.startKind, { num: textOffer.offer.num })
       : undefined;
-    const presentation = describeTextOfferResult(textOffer, input.startKind, job);
+    const workflow = input.modes
+      ? createWorkflow(ROOT, {
+          targets: [{ num: textOffer.offer.num }],
+          modes: input.modes,
+        })
+      : undefined;
+    const jobs = workflow
+      ? workflow.steps.flatMap(step => {
+          if (!step.jobId) return [];
+          const child = getJob(ROOT, step.jobId);
+          return child ? [child] : [];
+        })
+      : undefined;
+    const presentation = describeTextOfferResult(textOffer, input.startKind, job, workflow);
     revalidatePath('/offers');
     return Response.json({
       created: !textOffer.reused,
       reused: textOffer.reused,
       offer: textOffer.offer,
       ...(job ? { job } : {}),
+      ...(workflow ? { workflow, jobs } : {}),
       ...presentation,
     });
   } catch (error) {

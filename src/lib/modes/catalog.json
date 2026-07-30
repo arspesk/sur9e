@@ -1,0 +1,173 @@
+{
+  "modes": {
+    "apply": {
+      "label": "Apply",
+      "description": "Hand off a live application form without submitting it",
+      "execution": "handoff",
+      "scope": "offer"
+    },
+    "batch-evaluate": {
+      "label": "Batch evaluate",
+      "description": "Evaluate screened offers above the configured threshold",
+      "execution": "background",
+      "scope": "system",
+      "singleJob": true
+    },
+    "cover-letter": {
+      "label": "Cover letter",
+      "description": "Generate a tailored cover-letter PDF",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "singleJob": true
+    },
+    "enrich": {
+      "label": "Enrich profile",
+      "description": "Hand off a guided CV and profile enrichment interview",
+      "execution": "handoff",
+      "scope": "conversation"
+    },
+    "evaluate-offer": {
+      "label": "Evaluate offer",
+      "description": "Screen a new offer, then evaluate it",
+      "execution": "composite",
+      "scope": "offer",
+      "expandsTo": ["screen", "evaluate"]
+    },
+    "evaluate": {
+      "label": "Evaluate",
+      "description": "Run a full evaluation for one offer",
+      "execution": "background",
+      "scope": "offer",
+      "mutatesReport": true,
+      "singleJob": true
+    },
+    "follow-up": {
+      "label": "Follow up",
+      "description": "Review follow-up cadence and draft the next message",
+      "execution": "inline",
+      "scope": "conversation"
+    },
+    "interview-prep": {
+      "label": "Interview prep",
+      "description": "Build a company-specific interview brief",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "mutatesReport": true,
+      "singleJob": true
+    },
+    "latex": {
+      "label": "LaTeX CV",
+      "description": "Export a tailored CV as LaTeX and PDF",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "singleJob": true
+    },
+    "negotiate": {
+      "label": "Negotiate",
+      "description": "Build a compensation negotiation strategy",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "mutatesReport": true,
+      "singleJob": true
+    },
+    "offers": {
+      "label": "Compare offers",
+      "description": "Compare several tracked offers",
+      "execution": "inline",
+      "scope": "conversation"
+    },
+    "patterns": {
+      "label": "Patterns",
+      "description": "Analyze rejection and targeting patterns",
+      "execution": "inline",
+      "scope": "conversation"
+    },
+    "process-queue": {
+      "label": "Process queue",
+      "description": "Screen every pending saved URL",
+      "execution": "composite",
+      "scope": "system",
+      "expandsTo": ["screen"]
+    },
+    "project": {
+      "label": "Project",
+      "description": "Evaluate a portfolio project",
+      "execution": "inline",
+      "scope": "conversation"
+    },
+    "reach-out": {
+      "label": "Reach out",
+      "description": "Research contacts and draft outreach",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "mutatesReport": true,
+      "singleJob": true
+    },
+    "research": {
+      "label": "Research",
+      "description": "Research a company deeply",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "mutatesReport": true,
+      "singleJob": true
+    },
+    "scan": {
+      "label": "Scan",
+      "description": "Scan configured portals and sources for new offers",
+      "execution": "background",
+      "scope": "system",
+      "singleJob": true
+    },
+    "screen": {
+      "label": "Screen",
+      "description": "Run a quick fit screen for an offer",
+      "execution": "background",
+      "scope": "offer",
+      "singleJob": true
+    },
+    "screen-evaluate": {
+      "label": "Screen then evaluate",
+      "description": "Run separate screening and evaluation jobs in sequence",
+      "execution": "composite",
+      "scope": "offer",
+      "expandsTo": ["screen", "evaluate"],
+      "legacyStartJob": true,
+      "singleJob": true
+    },
+    "tailor-cv": {
+      "label": "Tailor CV",
+      "description": "Generate a tailored CV PDF",
+      "execution": "background",
+      "scope": "offer",
+      "requiresEvaluation": true,
+      "singleJob": true
+    },
+    "tracker": {
+      "label": "Tracker",
+      "description": "Review or update application status",
+      "execution": "inline",
+      "scope": "conversation"
+    },
+    "training": {
+      "label": "Training",
+      "description": "Evaluate a course or certification",
+      "execution": "inline",
+      "scope": "conversation"
+    }
+  },
+  "aliases": {
+    "auto-pipeline": "evaluate-offer",
+    "contact": "reach-out",
+    "deep": "research",
+    "followup": "follow-up",
+    "outreach": "reach-out",
+    "pdf": "tailor-cv",
+    "pipeline": "process-queue"
+  }
+}

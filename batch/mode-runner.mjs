@@ -31,8 +31,10 @@ const SPEC_LOADERS = {
   "reach-out": () => import("./specs/sections.mjs").then((m) => m.outreachSpec),
   negotiate: () => import("./specs/sections.mjs").then((m) => m.negotiateSpec),
   "tailor-cv": () => import("./specs/pdf.mjs").then((m) => m.tailorCvSpec),
+  latex: () => import("./specs/latex.mjs").then((m) => m.latexSpec),
   "cover-letter": () => import("./specs/pdf.mjs").then((m) => m.coverLetterSpec),
 };
+export const MODE_RUNNER_MODE_IDS = Object.freeze(Object.keys(SPEC_LOADERS));
 
 function normalizeModeId(modeId) {
   return modeId === "outreach" ? "reach-out" : modeId;

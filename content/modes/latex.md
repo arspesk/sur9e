@@ -20,8 +20,8 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 9. Reorder experience bullets by JD relevance
 10. Inject keywords naturally into existing achievements
 11. Generate the `.tex` file using `content/templates/cv-template.tex`
-12. Write to `artifacts/output/cv-{candidate}-{company}-{num}-{YYYY-MM-DD}.tex` (`{num}` = the offer's tracker number, so two offers at one company never overwrite each other)
-13. Run: `node generate-latex.mjs artifacts/output/cv-{candidate}-{company}-{num}-{YYYY-MM-DD}.tex artifacts/output/cv-{candidate}-{company}-{num}-{YYYY-MM-DD}.pdf`
+12. Write to `artifacts/output/cv-latex-{candidate}-{company}-{num}-{YYYY-MM-DD}.tex` (`{num}` = the offer's tracker number, and the `cv-latex` prefix keeps this export distinct from the standard tailored CV)
+13. Run: `node cli/generate-latex.mjs artifacts/output/cv-latex-{candidate}-{company}-{num}-{YYYY-MM-DD}.tex artifacts/output/cv-latex-{candidate}-{company}-{num}-{YYYY-MM-DD}.pdf`
 14. Report: .tex path, .pdf path, file sizes, section count, keyword coverage %
 
 **Requires:** `pdflatex` on PATH (MiKTeX or TeX Live). First compilation may auto-install missing LaTeX packages via MiKTeX.

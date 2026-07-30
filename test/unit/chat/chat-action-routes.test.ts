@@ -52,6 +52,8 @@ type StartJobRoute = typeof import('@/app/api/chat/actions/start-job/route');
 type SetStatusRoute = typeof import('@/app/api/chat/actions/set-status/route');
 type CancelJobRoute = typeof import('@/app/api/chat/actions/cancel-job/route');
 type CreateTextOfferRoute = typeof import('@/app/api/chat/actions/create-offer-from-text/route');
+type StartWorkflowRoute = typeof import('@/app/api/chat/actions/start-workflow/route');
+type CancelWorkflowRoute = typeof import('@/app/api/chat/actions/cancel-workflow/route');
 
 describe('chat action routes', () => {
   let root: string;
@@ -59,6 +61,8 @@ describe('chat action routes', () => {
   let setStatusRoute: SetStatusRoute;
   let cancelJobRoute: CancelJobRoute;
   let createTextOfferRoute: CreateTextOfferRoute;
+  let startWorkflowRoute: StartWorkflowRoute;
+  let cancelWorkflowRoute: CancelWorkflowRoute;
 
   beforeEach(async () => {
     root = seedRoot();
@@ -68,6 +72,8 @@ describe('chat action routes', () => {
     setStatusRoute = await import('@/app/api/chat/actions/set-status/route');
     cancelJobRoute = await import('@/app/api/chat/actions/cancel-job/route');
     createTextOfferRoute = await import('@/app/api/chat/actions/create-offer-from-text/route');
+    startWorkflowRoute = await import('@/app/api/chat/actions/start-workflow/route');
+    cancelWorkflowRoute = await import('@/app/api/chat/actions/cancel-workflow/route');
     emitTurnEventMock.mockReset();
     spawnJobMock.mockReset();
     revalidatePathMock.mockReset();
@@ -147,6 +153,46 @@ describe('chat action routes', () => {
       expect(spawnJobMock).toHaveBeenCalledTimes(1);
     });
 
+    it('expands an explicit URL screen-and-evaluate request into sequential jobs', async () => {
+      const url = 'https://jobs.example.com/roles/123';
+      const res = await startJobRoute.POST(
+        postJson('http://localhost/api/chat/actions/start-job', {
+          kind: 'screen-evaluate',
+          params: { url },
+          terminalApproved: true,
+        }),
+      );
+      const body = await res.json();
+
+      expect(body.started).toBe(true);
+      expect(body.job).toMatchObject({
+        type: 'screen',
+        params: { url, then: 'evaluate' },
+      });
+      expect(body.message).toBe(
+        'Screening started; evaluation will start after screening succeeds.',
+      );
+      await flushImmediate();
+      expect(spawnJobMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('cannot smuggle evaluation into a screen-only request through params', async () => {
+      const url = 'https://jobs.example.com/roles/456';
+      const res = await startJobRoute.POST(
+        postJson('http://localhost/api/chat/actions/start-job', {
+          kind: 'screen',
+          params: { url, then: 'evaluate', next_job_id: 'attacker-controlled' },
+          terminalApproved: true,
+        }),
+      );
+      const body = await res.json();
+
+      expect(body.started).toBe(true);
+      expect(body.job).toMatchObject({ type: 'screen', params: { url } });
+      expect(body.job.params).not.toHaveProperty('then');
+      expect(body.job.params).not.toHaveProperty('next_job_id');
+    });
+
     it('rejects an unknown kind with 400', async () => {
       const res = await startJobRoute.POST(
         postJson('http://localhost/api/chat/actions/start-job', { kind: 'nonsense' }),
@@ -224,7 +270,7 @@ describe('chat action routes', () => {
       expect(spawnJobMock).toHaveBeenCalledTimes(1);
     });
 
-    it('starts the recommended screen + evaluate workflow for pasted text', async () => {
+    it('starts screening first and queues evaluation as a separate successor job', async () => {
       const res = await createTextOfferRoute.POST(
         postJson('http://localhost/api/chat/actions/create-offer-from-text', {
           text: 'Own platform reliability.',
@@ -237,13 +283,166 @@ describe('chat action routes', () => {
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(body.job).toMatchObject({
-        type: 'screen-evaluate',
-        params: { num: body.offer.num },
+        type: 'screen',
+        params: { num: body.offer.num, then: 'evaluate' },
       });
-      expect(body.message).toMatch(/screening and evaluation started/i);
+      expect(body.message).toMatch(/evaluation will start after screening succeeds/i);
       expect(body.links).toEqual([
         { label: `Offer #${body.offer.num}`, href: `/report/${body.offer.num}` },
       ]);
+    });
+
+    it('rejects combining legacy startKind with workflow modes', async () => {
+      const res = await createTextOfferRoute.POST(
+        postJson('http://localhost/api/chat/actions/create-offer-from-text', {
+          text: 'Own platform reliability.',
+          company: 'Acme',
+          role: 'Staff Engineer',
+          startKind: 'screen',
+          modes: ['screen', 'evaluate'],
+          terminalApproved: true,
+        }),
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects an invalid workflow mode before creating or confirming the offer', async () => {
+      const res = await createTextOfferRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/create-offer-from-text',
+          {
+            text: 'Own platform reliability.',
+            company: 'Acme',
+            role: 'Staff Engineer',
+            modes: ['tracker'],
+          },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+
+      expect(res.status).toBe(400);
+      expect(emitTurnEventMock).not.toHaveBeenCalled();
+      expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).not.toContain(
+        'Staff Engineer',
+      );
+    });
+  });
+
+  describe('workflow action routes', () => {
+    it('parks the complete workflow behind one chat confirmation', async () => {
+      const res = await startWorkflowRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/start-workflow',
+          {
+            targets: [{ num: 1001 }],
+            modes: ['evaluate', 'cover-letter'],
+          },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.needsConfirm).toBe(true);
+      expect(body.summary).toContain('2 modes');
+      expect(body.meta).toContain('evaluation');
+      expect(emitTurnEventMock).toHaveBeenCalledWith(
+        'turn-1',
+        expect.objectContaining({ kind: 'start-workflow' }),
+      );
+      expect(readdirSync(join(root, 'data/jobs'))).toHaveLength(0);
+    });
+
+    it('starts and persists a terminal-approved workflow', async () => {
+      const res = await startWorkflowRoute.POST(
+        postJson('http://localhost/api/chat/actions/start-workflow', {
+          targets: [{ num: 1001 }],
+          modes: ['screen', 'evaluate'],
+          terminalApproved: true,
+        }),
+      );
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.started).toBe(true);
+      expect(body.workflow.status).toBe('running');
+      expect(body.jobs).toEqual([expect.objectContaining({ type: 'screen' })]);
+      expect(
+        readdirSync(join(root, 'data/workflows')).filter(name => name.endsWith('.json')),
+      ).toHaveLength(1);
+    });
+
+    it('rejects inline modes before creating a confirmation', async () => {
+      const res = await startWorkflowRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/start-workflow',
+          {
+            targets: [{ num: 1001 }],
+            modes: ['tracker'],
+          },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+
+      expect(res.status).toBe(400);
+      expect(emitTurnEventMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an incompatible running singleton before confirmation', async () => {
+      writeFileSync(
+        join(root, 'data/jobs', '0123456789abcdef.json'),
+        JSON.stringify({
+          id: '0123456789abcdef',
+          type: 'screen',
+          status: 'queued',
+          params: { url: 'https://example.com/jobs/already-running' },
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+          output: '',
+          error: null,
+          exitCode: null,
+        }),
+      );
+
+      const res = await startWorkflowRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/start-workflow',
+          {
+            targets: [{ url: 'https://example.com/jobs/new' }],
+            modes: ['screen'],
+          },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain('screen is already running');
+      expect(emitTurnEventMock).not.toHaveBeenCalled();
+    });
+
+    it('confirmation-gates workflow cancellation', async () => {
+      const started = await startWorkflowRoute.POST(
+        postJson('http://localhost/api/chat/actions/start-workflow', {
+          targets: [{ num: 1001 }],
+          modes: ['evaluate'],
+          terminalApproved: true,
+        }),
+      );
+      const workflowId = (await started.json()).workflow.id;
+      const res = await cancelWorkflowRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/cancel-workflow',
+          { workflowId },
+          { 'x-sur9e-turn': 'turn-1' },
+        ),
+      );
+
+      expect((await res.json()).needsConfirm).toBe(true);
+      expect(emitTurnEventMock).toHaveBeenCalledWith(
+        'turn-1',
+        expect.objectContaining({ kind: 'cancel-workflow' }),
+      );
     });
   });
 

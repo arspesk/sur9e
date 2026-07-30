@@ -116,7 +116,15 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
     // so confirm events persisted before this field existed still parse; the
     // card falls back to a generic "Confirmed" label when it's absent.
     kind: z
-      .enum(['start-job', 'cancel-job', 'create-offer-from-text', 'set-status', 'edit-report'])
+      .enum([
+        'start-job',
+        'start-workflow',
+        'cancel-job',
+        'cancel-workflow',
+        'create-offer-from-text',
+        'set-status',
+        'edit-report',
+      ])
       .optional(),
   }),
   z.object({

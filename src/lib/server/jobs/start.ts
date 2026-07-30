@@ -12,6 +12,7 @@ import { createJob, findActiveJob, type JobRecord, type JobType, listActiveJobs 
 export const JOB_KIND_BY_NUM = new Set<JobType>([
   'evaluate',
   'tailor-cv',
+  'latex',
   'cover-letter',
   'research',
   'interview-prep',
@@ -66,6 +67,49 @@ export interface StartJobInput {
   params?: Record<string, unknown>;
 }
 
+/** Read-only active-job preflight shared by standalone starts and workflow
+ * confirmation planning. An identical conflict can be reattached by the
+ * workflow executor; incompatible singleton work must be rejected before
+ * the user approves a plan that cannot start. */
+export function findJobConflict(
+  rootPath: string,
+  kind: JobType,
+  params: Record<string, unknown>,
+): JobConflictPayload | null {
+  if (JOB_KIND_BY_NUM.has(kind)) {
+    const num = params.num;
+    const duplicate = listActiveJobs(rootPath, kind).find(
+      job => Number((job.params as Record<string, unknown> | undefined)?.num) === num,
+    );
+    if (duplicate) {
+      const label = kind.replace(/-/g, ' ');
+      return {
+        conflict: true,
+        message: `a ${label} job for offer #${num} is already running`,
+        job: duplicate,
+      };
+    }
+  }
+
+  if (JOB_KIND_SINGLETON.has(kind)) {
+    const kindsToCheck: JobType[] = ['scan', 'screen', 'screen-evaluate', 'batch-evaluate'];
+    for (const activeKind of kindsToCheck) {
+      const active = findActiveJob(rootPath, activeKind);
+      if (active) {
+        const noun =
+          activeKind === 'scan'
+            ? 'scan'
+            : activeKind === 'batch-evaluate'
+              ? 'batch evaluation'
+              : 'screen';
+        return { conflict: true, message: `a ${noun} is already running`, job: active };
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Start a background job. Returns the freshly-created JobRecord on success.
  *
@@ -101,39 +145,6 @@ export function startJob(
     if (!findByNum(rootPath, num as number)) {
       throw new Error(`num not found: ${num}`);
     }
-    // Block a duplicate of the SAME per-offer kind for the SAME offer. Two
-    // concurrent cover-letter / evaluate / tailor-cv / … runs on one offer are
-    // wasted paid work and race on the same report/output files. (Singleton
-    // kinds get their own family guard below; this covers the per-offer kinds.)
-    const duplicate = listActiveJobs(rootPath, kind).find(
-      j => Number((j.params as Record<string, unknown> | undefined)?.num) === num,
-    );
-    if (duplicate) {
-      const label = (kind as string).replace(/-/g, ' ');
-      return {
-        conflict: true,
-        message: `a ${label} job for offer #${num} is already running`,
-        job: duplicate,
-      };
-    }
-  }
-
-  if (JOB_KIND_SINGLETON.has(kind)) {
-    // scan, batch-evaluate, and the screen pair all run the screen.mjs +
-    // merge-tracker chain over the same unlocked state (pipeline.md,
-    // screened-urls.txt, tracker-additions/), so scan/batch-evaluate block
-    // the whole family; a single-url screen only blocks its screen sibling.
-    const kindsToCheck: JobType[] =
-      kind === 'screen' || kind === 'screen-evaluate'
-        ? ['screen', 'screen-evaluate']
-        : ['scan', 'screen', 'screen-evaluate', 'batch-evaluate'];
-    for (const k of kindsToCheck) {
-      const active = findActiveJob(rootPath, k);
-      if (active) {
-        const noun = k === 'scan' ? 'scan' : k === 'batch-evaluate' ? 'batch evaluation' : 'screen';
-        return { conflict: true, message: `a ${noun} is already running`, job: active };
-      }
-    }
   }
 
   if (kind === 'screen' || kind === 'screen-evaluate') {
@@ -161,6 +172,9 @@ export function startJob(
       min_score: Number.isFinite(params.min_score) ? params.min_score : 3,
     };
   }
+
+  const conflict = findJobConflict(rootPath, kind, finalParams);
+  if (conflict) return conflict;
 
   return createJob(rootPath, kind, finalParams);
 }

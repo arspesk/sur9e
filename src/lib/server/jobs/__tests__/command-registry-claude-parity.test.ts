@@ -114,6 +114,13 @@ describe('command-registry Claude parity (lock command shape across the refactor
     expect(built!.args[1]).toContain('node batch/mode-runner.mjs cover-letter --num 42');
   });
 
+  it('latex — routes through mode-runner', () => {
+    const built = buildCommand('latex', { num: 42 }, root);
+    expect(built).not.toBeNull();
+    expect(built!.args[1]).toContain('set -o pipefail');
+    expect(built!.args[1]).toContain('node batch/mode-runner.mjs latex --num 42');
+  });
+
   it('screen-evaluate — routes through screen + mode-runner + merge-tracker', () => {
     const built = buildCommand(
       'screen-evaluate',

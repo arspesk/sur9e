@@ -17,17 +17,20 @@ import { jobEstimateLabel } from '../../job-types';
 import type { ApplicationRow } from '../../schemas/applications';
 import type { TextOfferStartKind } from '../../schemas/chat-actions';
 import type { JobType } from '../../schemas/jobs';
+import type { WorkflowRecord } from '../../schemas/workflows';
 import { updateStatus } from '../applications';
 import {
+  getJob,
   type JobConflictPayload,
   type JobRecord,
   type JobSetupRequiredPayload,
-  startJob,
 } from '../jobs';
 import { type CancelJobResult, cancelJob } from '../jobs/lifecycle';
 import { resolveModeRuntime } from '../providers/registry';
 import { applyReportBodyEdit, parseFrontmatter, saveReport } from '../reports';
 import { createOrReuseTextOffer, type TextOfferResult } from '../text-offers';
+import { cancelWorkflow, createWorkflow, getWorkflow, type WorkflowPlan } from '../workflows';
+import { startChatJob } from './job-start';
 import { appendConfirmResolution } from './store';
 import { emitTurnEvent } from './turn-runner';
 
@@ -35,7 +38,9 @@ const TTL_MS = 15 * 60 * 1000;
 
 export type ConfirmKind =
   | 'start-job'
+  | 'start-workflow'
   | 'cancel-job'
+  | 'cancel-workflow'
   | 'create-offer-from-text'
   | 'set-status'
   | 'edit-report';
@@ -43,6 +48,16 @@ export type ConfirmKind =
 export interface StartJobPayload {
   kind: JobType;
   params?: Record<string, unknown>;
+}
+
+export interface StartWorkflowPayload {
+  targets: Array<{ num: number } | { url: string }>;
+  modes: string[];
+  guidance?: string;
+}
+
+export interface CancelWorkflowPayload {
+  workflowId: string;
 }
 
 export interface SetStatusPayload {
@@ -59,6 +74,7 @@ export interface CreateOfferFromTextPayload {
   company?: string;
   role?: string;
   startKind?: TextOfferStartKind;
+  modes?: string[];
 }
 
 export interface EditReportPayload {
@@ -72,7 +88,9 @@ export interface EditReportPayload {
 
 type ConfirmPayload =
   | StartJobPayload
+  | StartWorkflowPayload
   | CancelJobPayload
+  | CancelWorkflowPayload
   | CreateOfferFromTextPayload
   | SetStatusPayload
   | EditReportPayload;
@@ -153,12 +171,16 @@ export interface ConfirmResultPresentation {
 
 type ConfirmExecutionPayload =
   | { job: JobRecord | JobConflictPayload | JobSetupRequiredPayload }
+  | { workflow: WorkflowRecord; jobs: JobRecord[] }
+  | { workflow: WorkflowRecord; cancelledWorkflow: boolean }
   | { updated: ApplicationRow | undefined }
   | { report: { num: number } }
   | { cancellation: CancelJobResult }
   | {
       textOffer: TextOfferResult;
       job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload;
+      workflow?: WorkflowRecord;
+      jobs?: JobRecord[];
     };
 
 export type ConfirmExecutionResult =
@@ -185,10 +207,24 @@ function executionFor(
     const status = result.job && 'status' in result.job ? result.job.status : undefined;
     return status === 'queued' || status === 'running' ? 'succeeded' : 'unchanged';
   }
+  if (kind === 'start-workflow' && 'workflow' in result && result.workflow) {
+    return result.workflow.status === 'error' ? 'failed' : 'succeeded';
+  }
+  if (kind === 'cancel-workflow' && 'cancelledWorkflow' in result) {
+    return result.cancelledWorkflow ? 'succeeded' : 'unchanged';
+  }
   if (kind === 'set-status' && 'updated' in result) {
     return result.updated ? 'succeeded' : 'unchanged';
   }
   return 'succeeded';
+}
+
+function jobsForWorkflow(root: string, workflow: WorkflowRecord): JobRecord[] {
+  return workflow.steps.flatMap(step => {
+    if (!step.jobId) return [];
+    const job = getJob(root, step.jobId);
+    return job ? [job] : [];
+  });
 }
 
 /**
@@ -222,22 +258,51 @@ export function resolveConfirm(
     try {
       if (rec.kind === 'start-job') {
         const p = rec.payload as StartJobPayload;
-        const job = startJob(root, { kind: p.kind, params: p.params });
+        const job = startChatJob(root, p.kind, p.params);
         result = { ok: true, job, ...describeStartedJob(p.kind, p.params, job) };
+      } else if (rec.kind === 'start-workflow') {
+        const p = rec.payload as StartWorkflowPayload;
+        const workflow = createWorkflow(root, p);
+        const jobs = jobsForWorkflow(root, workflow);
+        result = {
+          ok: true,
+          workflow,
+          jobs,
+          ...describeStartedWorkflow(workflow),
+        };
       } else if (rec.kind === 'cancel-job') {
         const p = rec.payload as CancelJobPayload;
         result = { ok: true, cancellation: cancelJob(root, p.jobId) };
+      } else if (rec.kind === 'cancel-workflow') {
+        const p = rec.payload as CancelWorkflowPayload;
+        const before = getWorkflow(root, p.workflowId);
+        if (!before) throw new Error(`workflow not found: ${p.workflowId}`);
+        const wasActive = before.status === 'queued' || before.status === 'running';
+        const workflow = cancelWorkflow(root, p.workflowId);
+        result = {
+          ok: true,
+          workflow,
+          cancelledWorkflow: wasActive,
+          message: wasActive
+            ? `Workflow ${workflow.id} cancelled.`
+            : `Workflow ${workflow.id} was already ${workflow.status}.`,
+        };
       } else if (rec.kind === 'create-offer-from-text') {
         const p = rec.payload as CreateOfferFromTextPayload;
         const textOffer = createOrReuseTextOffer(root, p);
         const job = p.startKind
-          ? startJob(root, { kind: p.startKind, params: { num: textOffer.offer.num } })
+          ? startChatJob(root, p.startKind, { num: textOffer.offer.num })
           : undefined;
+        const workflow = p.modes
+          ? createWorkflow(root, { targets: [{ num: textOffer.offer.num }], modes: p.modes })
+          : undefined;
+        const jobs = workflow ? jobsForWorkflow(root, workflow) : undefined;
         result = {
           ok: true,
           textOffer,
           ...(job ? { job } : {}),
-          ...describeTextOfferResult(textOffer, p.startKind, job),
+          ...(workflow ? { workflow, jobs } : {}),
+          ...describeTextOfferResult(textOffer, p.startKind, job, workflow),
         };
       } else if (rec.kind === 'edit-report') {
         const p = rec.payload as EditReportPayload;
@@ -313,6 +378,7 @@ function persistResolution(
 const KIND_LABELS: Record<JobType, string> = {
   evaluate: 'evaluation',
   'tailor-cv': 'CV tailoring',
+  latex: 'LaTeX CV generation',
   'cover-letter': 'cover letter',
   research: 'company research',
   'interview-prep': 'interview prep',
@@ -321,11 +387,28 @@ const KIND_LABELS: Record<JobType, string> = {
   scan: 'portal scan',
   'batch-evaluate': 'batch evaluation',
   screen: 'screening',
-  'screen-evaluate': 'screen + evaluate',
+  'screen-evaluate': 'screening → evaluation',
 };
 
 function offerLink(num: number): ConfirmResultLink[] {
   return [{ label: `Offer #${num}`, href: `/report/${num}` }];
+}
+
+function workflowLinks(workflow: WorkflowRecord): ConfirmResultLink[] {
+  return workflow.targets.flatMap(target =>
+    'num' in target && typeof target.num === 'number' && Number.isInteger(target.num)
+      ? offerLink(target.num)
+      : [],
+  );
+}
+
+export function describeStartedWorkflow(workflow: WorkflowRecord): ConfirmResultPresentation {
+  const targetCount = workflow.targets.length;
+  const modeCount = workflow.requestedModes.length;
+  return {
+    message: `Workflow started: ${modeCount} mode${modeCount === 1 ? '' : 's'} across ${targetCount || 1} target${targetCount === 1 ? '' : 's'}.`,
+    links: workflowLinks(workflow),
+  };
 }
 
 export function describeStartedJob(
@@ -336,6 +419,15 @@ export function describeStartedJob(
   const num = Number.isInteger(params?.num) ? (params?.num as number) : null;
   const links = num == null ? undefined : offerLink(num);
   if (job && 'conflict' in job) return { message: job.message, ...(links ? { links } : {}) };
+  if (kind === 'screen-evaluate') {
+    return {
+      message:
+        num == null
+          ? 'Screening started; evaluation will start after screening succeeds.'
+          : `Screening started for offer #${num}; evaluation will start after screening succeeds.`,
+      ...(links ? { links } : {}),
+    };
+  }
   const label = KIND_LABELS[kind] ?? kind;
   return {
     message:
@@ -350,14 +442,17 @@ export function describeTextOfferResult(
   textOffer: TextOfferResult,
   startKind?: TextOfferStartKind,
   job?: JobRecord | JobConflictPayload | JobSetupRequiredPayload,
+  workflow?: WorkflowRecord,
 ): ConfirmResultPresentation {
   const num = textOffer.offer.num;
   const created = textOffer.reused ? 'reused' : 'created';
   let followup = '';
-  if (startKind && job && 'conflict' in job) {
+  if (workflow) {
+    followup = ` Workflow started with ${workflow.requestedModes.join(' → ')}.`;
+  } else if (startKind && job && 'conflict' in job) {
     followup = ` ${job.message}`;
   } else if (startKind === 'screen-evaluate') {
-    followup = ' Screening and evaluation started.';
+    followup = ' Screening started; evaluation will start after screening succeeds.';
   } else if (startKind === 'screen') {
     followup = ' Screening started.';
   } else if (startKind) {
@@ -366,6 +461,56 @@ export function describeTextOfferResult(
   return {
     message: `Offer #${num} ${created}.${followup}`,
     links: offerLink(num),
+  };
+}
+
+export function describeStartWorkflow(
+  input: StartWorkflowPayload,
+  plan?: WorkflowPlan,
+): {
+  summary: string;
+  meta: string;
+} {
+  const targetCount = input.targets.length || 1;
+  const modeCount = input.modes.length;
+  const labels = input.modes.map(mode => KIND_LABELS[mode as JobType] ?? mode);
+  let phaseLabel = labels.join(' → ');
+  if (plan) {
+    const depths = new Map<string, number>();
+    const phases = new Map<number, string[]>();
+    for (const step of plan.steps) {
+      const depth =
+        step.dependsOn.length === 0
+          ? 0
+          : Math.max(...step.dependsOn.map(id => depths.get(id) ?? 0)) + 1;
+      depths.set(step.id, depth);
+      const label = KIND_LABELS[step.mode as JobType] ?? step.mode;
+      const phase = phases.get(depth) ?? [];
+      if (!phase.includes(label)) phase.push(label);
+      phases.set(depth, phase);
+    }
+    phaseLabel = [...phases.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, phase]) => phase.join(' + '))
+      .join(' → ');
+  }
+  return {
+    summary: `Run ${modeCount} mode${modeCount === 1 ? '' : 's'} for ${targetCount} target${targetCount === 1 ? '' : 's'}`,
+    meta: `${phaseLabel}${targetCount > 1 ? ` · ${targetCount} targets in parallel` : ''} · dependency-aware · max 4 parallel`,
+  };
+}
+
+export function describeCancelWorkflow(workflow: WorkflowRecord): {
+  summary: string;
+  meta: string;
+} {
+  const active = workflow.steps.filter(step => step.status === 'running').length;
+  const queued = workflow.steps.filter(
+    step => step.status === 'queued' || step.status === 'blocked',
+  ).length;
+  return {
+    summary: `Cancel workflow ${workflow.id}`,
+    meta: `${active} active · ${queued} queued · partial output kept`,
   };
 }
 
@@ -414,13 +559,22 @@ export function describeCancelJob(job: JobRecord): { summary: string; meta: stri
 
 export function describeCreateOfferFromText(
   preview: { reused: boolean; offer: ApplicationRow | null },
-  input: { company?: string; role?: string; startKind?: TextOfferStartKind },
+  input: {
+    company?: string;
+    role?: string;
+    startKind?: TextOfferStartKind;
+    modes?: string[];
+  },
 ): { summary: string; meta: string } {
   const identity = [input.company?.trim(), input.role?.trim()].filter(Boolean).join(' · ');
   const action = preview.reused
     ? `Reuse offer #${preview.offer?.num}`
     : `Create offer from pasted text`;
-  const next = input.startKind ? ` · then start ${KIND_LABELS[input.startKind]}` : '';
+  const next = input.modes
+    ? ` · then run ${input.modes.join(' → ')}`
+    : input.startKind
+      ? ` · then start ${KIND_LABELS[input.startKind]}`
+      : '';
   return {
     summary: identity ? `${action} — ${identity}` : action,
     meta: `${preview.reused ? 'exact text match' : 'local tracker write'}${next}`,

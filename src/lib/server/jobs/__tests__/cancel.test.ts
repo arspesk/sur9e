@@ -99,4 +99,27 @@ describe('cancelJob', () => {
     expect(result).toMatchObject({ cancelled: false, job: { status: 'done' } });
     expect(signal).not.toHaveBeenCalled();
   });
+
+  it('notifies a parent workflow when a child is cancelled directly', () => {
+    writeFileSync(
+      join(root, 'data/jobs', `${JOB_ID}.json`),
+      JSON.stringify(
+        {
+          ...record('queued'),
+          params: { num: 1, workflow_id: 'workflow-1', workflow_step_id: 'step-1' },
+        },
+        null,
+        2,
+      ),
+    );
+    const advanceWorkflow = vi.fn();
+
+    cancelJob(root, JOB_ID, {
+      signal: vi.fn(),
+      scheduleForce: vi.fn(),
+      advanceWorkflow,
+    });
+
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
+  });
 });

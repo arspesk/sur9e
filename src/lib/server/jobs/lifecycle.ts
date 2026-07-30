@@ -88,6 +88,7 @@ function signalTree(job: JobRecordType, signal: SignalName): void {
 export interface CancellationDeps {
   signal?: (job: JobRecordType, signal: SignalName) => void;
   scheduleForce?: (fn: () => void, ms: number) => void;
+  advanceWorkflow?: (rootPath: string, jobId: string) => void;
 }
 
 export type CancelJobResult =
@@ -123,6 +124,19 @@ function stopProcess(job: JobRecordType, deps: CancellationDeps): void {
   }
 }
 
+function notifyWorkflow(rootPath: string, job: JobRecordType, deps: CancellationDeps): void {
+  if (!job.workflowId && typeof job.params.workflow_id !== 'string') return;
+  if (deps.advanceWorkflow) {
+    deps.advanceWorkflow(rootPath, job.id);
+    return;
+  }
+  setImmediate(() => {
+    void import('../workflows/api').then(({ advanceWorkflowsForJob }) => {
+      advanceWorkflowsForJob(rootPath, job.id);
+    });
+  });
+}
+
 /**
  * Cancel one exact persisted job. The cancelled record is written before any
  * signal so pollers stop immediately; partial output and worker writes remain.
@@ -149,5 +163,6 @@ export function cancelJob(
         };
   persistJobRecord(rootPath, cancelled);
   stopProcess(cancelled, deps);
+  notifyWorkflow(rootPath, cancelled, deps);
   return { cancelled: current.status !== 'cancelled', job: cancelled };
 }
