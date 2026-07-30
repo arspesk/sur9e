@@ -91,7 +91,7 @@ describe('chat confirms store', () => {
     });
   });
 
-  it('approve executes a set-status payload and emits confirm-resolved', () => {
+  it('approve executes a set-status payload and emits confirm-resolved', async () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',
       kind: 'set-status',
@@ -99,7 +99,7 @@ describe('chat confirms store', () => {
       summary: 's',
       meta: 'm',
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('approved');
     expect(res.result).toMatchObject({ ok: true });
     const md = readFileSync(join(root, 'data/applications.md'), 'utf-8');
@@ -120,7 +120,7 @@ describe('chat confirms store', () => {
       summary: 's',
       meta: 'm',
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('approved');
     expect(res.result).toMatchObject({ ok: true });
     const files = readdirSync(join(root, 'data/jobs')).filter(f => f.endsWith('.json'));
@@ -132,7 +132,7 @@ describe('chat confirms store', () => {
     expect(spawnJobMock).toHaveBeenCalledTimes(1);
   });
 
-  it('approve executes an exact cancel-job payload through the shared lifecycle', () => {
+  it('approve executes an exact cancel-job payload through the shared lifecycle', async () => {
     const jobId = '0123456789abcdef';
     writeFileSync(
       join(root, 'data/jobs', `${jobId}.json`),
@@ -155,7 +155,7 @@ describe('chat confirms store', () => {
       summary: 'Cancel evaluation for offer #1001',
       meta: `job ${jobId}`,
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res).toMatchObject({
       outcome: 'approved',
       execution: 'succeeded',
@@ -163,7 +163,7 @@ describe('chat confirms store', () => {
     });
   });
 
-  it('records an unchanged execution when a cancel approval arrives after completion', () => {
+  it('records an unchanged execution when a cancel approval arrives after completion', async () => {
     const jobId = '0123456789abcdee';
     writeFileSync(
       join(root, 'data/jobs', `${jobId}.json`),
@@ -187,7 +187,7 @@ describe('chat confirms store', () => {
       meta: `job ${jobId}`,
     });
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
 
     expect(res).toMatchObject({
       outcome: 'approved',
@@ -215,7 +215,7 @@ describe('chat confirms store', () => {
       summary: 'Create offer from pasted text',
       meta: 'local tracker write · then start cover letter',
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res).toMatchObject({
       outcome: 'approved',
       result: {
@@ -251,7 +251,7 @@ describe('chat confirms store', () => {
       summary: 'Create, screen, and evaluate offer',
       meta: 'local tracker write · then start screen + evaluate',
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res).toMatchObject({
       outcome: 'approved',
       result: {
@@ -286,7 +286,7 @@ describe('chat confirms store', () => {
       meta: 'screening → evaluation',
     });
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
 
     expect(res).toMatchObject({
       outcome: 'approved',
@@ -324,7 +324,7 @@ describe('chat confirms store', () => {
       meta: 'local tracker write · screening → evaluation → cover letter',
     });
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
 
     expect(res).toMatchObject({
       outcome: 'approved',
@@ -351,7 +351,7 @@ describe('chat confirms store', () => {
     expect(spawnJobMock).toHaveBeenCalledTimes(1);
   });
 
-  it('defensively rejects a persisted text-offer payload that combines legacy and workflow modes', () => {
+  it('defensively rejects a persisted text-offer payload that combines legacy and workflow modes', async () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',
       kind: 'create-offer-from-text',
@@ -366,7 +366,7 @@ describe('chat confirms store', () => {
       meta: 'invalid persisted payload',
     });
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
 
     expect(res).toMatchObject({
       outcome: 'approved',
@@ -379,7 +379,7 @@ describe('chat confirms store', () => {
     );
   });
 
-  it('cancel executes nothing and emits confirm-resolved cancelled', () => {
+  it('cancel executes nothing and emits confirm-resolved cancelled', async () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',
       kind: 'start-job',
@@ -387,7 +387,7 @@ describe('chat confirms store', () => {
       summary: 's',
       meta: 'm',
     });
-    const res = confirms.resolveConfirm(root, token, false);
+    const res = await confirms.resolveConfirm(root, token, false);
     expect(res.outcome).toBe('cancelled');
     expect(res.result).toBeUndefined();
     expect(readdirSync(join(root, 'data/jobs'))).toHaveLength(0);
@@ -398,7 +398,7 @@ describe('chat confirms store', () => {
     });
   });
 
-  it('double-resolve: the second resolve returns expired and executes nothing', () => {
+  it('double-resolve: the second resolve returns expired and executes nothing', async () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',
       kind: 'set-status',
@@ -406,8 +406,8 @@ describe('chat confirms store', () => {
       summary: 's',
       meta: 'm',
     });
-    confirms.resolveConfirm(root, token, false);
-    const second = confirms.resolveConfirm(root, token, true);
+    await confirms.resolveConfirm(root, token, false);
+    const second = await confirms.resolveConfirm(root, token, true);
     expect(second.outcome).toBe('expired');
     // 1 confirm + 1 confirm-resolved — the expired path emits nothing.
     expect(emitTurnEventMock).toHaveBeenCalledTimes(2);
@@ -417,7 +417,7 @@ describe('chat confirms store', () => {
     expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain('| Screened  |');
   });
 
-  it('a confirm expires after 15 minutes and never executes', () => {
+  it('a confirm expires after 15 minutes and never executes', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-18T12:00:00Z'));
     const { token } = confirms.createConfirm(root, {
@@ -428,14 +428,14 @@ describe('chat confirms store', () => {
       meta: 'm',
     });
     vi.setSystemTime(new Date('2026-07-18T12:16:00Z'));
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('expired');
     expect(res.result).toBeUndefined();
     expect(readFileSync(join(root, 'data/applications.md'), 'utf-8')).toContain('| Screened  |');
     expect(emitTurnEventMock).toHaveBeenCalledTimes(1); // only the original confirm event
   });
 
-  it('an execution failure surfaces as ok:false without breaking resolution', () => {
+  it('an execution failure surfaces as ok:false without breaking resolution', async () => {
     const { token } = confirms.createConfirm(root, {
       turnId: 'turn-1',
       kind: 'start-job',
@@ -443,7 +443,7 @@ describe('chat confirms store', () => {
       summary: 's',
       meta: 'm',
     });
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('approved');
     expect(res.result).toMatchObject({ ok: false });
     if (res.result && res.result.ok === false) {

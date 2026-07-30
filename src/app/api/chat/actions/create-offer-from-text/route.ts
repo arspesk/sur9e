@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const turnId = request.headers.get('x-sur9e-turn');
     const preview =
       turnId || terminalApproved === true
-        ? reserveTextOfferPreview(ROOT, input.text)
+        ? await reserveTextOfferPreview(ROOT, input.text)
         : previewTextOffer(ROOT, input.text);
     if (input.modes) {
       const plan = planWorkflowForTargets(
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     if (terminalApproved !== true) {
       return Response.json({ needsConfirm: true, summary, meta });
     }
-    const textOffer = createOrReuseTextOffer(ROOT, { ...input, reservedNum });
+    const textOffer = await createOrReuseTextOffer(ROOT, { ...input, reservedNum });
     const job = input.startKind
       ? startChatJob(ROOT, input.startKind, { num: textOffer.offer.num })
       : undefined;

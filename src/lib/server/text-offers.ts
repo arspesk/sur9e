@@ -100,12 +100,15 @@ export function previewTextOffer(rootPath: string, text: string): TextOfferPrevi
   };
 }
 
-export function reserveTextOfferPreview(rootPath: string, text: string): TextOfferPreview {
+export async function reserveTextOfferPreview(
+  rootPath: string,
+  text: string,
+): Promise<TextOfferPreview> {
   const preview = previewTextOffer(rootPath, text);
   if (preview.reused) return preview;
   return {
     ...preview,
-    anticipatedNum: reserveTextOfferNumber(rootPath, preview.jdHash, preview.anticipatedNum),
+    anticipatedNum: await reserveTextOfferNumber(rootPath, preview.jdHash, preview.anticipatedNum),
   };
 }
 
@@ -123,17 +126,19 @@ function mergeTracker(rootPath: string): void {
   });
 }
 
-export function createOrReuseTextOffer(
+export async function createOrReuseTextOffer(
   rootPath: string,
   input: CreateTextOfferInput,
-): TextOfferResult {
+): Promise<TextOfferResult> {
   const text = normalizeJobDescription(input.text);
-  return withTextOfferCreationLock(rootPath, () => {
+  return withTextOfferCreationLock(rootPath, async () => {
     const preview = previewTextOffer(rootPath, text);
     const { jdHash } = preview;
     const existing = preview.offer;
     if (existing) {
-      if (input.reservedNum) releaseTextOfferNumber(rootPath, jdHash, input.reservedNum);
+      if (input.reservedNum) {
+        await releaseTextOfferNumber(rootPath, jdHash, input.reservedNum);
+      }
       return {
         reused: true,
         offer: existing,
@@ -142,75 +147,78 @@ export function createOrReuseTextOffer(
       };
     }
 
-    const reservedNum = reserveTextOfferNumber(rootPath, jdHash, preview.anticipatedNum);
+    const reservedNum = await reserveTextOfferNumber(rootPath, jdHash, preview.anticipatedNum);
     if (input.reservedNum && input.reservedNum !== reservedNum) {
       throw new Error(`reserved offer number changed from ${input.reservedNum} to ${reservedNum}`);
     }
-    const company = input.company?.trim() || 'Unknown';
-    const role = input.role?.trim() || 'Unknown role';
-    const num = reservedNum;
-    const today = new Date().toISOString().slice(0, 10);
-    const slug = companySlug(company) || 'unknown';
-    const jdPath = `inputs/jds/${jdHash}.md`;
-    const reportPath = `artifacts/reports/${String(num).padStart(3, '0')}-${slug}-${today}.md`;
+    try {
+      const company = input.company?.trim() || 'Unknown';
+      const role = input.role?.trim() || 'Unknown role';
+      const num = reservedNum;
+      const today = new Date().toISOString().slice(0, 10);
+      const slug = companySlug(company) || 'unknown';
+      const jdPath = `inputs/jds/${jdHash}.md`;
+      const reportPath = `artifacts/reports/${String(num).padStart(3, '0')}-${slug}-${today}.md`;
 
-    mkdirSync(join(rootPath, 'inputs/jds'), { recursive: true });
-    mkdirSync(join(rootPath, 'artifacts/reports'), { recursive: true });
-    mkdirSync(join(rootPath, 'batch/tracker-additions'), { recursive: true });
-    writeFileSync(join(rootPath, jdPath), `${text}\n`, 'utf-8');
-    saveReport({
-      filePath: join(rootPath, reportPath),
-      frontmatter: {
+      mkdirSync(join(rootPath, 'inputs/jds'), { recursive: true });
+      mkdirSync(join(rootPath, 'artifacts/reports'), { recursive: true });
+      mkdirSync(join(rootPath, 'batch/tracker-additions'), { recursive: true });
+      writeFileSync(join(rootPath, jdPath), `${text}\n`, 'utf-8');
+      saveReport({
+        filePath: join(rootPath, reportPath),
+        frontmatter: {
+          num,
+          company,
+          role,
+          date: today,
+          status: 'Screened',
+          state: 'screened',
+          score: 'N/A',
+          source_kind: 'text',
+          jd_path: jdPath,
+          jd_hash: jdHash,
+          tldr: 'Created from a pasted job description. Run screening or another offer mode when ready.',
+        },
+        body: [
+          '<div data-callout data-variant="info" data-emoji="💡">',
+          '',
+          '**Next Steps** Run screening, a full evaluation, or generate a tailored application document.',
+          '',
+          '</div>',
+          '',
+          '## TL;DR',
+          '',
+          'Created from a pasted job description. No screening score has been assigned yet.',
+          '',
+        ].join('\n'),
+      });
+
+      const clean = (value: string) => value.replace(/[|\t\r\n]+/g, ' ').trim();
+      const tsv = [
         num,
-        company,
-        role,
-        date: today,
-        status: 'Screened',
-        state: 'screened',
-        score: 'N/A',
-        source_kind: 'text',
-        jd_path: jdPath,
-        jd_hash: jdHash,
-        tldr: 'Created from a pasted job description. Run screening or another offer mode when ready.',
-      },
-      body: [
-        '<div data-callout data-variant="info" data-emoji="💡">',
+        today,
+        clean(company),
+        clean(role),
+        'N/A',
+        'Screened',
+        '❌',
+        `[${num}](${reportPath})`,
+        'Created from pasted job description',
         '',
-        '**Next Steps** Run screening, a full evaluation, or generate a tailored application document.',
-        '',
-        '</div>',
-        '',
-        '## TL;DR',
-        '',
-        'Created from a pasted job description. No screening score has been assigned yet.',
-        '',
-      ].join('\n'),
-    });
+      ].join('\t');
+      writeFileSync(
+        join(rootPath, `batch/tracker-additions/${String(num).padStart(3, '0')}-${slug}.tsv`),
+        `${tsv}\n`,
+        'utf-8',
+      );
 
-    const clean = (value: string) => value.replace(/[|\t\r\n]+/g, ' ').trim();
-    const tsv = [
-      num,
-      today,
-      clean(company),
-      clean(role),
-      'N/A',
-      'Screened',
-      '❌',
-      `[${num}](${reportPath})`,
-      'Created from pasted job description',
-      '',
-    ].join('\t');
-    writeFileSync(
-      join(rootPath, `batch/tracker-additions/${String(num).padStart(3, '0')}-${slug}.tsv`),
-      `${tsv}\n`,
-      'utf-8',
-    );
-
-    mergeTracker(rootPath);
-    const offer = findByNum(rootPath, num);
-    if (!offer)
-      throw new Error(`text offer #${num} was created but did not merge into the tracker`);
-    releaseTextOfferNumber(rootPath, jdHash, num);
-    return { reused: false, offer, jdHash, jdPath };
+      mergeTracker(rootPath);
+      const offer = findByNum(rootPath, num);
+      if (!offer)
+        throw new Error(`text offer #${num} was created but did not merge into the tracker`);
+      return { reused: false, offer, jdHash, jdPath };
+    } finally {
+      await releaseTextOfferNumber(rootPath, jdHash, reservedNum);
+    }
   });
 }

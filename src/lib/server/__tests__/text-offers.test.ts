@@ -49,10 +49,10 @@ describe('text offers', () => {
     expect(hashJobDescription(unix)).toBe(hashJobDescription(windows));
   });
 
-  it('saves the JD, creates a Screened/N/A report, and merges a normal tracker row', () => {
+  it('saves the JD, creates a Screened/N/A report, and merges a normal tracker row', async () => {
     const root = seedRoot();
     roots.push(root);
-    const created = createOrReuseTextOffer(root, {
+    const created = await createOrReuseTextOffer(root, {
       company: 'Acme',
       role: 'Senior Engineer',
       text: 'Own the platform and mentor engineers.',
@@ -80,15 +80,15 @@ describe('text offers', () => {
     expect(tracker).toContain('| Acme | Senior Engineer | N/A | Screened |');
   });
 
-  it('reuses the exact normalized JD instead of creating a duplicate offer', () => {
+  it('reuses the exact normalized JD instead of creating a duplicate offer', async () => {
     const root = seedRoot();
     roots.push(root);
-    const first = createOrReuseTextOffer(root, {
+    const first = await createOrReuseTextOffer(root, {
       company: 'Acme',
       role: 'Senior Engineer',
       text: 'Own the platform.\n',
     });
-    const second = createOrReuseTextOffer(root, {
+    const second = await createOrReuseTextOffer(root, {
       company: 'Acme Incorporated',
       role: 'Platform Lead',
       text: '\r\nOwn the platform.   \r\n',
@@ -102,11 +102,11 @@ describe('text offers', () => {
     ).toHaveLength(1);
   });
 
-  it('creates with the exact number reserved during confirmation planning', () => {
+  it('creates with the exact number reserved during confirmation planning', async () => {
     const root = seedRoot();
     roots.push(root);
-    const preview = reserveTextOfferPreview(root, 'Build a reliable platform.');
-    const created = createOrReuseTextOffer(root, {
+    const preview = await reserveTextOfferPreview(root, 'Build a reliable platform.');
+    const created = await createOrReuseTextOffer(root, {
       company: 'Acme',
       role: 'Platform Engineer',
       text: 'Build a reliable platform.',
@@ -116,18 +116,38 @@ describe('text offers', () => {
     expect(created.offer.num).toBe(preview.anticipatedNum);
   });
 
-  it('uses explicit Unknown labels when identity is genuinely absent', () => {
+  it('releases the reserved number when offer creation fails', async () => {
     const root = seedRoot();
     roots.push(root);
-    const created = createOrReuseTextOffer(root, { text: 'Build something useful.' });
+    const preview = await reserveTextOfferPreview(root, 'Build a reliable platform.');
+    writeFileSync(join(root, 'inputs'), 'block the inputs directory', 'utf-8');
+
+    await expect(
+      createOrReuseTextOffer(root, {
+        company: 'Acme',
+        role: 'Platform Engineer',
+        text: 'Build a reliable platform.',
+        reservedNum: preview.anticipatedNum,
+      }),
+    ).rejects.toThrow();
+
+    rmSync(join(root, 'inputs'), { force: true });
+    const next = await reserveTextOfferPreview(root, 'Build a different reliable platform.');
+    expect(next.anticipatedNum).toBe(preview.anticipatedNum);
+  });
+
+  it('uses explicit Unknown labels when identity is genuinely absent', async () => {
+    const root = seedRoot();
+    roots.push(root);
+    const created = await createOrReuseTextOffer(root, { text: 'Build something useful.' });
     expect(created.offer.company).toBe('Unknown');
     expect(created.offer.role).toBe('Unknown role');
   });
 
-  it('deleting the offer also removes its saved pasted JD', () => {
+  it('deleting the offer also removes its saved pasted JD', async () => {
     const root = seedRoot();
     roots.push(root);
-    const created = createOrReuseTextOffer(root, {
+    const created = await createOrReuseTextOffer(root, {
       company: 'Acme',
       role: 'Engineer',
       text: 'Build something useful.',

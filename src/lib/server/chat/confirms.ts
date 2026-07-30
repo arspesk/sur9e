@@ -225,11 +225,11 @@ function jobsForWorkflow(root: string, workflow: WorkflowRecord): JobRecord[] {
  * — single source of effects). Unknown, already-resolved, and past-TTL
  * tokens all resolve to 'expired' and execute nothing.
  */
-export function resolveConfirm(
+export async function resolveConfirm(
   root: string,
   token: string,
   approve: boolean,
-): ResolveConfirmResult {
+): Promise<ResolveConfirmResult> {
   const rec = confirms.get(token);
   if (!rec) {
     // Unknown/swept token: nothing to execute, but if the owning message is
@@ -282,7 +282,7 @@ export function resolveConfirm(
         if (p.startKind && p.modes) {
           throw new Error('startKind and modes cannot be combined');
         }
-        const textOffer = createOrReuseTextOffer(root, p);
+        const textOffer = await createOrReuseTextOffer(root, p);
         const job = p.startKind
           ? startChatJob(root, p.startKind, { num: textOffer.offer.num })
           : undefined;
