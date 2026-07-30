@@ -318,6 +318,76 @@ for (const viewport of VIEWPORTS) {
 }
 
 for (const viewport of VIEWPORTS) {
+  test(`sent attachment stays below its user bubble @ ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await mockChatApi(page);
+    await page.goto('/chat');
+    await suppressDevOverlay(page);
+
+    const surface =
+      viewport.width <= 640
+        ? page.getByRole('dialog', { name: 'sur9e chat' })
+        : page.locator('.chat-page__main');
+    await expect(surface).toBeVisible();
+    const body = surface.locator('.chat-page__body, .chat-card__body');
+    await expect(body).toBeVisible();
+    await body.evaluate(element => {
+      element.innerHTML = `
+        <div class="chat-transcript">
+          <div class="chat-msg chat-msg--user">
+            <div class="chat-user-bubble">that is what recruiter has said</div>
+            <div class="chat-msg__attachments">
+              <span class="chat-attach-chip">
+                <img
+                  class="chat-attach-chip__thumb chat-attach-chip__thumb--sent"
+                  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nLkAAAAASUVORK5CYII="
+                  alt="CleanShot 2026-07-30 at 08.33.24@2x with recruiter location details.png"
+                />
+                <span class="chat-attach-chip__body">
+                  <span
+                    class="chat-attach-chip__name"
+                    title="CleanShot 2026-07-30 at 08.33.24@2x with recruiter location details.png"
+                  >
+                    CleanShot 2026-07-30 at 08.33.24@2x with recruiter location details.png
+                  </span>
+                  <span class="chat-attach-chip__meta">PNG image</span>
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    const message = surface.locator('.chat-msg--user');
+    const bubble = message.locator('.chat-user-bubble');
+    const attachment = message.locator('.chat-msg__attachments');
+    await expect(bubble).toHaveText('that is what recruiter has said');
+    await expect(attachment.getByText('PNG image')).toBeVisible();
+
+    const bubbleBox = await bubble.boundingBox();
+    const attachmentBox = await attachment.boundingBox();
+    expect(bubbleBox).not.toBeNull();
+    expect(attachmentBox).not.toBeNull();
+    expect(attachmentBox?.y).toBeGreaterThanOrEqual((bubbleBox?.y ?? 0) + (bubbleBox?.height ?? 0));
+    expect(attachmentBox?.width).toBeLessThanOrEqual(320);
+    expect(
+      Math.abs(
+        (attachmentBox?.x ?? 0) +
+          (attachmentBox?.width ?? 0) -
+          ((bubbleBox?.x ?? 0) + (bubbleBox?.width ?? 0)),
+      ),
+    ).toBeLessThanOrEqual(1);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(viewport.width + 1);
+    if (viewport.width <= 640) {
+      await page.waitForTimeout(350);
+    }
+    await page.screenshot({ path: `test-results/chat-sent-attachment-${viewport.name}.png` });
+  });
+}
+
+for (const viewport of VIEWPORTS) {
   test(`new full-page thread never flashes the empty state @ ${viewport.name}`, async ({
     page,
   }) => {

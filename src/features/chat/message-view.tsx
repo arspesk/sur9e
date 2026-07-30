@@ -22,6 +22,12 @@ function parseTurnEvents(events: unknown[] | null | undefined): ChatTurnEvent[] 
   return parsed.length ? parsed : null;
 }
 
+function attachmentTypeLabel(mime: string): string {
+  const [kind, rawSubtype] = mime.split('/');
+  const subtype = rawSubtype?.split('+')[0]?.toUpperCase() || 'FILE';
+  return `${subtype} ${kind === 'image' ? 'image' : 'file'}`;
+}
+
 /** Shared copy control: message-level and (via delegation) code blocks.
  * `inline` renders the always-visible icon variant used under AI replies;
  * the default stays the hover-revealed corner button on user bubbles.
@@ -224,7 +230,12 @@ export function MessageView({
                     ▤
                   </span>
                 )}
-                <span className="chat-attach-chip__name">{a.name}</span>
+                <span className="chat-attach-chip__body">
+                  <span className="chat-attach-chip__name" title={a.name}>
+                    {a.name}
+                  </span>
+                  <span className="chat-attach-chip__meta">{attachmentTypeLabel(a.mime)}</span>
+                </span>
               </span>
             ))}
           </div>
