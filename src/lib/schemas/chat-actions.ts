@@ -8,12 +8,14 @@
 import { z } from 'zod';
 import { ApplicationStatus } from './applications';
 import { JobType } from './jobs';
+import { HttpUrl } from './urls';
 
 export const TextOfferStartKind = z.enum([
   'screen',
   'screen-evaluate',
   'evaluate',
   'tailor-cv',
+  'latex',
   'cover-letter',
   'research',
   'interview-prep',
@@ -21,6 +23,25 @@ export const TextOfferStartKind = z.enum([
   'negotiate',
 ]);
 export type TextOfferStartKind = z.infer<typeof TextOfferStartKind>;
+
+export const WorkflowTargetInput = z.union([
+  z.object({ num: z.number().int().positive() }).strict(),
+  z.object({ url: HttpUrl }).strict(),
+]);
+
+export const StartWorkflowActionRequest = z.object({
+  targets: z.array(WorkflowTargetInput),
+  modes: z.array(z.string().trim().min(1)).min(1),
+  guidance: z.string().trim().min(1).max(2_000).optional(),
+  terminalApproved: z.boolean().optional(),
+});
+export type StartWorkflowActionRequest = z.infer<typeof StartWorkflowActionRequest>;
+
+export const CancelWorkflowActionRequest = z.object({
+  workflowId: z.string().regex(/^[a-f0-9]{16}$/),
+  terminalApproved: z.boolean().optional(),
+});
+export type CancelWorkflowActionRequest = z.infer<typeof CancelWorkflowActionRequest>;
 
 export const StartJobActionRequest = z.object({
   kind: JobType,
@@ -36,13 +57,18 @@ export const CancelJobActionRequest = z.object({
 });
 export type CancelJobActionRequest = z.infer<typeof CancelJobActionRequest>;
 
-export const CreateOfferFromTextActionRequest = z.object({
-  text: z.string().trim().min(1).max(32_000),
-  company: z.string().trim().min(1).max(160).optional(),
-  role: z.string().trim().min(1).max(240).optional(),
-  startKind: TextOfferStartKind.optional(),
-  terminalApproved: z.boolean().optional(),
-});
+export const CreateOfferFromTextActionRequest = z
+  .object({
+    text: z.string().trim().min(1).max(32_000),
+    company: z.string().trim().min(1).max(160).optional(),
+    role: z.string().trim().min(1).max(240).optional(),
+    startKind: TextOfferStartKind.optional(),
+    modes: z.array(z.string().trim().min(1)).min(1).optional(),
+    terminalApproved: z.boolean().optional(),
+  })
+  .refine(input => !(input.startKind && input.modes), {
+    message: 'startKind and modes cannot be combined',
+  });
 export type CreateOfferFromTextActionRequest = z.infer<typeof CreateOfferFromTextActionRequest>;
 
 export const SetStatusActionRequest = z.object({

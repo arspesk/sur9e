@@ -81,17 +81,22 @@ export function createJob(
 ): JobRecord {
   const canonicalType = validateType(type);
   const id = randomBytes(8).toString('hex');
+  const rawParams = params || {};
   mkdirSync(jobsDir(rootPath), { recursive: true });
   const job = JobRecord.parse({
     id,
     type: canonicalType,
     status: 'queued',
-    params: params || {},
+    params: rawParams,
     startedAt: new Date().toISOString(),
     finishedAt: null,
     output: '',
     error: null,
     exitCode: null,
+    ...(typeof rawParams.workflow_id === 'string' ? { workflowId: rawParams.workflow_id } : {}),
+    ...(typeof rawParams.workflow_step_id === 'string'
+      ? { workflowStepId: rawParams.workflow_step_id }
+      : {}),
   });
   persist(rootPath, job);
 
@@ -113,6 +118,14 @@ export function createJob(
         error: err instanceof Error ? err.message : String(err),
         finishedAt: new Date().toISOString(),
       });
+      if (job.workflowId) {
+        void import('../workflows')
+          .then(({ advanceWorkflowsForJob }) => advanceWorkflowsForJob(rootPath, job.id))
+          .catch(() => {
+            // The persisted child error remains authoritative; boot/list
+            // reconciliation will retry advancing the parent workflow.
+          });
+      }
     });
   });
   return job;

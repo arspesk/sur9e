@@ -249,6 +249,41 @@ interface SpawnJobDeps {
   spawnProcess?: (command: string, args: string[], options: SpawnOptions) => SpawnedJobProcess;
   cancel?: typeof cancelJob;
   trackUsage?: TrackUsage;
+  startNextJob?: (
+    rootPath: string,
+    kind: 'evaluate',
+    params: Record<string, unknown>,
+  ) =>
+    | JobRecord
+    | { conflict: true; message: string }
+    | Promise<JobRecord | { conflict: true; message: string }>;
+  advanceWorkflow?: (rootPath: string, jobId: string) => unknown | Promise<unknown>;
+}
+
+async function startNextJob(
+  rootPath: string,
+  kind: 'evaluate',
+  params: Record<string, unknown>,
+): Promise<JobRecord | { conflict: true; message: string }> {
+  // Dynamic import avoids a static runner → start → api → runner cycle.
+  const { startJob } = await import('./start');
+  return startJob(rootPath, { kind, params });
+}
+
+async function advanceWorkflowForJob(rootPath: string, jobId: string): Promise<void> {
+  const { advanceWorkflowsForJob } = await import('../workflows/api');
+  advanceWorkflowsForJob(rootPath, jobId);
+}
+
+async function notifyWorkflow(rootPath: string, job: JobRecord, deps: SpawnJobDeps): Promise<void> {
+  const persisted = readJobRecord(rootPath, job.id);
+  if (!persisted?.workflowId && typeof persisted?.params.workflow_id !== 'string') return;
+  try {
+    await (deps.advanceWorkflow ?? advanceWorkflowForJob)(rootPath, job.id);
+  } catch {
+    // The child job record is authoritative. Boot/list reconciliation retries
+    // advancing its parent without turning this completed child into a crash.
+  }
 }
 
 export async function spawnJob(
@@ -271,6 +306,7 @@ export async function spawnJob(
       finishedAt: new Date().toISOString(),
     };
     persist(rootPath, failed);
+    await notifyWorkflow(rootPath, failed, deps);
     return;
   }
   if (!built) {
@@ -281,6 +317,7 @@ export async function spawnJob(
       finishedAt: new Date().toISOString(),
     };
     persist(rootPath, failed);
+    await notifyWorkflow(rootPath, failed, deps);
     return;
   }
 
@@ -339,6 +376,7 @@ export async function spawnJob(
       finishedAt: new Date().toISOString(),
     };
     persist(rootPath, failed);
+    await notifyWorkflow(rootPath, failed, deps);
     return;
   }
   let providerVersion: string | undefined;
@@ -591,6 +629,49 @@ export async function spawnJob(
       current = { ...current, fixes: fixLog };
     }
     persistCurrentPreservingCancellation();
+
+    // Chat's explicit "screen and evaluate" request is represented as two
+    // real jobs, not the legacy monolithic screen-evaluate command. The screen
+    // record carries `then: evaluate`; only a successful screen may create the
+    // successor. stampScreenJobNum above resolves the tracker number for URL
+    // screens before this hand-off.
+    if (
+      current.status === 'done' &&
+      current.type === 'screen' &&
+      current.params.then === 'evaluate' &&
+      typeof current.params.next_job_id !== 'string'
+    ) {
+      const num = current.params.num;
+      try {
+        if (!Number.isInteger(num)) {
+          throw new Error('screening finished without a tracker offer number');
+        }
+        const next = await (deps.startNextJob ?? startNextJob)(rootPath, 'evaluate', {
+          num: num as number,
+        });
+        current =
+          'conflict' in next
+            ? {
+                ...current,
+                params: { ...current.params, continuation_error: next.message },
+              }
+            : {
+                ...current,
+                params: { ...current.params, next_job_id: next.id },
+              };
+      } catch (error) {
+        current = {
+          ...current,
+          params: {
+            ...current.params,
+            continuation_error:
+              error instanceof Error ? error.message : 'failed to start evaluation',
+          },
+        };
+      }
+      persistCurrentPreservingCancellation();
+    }
+    await notifyWorkflow(rootPath, current, deps);
   });
 
   child.on('error', (err: Error) => {
@@ -615,6 +696,7 @@ export async function spawnJob(
             finishedAt: new Date().toISOString(),
           };
     persist(rootPath, current);
+    void notifyWorkflow(rootPath, current, deps);
   });
 }
 

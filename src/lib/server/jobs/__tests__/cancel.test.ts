@@ -99,4 +99,54 @@ describe('cancelJob', () => {
     expect(result).toMatchObject({ cancelled: false, job: { status: 'done' } });
     expect(signal).not.toHaveBeenCalled();
   });
+
+  it('notifies a parent workflow when a child is cancelled directly', () => {
+    writeFileSync(
+      join(root, 'data/jobs', `${JOB_ID}.json`),
+      JSON.stringify(
+        {
+          ...record('queued'),
+          params: { num: 1, workflow_id: 'workflow-1', workflow_step_id: 'step-1' },
+        },
+        null,
+        2,
+      ),
+    );
+    const advanceWorkflow = vi.fn();
+
+    cancelJob(root, JOB_ID, {
+      signal: vi.fn(),
+      scheduleForce: vi.fn(),
+      advanceWorkflow,
+    });
+
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
+  });
+
+  it('contains a workflow notification failure after cancellation', () => {
+    writeFileSync(
+      join(root, 'data/jobs', `${JOB_ID}.json`),
+      JSON.stringify(
+        {
+          ...record('queued'),
+          params: { num: 1, workflow_id: '0123456789abcdef', workflow_step_id: 'step-1' },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const advanceWorkflow = vi.fn(() => {
+      throw new Error('damaged workflow');
+    });
+
+    expect(() =>
+      cancelJob(root, JOB_ID, {
+        signal: vi.fn(),
+        scheduleForce: vi.fn(),
+        advanceWorkflow,
+      }),
+    ).not.toThrow();
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
+  });
 });

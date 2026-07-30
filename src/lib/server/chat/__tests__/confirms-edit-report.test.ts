@@ -51,12 +51,12 @@ function parkEdit(oldText: string, newText: string) {
 }
 
 describe("resolveConfirm 'edit-report'", () => {
-  it('approve applies the edit to the file and returns { ok, report }', () => {
+  it('approve applies the edit to the file and returns { ok, report }', async () => {
     const { token } = parkEdit(
       'The comp band looks below market.',
       'The comp band is competitive.',
     );
-    const res = resolveConfirm(dir, token, true);
+    const res = await resolveConfirm(dir, token, true);
 
     expect(res.outcome).toBe('approved');
     expect(res.result).toEqual({ ok: true, report: { num: 7 } });
@@ -68,13 +68,13 @@ describe("resolveConfirm 'edit-report'", () => {
     expect(after).toContain('company: Acme');
   });
 
-  it('approve with a vanished old_text yields { ok:false, error } and leaves the file alone', () => {
+  it('approve with a vanished old_text yields { ok:false, error } and leaves the file alone', async () => {
     const { token } = parkEdit('The comp band looks below market.', 'edited.');
     // Race: the source text is gone by the time the user approves.
     const mutated = REPORT.replace('The comp band looks below market.', 'Rewritten out of band.');
     writeFileSync(filePath, mutated, 'utf8');
 
-    const res = resolveConfirm(dir, token, true);
+    const res = await resolveConfirm(dir, token, true);
     expect(res.outcome).toBe('approved');
     expect(res.result?.ok).toBe(false);
     if (res.result?.ok === false) {
@@ -84,9 +84,9 @@ describe("resolveConfirm 'edit-report'", () => {
     expect(readFileSync(filePath, 'utf8')).toContain('Rewritten out of band.');
   });
 
-  it('cancel writes nothing', () => {
+  it('cancel writes nothing', async () => {
     const { token } = parkEdit('The comp band looks below market.', 'should not be written');
-    const res = resolveConfirm(dir, token, false);
+    const res = await resolveConfirm(dir, token, false);
     expect(res.outcome).toBe('cancelled');
     expect(res.result).toBeUndefined();
     expect(readFileSync(filePath, 'utf8')).toBe(REPORT);

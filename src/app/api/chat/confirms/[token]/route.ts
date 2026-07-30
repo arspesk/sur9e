@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!parsed.success) {
     return jsonError('body must be { approve: boolean }', 400);
   }
-  const resolved = resolveConfirm(ROOT, token, parsed.data.approve);
+  const resolved = await resolveConfirm(ROOT, token, parsed.data.approve);
   // An approved report edit wrote a new body to disk — revalidate the report
   // page (whole dynamic segment) and the offers view that renders its summary,
   // mirroring the editor save route (api/reports/[filename]/body).

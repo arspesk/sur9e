@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // cli/mcp-app-server.mjs — the sur9e-app MCP server (stdio transport).
 //
 // Bridges an AI agent (a web-chat turn or a terminal session) to the
@@ -16,7 +17,11 @@
 //
 // stdout carries ONLY JSON-RPC frames; all logging goes to stderr.
 
+import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline';
+
+const require = createRequire(import.meta.url);
+const MODE_DATA = require('../src/lib/modes/catalog.json');
 
 const APP_URL = (process.env.SUR9E_APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 const TURN_ID = process.env.SUR9E_CHAT_TURN_ID ?? '';
@@ -25,6 +30,25 @@ const PROTOCOL_VERSION = '2025-06-18';
 const SERVER_INFO = { name: 'sur9e-app', version: '1.0.0' };
 
 const READ_TOOLS = [
+  {
+    name: 'list_modes',
+    description:
+      'List every canonical sur9e mode, alias, execution type, scope, and dependency capability. Read-only.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'get_mode_instructions',
+    description:
+      'Load the canonical instructions for one inline or handoff mode before running it in chat.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', minLength: 1, description: 'Canonical mode id or legacy alias' },
+      },
+      required: ['mode'],
+      additionalProperties: false,
+    },
+  },
   {
     name: 'get_tracker',
     description:
@@ -61,22 +85,19 @@ const READ_TOOLS = [
     description: 'Background jobs currently queued or running, grouped by job type. Read-only.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
+  {
+    name: 'list_workflows',
+    description:
+      'List persisted multi-mode workflows and their child-step states. Also reconciles completed child jobs. Read-only.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
 ];
 
-// Every job kind the chat can launch (spec §2 v1 capabilities).
-const JOB_KINDS = [
-  'evaluate',
-  'tailor-cv',
-  'cover-letter',
-  'research',
-  'interview-prep',
-  'reach-out',
-  'negotiate',
-  'scan',
-  'batch-evaluate',
-  'screen',
-  'screen-evaluate',
-];
+// Backward-compatible single-job surface. Multi-mode and composite work uses
+// start_workflow; screen-evaluate remains here only as a declared legacy path.
+const JOB_KINDS = Object.entries(MODE_DATA.modes)
+  .filter(([, mode]) => mode.singleJob === true)
+  .map(([id]) => id);
 
 const TERMINAL_APPROVED_DESC =
   'Terminal sessions only: set true ONLY after the user explicitly approved this exact ' +
@@ -84,9 +105,73 @@ const TERMINAL_APPROVED_DESC =
 
 const ACTION_TOOLS = [
   {
+    name: 'start_workflow',
+    description:
+      'Plan and start one dependency-aware workflow for one or many explicit offers. The server inserts prerequisites, serializes report writers, and parallelizes only safe work. Use this for multiple modes or selected-offer bulk actions. ALWAYS requires one user approval.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targets: {
+          type: 'array',
+          minItems: 0,
+          items: {
+            oneOf: [
+              {
+                type: 'object',
+                properties: { num: { type: 'integer', minimum: 1 } },
+                required: ['num'],
+                additionalProperties: false,
+              },
+              {
+                type: 'object',
+                properties: { url: { type: 'string', format: 'uri' } },
+                required: ['url'],
+                additionalProperties: false,
+              },
+            ],
+          },
+          description:
+            'Explicit tracked offers or URLs. Use [] only for scan, process-queue, or batch-evaluate.',
+        },
+        modes: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', minLength: 1 },
+          description: 'Canonical mode ids or supported legacy aliases',
+        },
+        guidance: {
+          type: 'string',
+          description: 'Optional concise guidance applied to every generated step',
+        },
+        terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
+      },
+      required: ['targets', 'modes'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'cancel_workflow',
+    description:
+      'Cancel one exact workflow, including active children and queued descendants. First call list_workflows. ALWAYS requires user approval.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflow_id: {
+          type: 'string',
+          pattern: '^[a-f0-9]{16}$',
+          description: 'Exact workflow id returned by list_workflows',
+        },
+        terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
+      },
+      required: ['workflow_id'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'start_job',
     description:
       `Start a background job (${JOB_KINDS.join(', ')}). ` +
+      'Screening and evaluation are separate modes: use screen-evaluate only when the user explicitly asks for both; the server schedules two sequential jobs. ' +
       'ALWAYS requires user approval before anything runs or spends AI tokens — follow the instructions in the tool result.',
     inputSchema: {
       type: 'object',
@@ -126,8 +211,9 @@ const ACTION_TOOLS = [
     description:
       'Create or reuse a normal tracked offer from pasted job-description text, without a URL. ' +
       'If company or role is missing, ask the user first; use Unknown only when the information is genuinely absent from the text. ' +
-      'Unless the user already chose, ask whether they want: Create + screen + evaluate (recommended), Create + screen, or Create only. ' +
-      'Exact normalized text is deduplicated. Optionally start screen + evaluate, screen, evaluate, CV, cover letter, research, interview prep, outreach, or negotiation in the SAME approval. ' +
+      'Screening and evaluation are separate modes. Unless the user already chose, ask whether they want: Create + screen, Create + evaluate, or Create only. ' +
+      'Use screen-evaluate only when the user explicitly asks for both; the server schedules screening first and evaluation only after screening succeeds. ' +
+      'Exact normalized text is deduplicated. Optionally start screen, evaluate, CV, cover letter, research, interview prep, outreach, or negotiation in the SAME approval. ' +
       'ALWAYS requires user approval.',
     inputSchema: {
       type: 'object',
@@ -147,6 +233,7 @@ const ACTION_TOOLS = [
             'screen-evaluate',
             'evaluate',
             'tailor-cv',
+            'latex',
             'cover-letter',
             'research',
             'interview-prep',
@@ -154,7 +241,14 @@ const ACTION_TOOLS = [
             'negotiate',
           ],
           description:
-            'Optional job to start after creation; use screen-evaluate for the recommended Create + screen + evaluate workflow',
+            'Optional job after creation; use screen-evaluate only when the user explicitly asks for both screening and evaluation',
+        },
+        modes: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', minLength: 1 },
+          description:
+            'Optional dependency-aware workflow after creation. Do not combine with start_kind.',
         },
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },
@@ -310,6 +404,29 @@ async function confirmGatedCall(path, body) {
 // Returns an MCP tool result, or null for a tool name not in TOOLS.
 async function callTool(name, args) {
   switch (name) {
+    case 'list_modes': {
+      const { status, body } = await appFetch('/api/chat/modes');
+      if (status !== 200) {
+        return errorResult(
+          `Failed to list modes (HTTP ${status}): ${body?.error ?? 'unknown error'}`,
+        );
+      }
+      return textResult(body);
+    }
+    case 'get_mode_instructions': {
+      if (typeof args?.mode !== 'string' || !args.mode.trim()) {
+        return errorResult('mode must be a canonical mode id or legacy alias.');
+      }
+      const { status, body } = await appFetch(
+        `/api/chat/modes/${encodeURIComponent(args.mode.trim())}`,
+      );
+      if (status !== 200) {
+        return errorResult(
+          `Failed to load mode instructions (HTTP ${status}): ${body?.error ?? 'unknown error'}`,
+        );
+      }
+      return textResult(body);
+    }
     case 'get_tracker': {
       const { status, body } = await appFetch('/api/applications');
       if (status !== 200) {
@@ -375,6 +492,27 @@ async function callTool(name, args) {
       }
       return textResult(body);
     }
+    case 'list_workflows': {
+      const { status, body } = await appFetch('/api/workflows');
+      if (status !== 200) {
+        return errorResult(
+          `Failed to list workflows (HTTP ${status}): ${body?.error ?? 'unknown error'}`,
+        );
+      }
+      return textResult(body);
+    }
+    case 'start_workflow':
+      return confirmGatedCall('/api/chat/actions/start-workflow', {
+        targets: args?.targets ?? [],
+        modes: args?.modes,
+        guidance: args?.guidance,
+        terminalApproved: args?.terminalApproved === true,
+      });
+    case 'cancel_workflow':
+      return confirmGatedCall('/api/chat/actions/cancel-workflow', {
+        workflowId: args?.workflow_id,
+        terminalApproved: args?.terminalApproved === true,
+      });
     case 'start_job':
       return confirmGatedCall('/api/chat/actions/start-job', {
         kind: args?.kind,
@@ -392,6 +530,7 @@ async function callTool(name, args) {
         company: args?.company,
         role: args?.role,
         startKind: args?.start_kind,
+        modes: args?.modes,
         terminalApproved: args?.terminalApproved === true,
       });
     case 'set_status':

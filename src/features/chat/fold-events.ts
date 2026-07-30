@@ -11,7 +11,9 @@ import type { ChatActionLink, ChatTurnEvent } from '@/lib/schemas/chat';
 // client-safe module never imports the server-only confirms store).
 export type ConfirmActionKind =
   | 'start-job'
+  | 'start-workflow'
   | 'cancel-job'
+  | 'cancel-workflow'
   | 'create-offer-from-text'
   | 'set-status'
   | 'edit-report';

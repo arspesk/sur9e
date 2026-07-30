@@ -7,6 +7,7 @@
 // Next.js routes.
 
 import { z } from 'zod';
+import { JOB_MODE_IDS, type JobModeId } from '../modes/catalog';
 import { ProviderId } from './providers';
 
 export const JobStatus = z.enum(['queued', 'running', 'done', 'error', 'cancelled']);
@@ -23,19 +24,7 @@ export const ResolvedFrom = z.enum([
 ]);
 export type ResolvedFrom = z.infer<typeof ResolvedFrom>;
 
-export const JOB_TYPES = [
-  'evaluate',
-  'tailor-cv',
-  'cover-letter',
-  'research',
-  'interview-prep',
-  'reach-out',
-  'negotiate',
-  'scan',
-  'batch-evaluate',
-  'screen',
-  'screen-evaluate',
-] as const;
+export const JOB_TYPES = [...JOB_MODE_IDS] as [JobModeId, ...JobModeId[]];
 
 const CanonicalJobType = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof CanonicalJobType>;
@@ -67,6 +56,7 @@ export const JobParams = z.preprocess(
       generate_cover_letter: z.boolean().optional(),
     }),
     z.object({ type: z.literal('tailor-cv'), num: z.number().int().positive() }),
+    z.object({ type: z.literal('latex'), num: z.number().int().positive() }),
     z.object({ type: z.literal('cover-letter'), num: z.number().int().positive() }),
     z.object({ type: z.literal('research'), num: z.number().int().positive() }),
     z.object({ type: z.literal('interview-prep'), num: z.number().int().positive() }),
@@ -120,6 +110,11 @@ export const JobRecord = z.object({
   output: z.string().default(''),
   error: z.string().nullable(),
   exitCode: z.number().int().nullable(),
+  // Optional workflow parent metadata. Legacy standalone records omit it;
+  // workflow children carry both ids so the UI and recovery path can group
+  // and advance them without parsing the free-form params bag.
+  workflowId: z.string().length(16).optional(),
+  workflowStepId: z.string().min(1).optional(),
   // Pid of the spawned worker process, stamped by the runner on the running
   // record. Drives reap-on-read liveness detection (jobs/stale.ts): a
   // 'running' record whose pid no longer exists was orphaned by a server

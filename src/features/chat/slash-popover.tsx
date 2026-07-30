@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { useActiveOptionScroll } from '@/hooks/use-active-option-scroll';
+import { CHAT_DISCOVERABLE_MODES, type ModeId } from '@/lib/modes/catalog';
 
 export interface SlashItem {
   command: string;
@@ -9,23 +10,28 @@ export interface SlashItem {
   description: string;
 }
 
-/** The 8 interactive chat modes + job commands (spec §2 v1 list). Hardcoded
- * by design — the backend routes modes from message text; this list only
- * powers discovery. Keep provider-neutral, one line each. */
-export const SLASH_ITEMS: SlashItem[] = [
-  { command: 'enrich', description: 'Strengthen your CV through a guided interview' },
-  { command: 'offers', description: 'Compare your active offers side by side' },
-  { command: 'tracker', description: 'Ask about application statuses and history' },
-  { command: 'patterns', description: 'Analyze rejection patterns and targeting' },
-  { command: 'follow-up', description: 'Review follow-up cadence for open applications' },
-  { command: 'process-queue', description: 'Process pending saved job URLs' },
-  { command: 'training', description: 'Evaluate a course or certification' },
-  { command: 'project', description: 'Evaluate a portfolio project idea' },
-  { command: 'evaluate', hint: '<num>', description: 'Run a deep evaluation for an offer' },
-  { command: 'screen', hint: '<url>', description: 'Screen a job posting URL' },
-  { command: 'research', hint: '<num>', description: 'Research the company behind an offer' },
-  { command: 'scan', description: 'Scan portals and job boards for new offers' },
-];
+const MODE_HINTS: Partial<Record<ModeId, string>> = {
+  apply: '<num>',
+  'cover-letter': '<num>',
+  'evaluate-offer': '<url-or-num>',
+  evaluate: '<num>',
+  'interview-prep': '<num>',
+  latex: '<num>',
+  negotiate: '<num>',
+  'reach-out': '<num>',
+  research: '<num>',
+  screen: '<url-or-num>',
+  'screen-evaluate': '<url-or-num>',
+  'tailor-cv': '<num>',
+};
+
+/** Discovery is generated from the same catalog used by MCP and the chat
+ * prompt, so adding or reclassifying a mode cannot leave slash commands stale. */
+export const SLASH_ITEMS: SlashItem[] = CHAT_DISCOVERABLE_MODES.map(mode => ({
+  command: mode.id,
+  hint: MODE_HINTS[mode.id as ModeId],
+  description: mode.description,
+}));
 
 /** Prefix matches first, then substring matches — stable within each tier. */
 export function filterSlashItems(filter: string): SlashItem[] {

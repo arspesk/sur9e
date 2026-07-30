@@ -136,10 +136,10 @@ describe('confirm resolution persists to the owning message', () => {
     return { conversationId: conversation.id, token };
   }
 
-  it('approve: the started outcome lands in events_json and re-renders as job-started, no buttons', () => {
+  it('approve: the started outcome lands in events_json and re-renders as job-started, no buttons', async () => {
     const { conversationId, token } = seedTurn();
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('approved');
 
     // Reload from disk — the persisted events now carry the confirm-resolved.
@@ -176,10 +176,10 @@ describe('confirm resolution persists to the owning message', () => {
     expect(queryByRole('button')).toBeNull();
   });
 
-  it('cancel: the cancelled outcome persists and re-renders as cancelled, no buttons', () => {
+  it('cancel: the cancelled outcome persists and re-renders as cancelled, no buttons', async () => {
     const { conversationId, token } = seedTurn();
 
-    const res = confirms.resolveConfirm(root, token, false);
+    const res = await confirms.resolveConfirm(root, token, false);
     expect(res.outcome).toBe('cancelled');
 
     const [msg] = store.listMessages(root, conversationId);
@@ -204,13 +204,13 @@ describe('confirm resolution persists to the owning message', () => {
     expect(queryByRole('button')).toBeNull();
   });
 
-  it('is idempotent: a stale second resolve never overwrites the recorded outcome', () => {
+  it('is idempotent: a stale second resolve never overwrites the recorded outcome', async () => {
     const { conversationId, token } = seedTurn();
 
-    confirms.resolveConfirm(root, token, true); // approved persisted
+    await confirms.resolveConfirm(root, token, true); // approved persisted
     // A late/stale click: the token is already consumed, so it resolves to
     // expired — which must NOT clobber the approved state on the message.
-    const second = confirms.resolveConfirm(root, token, false);
+    const second = await confirms.resolveConfirm(root, token, false);
     expect(second.outcome).toBe('expired');
 
     const [msg] = store.listMessages(root, conversationId);
@@ -219,7 +219,7 @@ describe('confirm resolution persists to the owning message', () => {
     expect(resolutions[0].outcome).toBe('approved');
   });
 
-  it('a resolve whose owning message is not (yet) persisted is a harmless no-op', () => {
+  it('a resolve whose owning message is not (yet) persisted is a harmless no-op', async () => {
     // The live turn is still streaming: no assistant message on disk yet. The
     // live SSE event carries the resolution; persistence simply finds no owner
     // and does nothing (the turn will persist the full events at 'done').
@@ -232,7 +232,7 @@ describe('confirm resolution persists to the owning message', () => {
       meta: 'tracker write · no AI spend',
     });
 
-    const res = confirms.resolveConfirm(root, token, true);
+    const res = await confirms.resolveConfirm(root, token, true);
     expect(res.outcome).toBe('approved');
     // No assistant message existed, so listMessages is empty and nothing threw.
     expect(store.listMessages(root, conversation.id)).toHaveLength(0);

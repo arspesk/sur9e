@@ -7,6 +7,7 @@
 // the human, then re-call with terminalApproved: true.
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { JOB_MODE_IDS } from '@/lib/modes/catalog';
 import { McpTestClient, type MockApp, startMockApp } from './mcp-test-utils';
 
 const CONFIRM_RESPONSE = {
@@ -35,8 +36,173 @@ describe('mcp-app-server — action tools', () => {
     const res = await client.request(2, 'tools/list');
     const names = res.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(
-      expect.arrayContaining(['start_job', 'cancel_job', 'set_status', 'edit_report', 'navigate']),
+      expect.arrayContaining([
+        'list_modes',
+        'get_mode_instructions',
+        'start_workflow',
+        'list_workflows',
+        'cancel_workflow',
+        'start_job',
+        'cancel_job',
+        'set_status',
+        'edit_report',
+        'navigate',
+      ]),
     );
+    const startJob = res.result.tools.find((tool: { name: string }) => tool.name === 'start_job');
+    expect([...startJob.inputSchema.properties.kind.enum].sort()).toEqual([...JOB_MODE_IDS].sort());
+  });
+
+  it('lists canonical modes and loads inline instructions', async () => {
+    app = await startMockApp({
+      'GET /api/chat/modes': {
+        status: 200,
+        body: { modes: [{ id: 'tracker', execution: 'inline' }] },
+      },
+      'GET /api/chat/modes/tracker': {
+        status: 200,
+        body: { id: 'tracker', execution: 'inline', instructions: '# Tracker' },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url });
+    await client.initialize();
+
+    const listed = await client.request(2, 'tools/call', {
+      name: 'list_modes',
+      arguments: {},
+    });
+    const loaded = await client.request(3, 'tools/call', {
+      name: 'get_mode_instructions',
+      arguments: { mode: 'tracker' },
+    });
+
+    expect(JSON.parse(listed.result.content[0].text).modes[0].id).toBe('tracker');
+    expect(JSON.parse(loaded.result.content[0].text).instructions).toContain('# Tracker');
+  });
+
+  it('starts a selected-offer multi-mode workflow behind one confirmation', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/start-workflow': {
+        status: 200,
+        body: {
+          needsConfirm: true,
+          token: 'tok-workflow',
+          summary: 'Run 3 modes for offer #7',
+          meta: 'screen → evaluate → cover letter',
+        },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+
+    const res = await client.request(2, 'tools/call', {
+      name: 'start_workflow',
+      arguments: {
+        targets: [{ num: 7 }],
+        modes: ['screen', 'evaluate', 'cover-letter'],
+        guidance: 'Focus on platform work.',
+      },
+    });
+
+    expect(JSON.parse(res.result.content[0].text).token).toBe('tok-workflow');
+    expect(app.requests[0].body).toEqual({
+      targets: [{ num: 7 }],
+      modes: ['screen', 'evaluate', 'cover-letter'],
+      guidance: 'Focus on platform work.',
+    });
+  });
+
+  it('requires terminal approval once, then relays a started workflow', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/start-workflow': req =>
+        (req.body as Record<string, unknown>).terminalApproved === true
+          ? {
+              status: 200,
+              body: {
+                started: true,
+                workflow: { id: '0123456789abcdef', status: 'running' },
+                jobs: [{ id: 'fedcba9876543210', type: 'evaluate', status: 'queued' }],
+              },
+            }
+          : {
+              status: 200,
+              body: { needsConfirm: true, summary: 'Run evaluation', meta: 'evaluation' },
+            },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url });
+    await client.initialize();
+
+    const pending = await client.request(2, 'tools/call', {
+      name: 'start_workflow',
+      arguments: { targets: [{ num: 7 }], modes: ['evaluate'] },
+    });
+    const approved = await client.request(3, 'tools/call', {
+      name: 'start_workflow',
+      arguments: {
+        targets: [{ num: 7 }],
+        modes: ['evaluate'],
+        terminalApproved: true,
+      },
+    });
+
+    expect(JSON.parse(pending.result.content[0].text).instructions).toContain('terminalApproved');
+    expect(JSON.parse(approved.result.content[0].text)).toMatchObject({
+      started: true,
+      workflow: { id: '0123456789abcdef' },
+      jobs: [{ type: 'evaluate' }],
+    });
+  });
+
+  it('lists and confirmation-gates workflow cancellation', async () => {
+    app = await startMockApp({
+      'GET /api/workflows': {
+        status: 200,
+        body: { workflows: [{ id: '0123456789abcdef', status: 'running' }] },
+      },
+      'POST /api/chat/actions/cancel-workflow': {
+        status: 200,
+        body: { needsConfirm: true, token: 'tok-cancel-workflow' },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+
+    const listed = await client.request(2, 'tools/call', {
+      name: 'list_workflows',
+      arguments: {},
+    });
+    const cancelled = await client.request(3, 'tools/call', {
+      name: 'cancel_workflow',
+      arguments: { workflow_id: '0123456789abcdef' },
+    });
+
+    expect(JSON.parse(listed.result.content[0].text).workflows[0].status).toBe('running');
+    expect(JSON.parse(cancelled.result.content[0].text).token).toBe('tok-cancel-workflow');
+    expect(app.requests[1].body).toEqual({ workflowId: '0123456789abcdef' });
+  });
+
+  it('rejects malformed mode-instruction and workflow calls without claiming success', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/start-workflow': {
+        status: 400,
+        body: { error: 'at least one mode is required' },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url });
+    await client.initialize();
+
+    const missingMode = await client.request(2, 'tools/call', {
+      name: 'get_mode_instructions',
+      arguments: {},
+    });
+    const malformedWorkflow = await client.request(3, 'tools/call', {
+      name: 'start_workflow',
+      arguments: { targets: [{ num: 7 }] },
+    });
+
+    expect(missingMode.result.isError).toBe(true);
+    expect(malformedWorkflow.result.isError).toBe(true);
+    expect(malformedWorkflow.result.content[0].text).toContain('at least one mode');
   });
 
   it('advertises tracked pasted-text screening by offer number', async () => {
@@ -44,6 +210,9 @@ describe('mcp-app-server — action tools', () => {
     await client.initialize();
     const res = await client.request(2, 'tools/list');
     const startJob = res.result.tools.find((tool: { name: string }) => tool.name === 'start_job');
+    expect(startJob.description).toContain(
+      'use screen-evaluate only when the user explicitly asks for both',
+    );
     expect(startJob.inputSchema.properties.params.description).toContain(
       'screen or screen-evaluate with { "num": <tracker number> }',
     );
@@ -84,7 +253,35 @@ describe('mcp-app-server — action tools', () => {
     });
   });
 
-  it('advertises and forwards the recommended create + screen + evaluate workflow', async () => {
+  it('create_offer_from_text forwards a multi-mode workflow and not legacy start_kind', async () => {
+    app = await startMockApp({
+      'POST /api/chat/actions/create-offer-from-text': {
+        status: 200,
+        body: { needsConfirm: true, token: 'tok-text-workflow' },
+      },
+    });
+    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
+    await client.initialize();
+
+    await client.request(2, 'tools/call', {
+      name: 'create_offer_from_text',
+      arguments: {
+        text: 'Build the platform.',
+        company: 'Acme',
+        role: 'Engineer',
+        modes: ['screen', 'evaluate'],
+      },
+    });
+
+    expect(app.requests[0].body).toEqual({
+      text: 'Build the platform.',
+      company: 'Acme',
+      role: 'Engineer',
+      modes: ['screen', 'evaluate'],
+    });
+  });
+
+  it('allows an explicitly requested combined workflow without recommending it', async () => {
     app = await startMockApp({
       'POST /api/chat/actions/create-offer-from-text': {
         status: 200,
@@ -103,8 +300,14 @@ describe('mcp-app-server — action tools', () => {
       (candidate: { name: string }) => candidate.name === 'create_offer_from_text',
     );
     expect(tool.inputSchema.properties.start_kind.enum).toContain('screen-evaluate');
-    expect(tool.description).toContain('Create + screen + evaluate');
-    expect(tool.description).toContain('recommended');
+    expect(tool.description).toMatch(/screening and evaluation are separate modes/i);
+    expect(tool.description).toContain(
+      'screen-evaluate only when the user explicitly asks for both',
+    );
+    expect(tool.description).not.toContain('recommended');
+    expect(tool.inputSchema.properties.start_kind.description).toContain(
+      'only when the user explicitly asks for both',
+    );
 
     await client.request(3, 'tools/call', {
       name: 'create_offer_from_text',

@@ -230,10 +230,16 @@ for (const viewport of VIEWPORTS) {
       await openChatBubble(page, viewport.width);
       const input = page.getByRole('textbox', { name: 'Message' });
       await input.fill('/');
-      await expect(page.getByRole('listbox', { name: 'Chat modes' })).toBeVisible();
+      const listbox = page.getByRole('listbox', { name: 'Chat modes' });
+      await expect(listbox).toBeVisible();
       await page.keyboard.press('ArrowDown');
+      const activeOption = listbox.locator('[role="option"][aria-selected="true"]');
+      await expect(activeOption).toHaveCount(1);
+      const command = (await activeOption.locator('.chat-slash__cmd').innerText())
+        .trim()
+        .split(/\s+/)[0];
       await page.keyboard.press('Enter');
-      await expect(input).toHaveValue('/offers ');
+      await expect(input).toHaveValue(`${command} `);
     });
   });
 }

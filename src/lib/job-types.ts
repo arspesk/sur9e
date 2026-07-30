@@ -64,6 +64,18 @@ export const JOB_TYPES: JobType[] = [
     estimateS: 240,
   },
   {
+    type: 'latex',
+    menuTitle: null,
+    menuTitleBusy: null,
+    menuSub: null,
+    menuIcon: null,
+    pillTitle: 'Generating LaTeX CV…',
+    pillTitleNum: 'Generating LaTeX CV for #{num}…',
+    failMsg: 'LaTeX CV generation failed — retry from the offer',
+    refreshOnDone: true,
+    estimateS: 300,
+  },
+  {
     type: 'cover-letter',
     menuTitle: null,
     menuTitleBusy: null,

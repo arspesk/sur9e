@@ -4,7 +4,8 @@ import { jsonError } from '@/lib/http-errors';
 import { ROOT } from '@/lib/root';
 import { StartJobActionRequest } from '@/lib/schemas/chat-actions';
 import { createConfirm, describeStartedJob, describeStartJob } from '@/lib/server/chat/confirms';
-import { JOB_KIND_BY_NUM, startJob } from '@/lib/server/jobs';
+import { startChatJob } from '@/lib/server/chat/job-start';
+import { JOB_KIND_BY_NUM } from '@/lib/server/jobs';
 
 export async function POST(request: Request) {
   const raw = await request.json().catch(() => null);
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = startJob(ROOT, { kind, params });
+    const result = startChatJob(ROOT, kind, params);
     if ('conflict' in result) {
       return Response.json({ started: false, conflict: true, message: result.message });
     }

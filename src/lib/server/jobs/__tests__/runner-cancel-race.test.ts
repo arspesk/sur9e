@@ -191,4 +191,137 @@ describe('spawnJob cancellation interleaving', () => {
       output: expect.stringContaining('[USAGE]'),
     });
   });
+
+  it('starts evaluation as a separate job only after screening succeeds', async () => {
+    const job: JobRecord = {
+      id: JOB_ID,
+      type: 'screen',
+      status: 'queued',
+      params: { num: 1, then: 'evaluate' },
+      startedAt: '2026-07-28T10:00:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    };
+    persistJobRecord(root, job);
+    const child = fakeChild();
+    const startNextJob = vi.fn(() => ({
+      id: 'fedcba9876543210',
+      type: 'evaluate',
+      status: 'queued',
+      params: { num: 1 },
+      startedAt: '2026-07-28T10:01:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    }));
+
+    await spawnJob(root, job, {
+      spawnProcess: vi.fn(() => child),
+      startNextJob,
+    } as Parameters<typeof spawnJob>[2]);
+    child.emit('close', 0);
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(startNextJob).toHaveBeenCalledWith(root, 'evaluate', { num: 1 });
+    expect(readJobRecord(root, JOB_ID)).toMatchObject({
+      status: 'done',
+      params: {
+        num: 1,
+        then: 'evaluate',
+        next_job_id: 'fedcba9876543210',
+      },
+    });
+  });
+
+  it('does not start evaluation when screening fails', async () => {
+    const job: JobRecord = {
+      id: JOB_ID,
+      type: 'screen',
+      status: 'queued',
+      params: { num: 1, then: 'evaluate' },
+      startedAt: '2026-07-28T10:00:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    };
+    persistJobRecord(root, job);
+    const child = fakeChild();
+    const startNextJob = vi.fn();
+
+    await spawnJob(root, job, {
+      spawnProcess: vi.fn(() => child),
+      startNextJob,
+    } as Parameters<typeof spawnJob>[2]);
+    child.emit('close', 1);
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(startNextJob).not.toHaveBeenCalled();
+    expect(readJobRecord(root, JOB_ID)).toMatchObject({
+      status: 'error',
+      params: { num: 1, then: 'evaluate' },
+    });
+  });
+
+  it('notifies the workflow runner after a child reaches a terminal state', async () => {
+    const job: JobRecord = {
+      id: JOB_ID,
+      type: 'evaluate',
+      status: 'queued',
+      params: { num: 1, workflow_id: 'workflow-1', workflow_step_id: 'step-1' },
+      startedAt: '2026-07-28T10:00:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    };
+    persistJobRecord(root, job);
+    const child = fakeChild();
+    const advanceWorkflow = vi.fn();
+
+    await spawnJob(root, job, {
+      spawnProcess: vi.fn(() => child),
+      advanceWorkflow,
+    } as Parameters<typeof spawnJob>[2]);
+    child.emit('close', 0);
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
+  });
+
+  it('contains a rejected workflow notification after job completion', async () => {
+    const job: JobRecord = {
+      id: JOB_ID,
+      type: 'evaluate',
+      status: 'queued',
+      params: {
+        num: 1,
+        workflow_id: '0123456789abcdef',
+        workflow_step_id: 'step-1',
+      },
+      workflowId: '0123456789abcdef',
+      workflowStepId: 'step-1',
+      startedAt: '2026-07-28T10:00:00.000Z',
+      finishedAt: null,
+      output: '',
+      error: null,
+      exitCode: null,
+    };
+    persistJobRecord(root, job);
+    const child = fakeChild();
+    const advanceWorkflow = vi.fn().mockRejectedValue(new Error('damaged workflow'));
+
+    await spawnJob(root, job, {
+      spawnProcess: vi.fn(() => child),
+      advanceWorkflow,
+    });
+    child.emit('close', 0);
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
+    expect(advanceWorkflow).toHaveBeenCalledWith(root, JOB_ID);
+  });
 });

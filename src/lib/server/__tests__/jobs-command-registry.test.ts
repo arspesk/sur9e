@@ -165,15 +165,18 @@ describe('jobs/command-registry', () => {
       },
     );
 
-    it.each(['tailor-cv', 'cover-letter'] as const)('%s — routes through mode-runner', type => {
-      const cmd = buildCommand(type, { num: 42 }, root);
-      expect(cmd).not.toBeNull();
-      expect(() => JobCommand.parse(cmd)).not.toThrow();
-      // Input loading + provider spawn moved into batch/mode-runner.mjs;
-      // the registry branch is now a thin script that calls it.
-      expect(cmd?.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
-      expect(cmd?.args[1]).toContain('set -o pipefail');
-    });
+    it.each(['tailor-cv', 'cover-letter', 'latex'] as const)(
+      '%s — routes through mode-runner',
+      type => {
+        const cmd = buildCommand(type, { num: 42 }, root);
+        expect(cmd).not.toBeNull();
+        expect(() => JobCommand.parse(cmd)).not.toThrow();
+        // Input loading + provider spawn moved into batch/mode-runner.mjs;
+        // the registry branch is now a thin script that calls it.
+        expect(cmd?.args[1]).toContain(`node batch/mode-runner.mjs ${type} --num 42`);
+        expect(cmd?.args[1]).toContain('set -o pipefail');
+      },
+    );
   });
 
   describe('buildCommand returns null for invalid params', () => {

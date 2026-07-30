@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { MODE_CATALOG } from '@/lib/modes/catalog';
 import { ChatMessage } from '@/lib/schemas/chat';
 import {
   buildChatSystemPrompt,
@@ -32,34 +33,19 @@ describe('buildChatSystemPrompt', () => {
     expect(prompt).toContain('confirmation');
   });
 
-  it('routes the 8 interactive modes and the job kinds', () => {
-    for (const mode of [
-      'enrich',
-      'offers',
-      'tracker',
-      'patterns',
-      'follow-up',
-      'process-queue',
-      'training',
-      'project',
-    ]) {
+  it('routes every canonical catalog mode', () => {
+    for (const mode of Object.keys(MODE_CATALOG)) {
       expect(prompt).toContain(`- ${mode} —`);
     }
-    for (const job of [
-      'evaluate',
-      'screen',
-      'screen-evaluate',
-      'research',
-      'tailor-cv',
-      'cover-letter',
-      'interview-prep',
-      'reach-out',
-      'negotiate',
-      'scan',
-      'batch-evaluate',
-    ]) {
-      expect(prompt).toContain(`- ${job} —`);
-    }
+  });
+
+  it('uses durable workflows for multi-mode and selected-bulk requests', () => {
+    expect(prompt).toContain('start_workflow');
+    expect(prompt).toContain('list_workflows');
+    expect(prompt).toContain('cancel_workflow');
+    expect(prompt).toContain('dependency-aware');
+    expect(prompt).toContain('one confirmation');
+    expect(prompt).toContain('get_mode_instructions');
   });
 
   it('treats a pasted-text Screened/N/A offer as unscreened and screenable by number', () => {
@@ -69,12 +55,15 @@ describe('buildChatSystemPrompt', () => {
     expect(prompt).toContain('does not require a URL');
   });
 
-  it('offers the approved pasted-text workflows and recommends screening plus evaluation', () => {
-    expect(prompt).toContain('Create + screen + evaluate');
-    expect(prompt).toContain('recommended');
+  it('keeps screening and evaluation separate unless the user explicitly asks for both', () => {
+    expect(prompt).toContain('Treat screening and evaluation as separate modes');
     expect(prompt).toContain('Create + screen');
+    expect(prompt).toContain('Create + evaluate');
     expect(prompt).toContain('Create only');
-    expect(prompt).toContain('start_kind: screen-evaluate');
+    expect(prompt).toContain(
+      'Use screen-evaluate only when the user explicitly asks for both screening and evaluation',
+    );
+    expect(prompt).not.toContain('Create + screen + evaluate (recommended)');
   });
 
   it('requires durable Markdown links when mentioning internal app pages', () => {

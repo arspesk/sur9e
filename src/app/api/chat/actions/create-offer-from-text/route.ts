@@ -8,8 +8,18 @@ import {
   describeCreateOfferFromText,
   describeTextOfferResult,
 } from '@/lib/server/chat/confirms';
-import { startJob } from '@/lib/server/jobs';
-import { createOrReuseTextOffer, previewTextOffer } from '@/lib/server/text-offers';
+import { startChatJob } from '@/lib/server/chat/job-start';
+import {
+  createOrReuseTextOffer,
+  previewTextOffer,
+  reserveTextOfferPreview,
+} from '@/lib/server/text-offers';
+import {
+  assertWorkflowStartable,
+  createWorkflow,
+  planWorkflowForTargets,
+  workflowChildJobs,
+} from '@/lib/server/workflows';
 import { revalidatePath } from '@/server/revalidate';
 
 export async function POST(request: Request) {
@@ -20,14 +30,32 @@ export async function POST(request: Request) {
   }
   const { terminalApproved, ...input } = parsed.data;
   try {
-    const preview = previewTextOffer(ROOT, input.text);
-    const { summary, meta } = describeCreateOfferFromText(preview, input);
     const turnId = request.headers.get('x-sur9e-turn');
+    const preview =
+      turnId || terminalApproved === true
+        ? await reserveTextOfferPreview(ROOT, input.text)
+        : previewTextOffer(ROOT, input.text);
+    if (input.modes) {
+      const plan = planWorkflowForTargets(
+        ROOT,
+        {
+          targets: [{ num: preview.anticipatedNum }],
+          modes: input.modes,
+        },
+        undefined,
+        {
+          allowMissingOfferNums: preview.reused ? undefined : new Set([preview.anticipatedNum]),
+        },
+      );
+      assertWorkflowStartable(ROOT, plan);
+    }
+    const { summary, meta } = describeCreateOfferFromText(preview, input);
+    const reservedNum = preview.reused ? undefined : preview.anticipatedNum;
     if (turnId) {
       const { token } = createConfirm(ROOT, {
         turnId,
         kind: 'create-offer-from-text',
-        payload: input,
+        payload: { ...input, reservedNum },
         summary,
         meta,
       });
@@ -36,17 +64,25 @@ export async function POST(request: Request) {
     if (terminalApproved !== true) {
       return Response.json({ needsConfirm: true, summary, meta });
     }
-    const textOffer = createOrReuseTextOffer(ROOT, input);
+    const textOffer = await createOrReuseTextOffer(ROOT, { ...input, reservedNum });
     const job = input.startKind
-      ? startJob(ROOT, { kind: input.startKind, params: { num: textOffer.offer.num } })
+      ? startChatJob(ROOT, input.startKind, { num: textOffer.offer.num })
       : undefined;
-    const presentation = describeTextOfferResult(textOffer, input.startKind, job);
+    const workflow = input.modes
+      ? createWorkflow(ROOT, {
+          targets: [{ num: textOffer.offer.num }],
+          modes: input.modes,
+        })
+      : undefined;
+    const jobs = workflow ? workflowChildJobs(ROOT, workflow) : undefined;
+    const presentation = describeTextOfferResult(textOffer, input.startKind, job, workflow);
     revalidatePath('/offers');
     return Response.json({
       created: !textOffer.reused,
       reused: textOffer.reused,
       offer: textOffer.offer,
       ...(job ? { job } : {}),
+      ...(workflow ? { workflow, jobs } : {}),
       ...presentation,
     });
   } catch (error) {
