@@ -27,7 +27,10 @@ const REQUIRED_FILES: Record<OnboardingMissing, string> = {
 /** Which required personalization files are missing under `root`. */
 export function getOnboardingStatus(root: string): OnboardingStatus {
   const missing = (Object.keys(REQUIRED_FILES) as OnboardingMissing[]).filter(
-    key => !existsSync(join(root, REQUIRED_FILES[key])),
+    key =>
+      !existsSync(
+        /* turbopackIgnore: true */ join(/* turbopackIgnore: true */ root, REQUIRED_FILES[key]),
+      ),
   );
   return { ready: missing.length === 0, missing };
 }

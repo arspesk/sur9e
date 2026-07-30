@@ -128,6 +128,31 @@ describe('MessageView', () => {
     expect(getByText('shot.png')).toBeTruthy();
     expect(getByText('cv.pdf')).toBeTruthy();
     expect(container.querySelector('.chat-attach-chip__icon')).toBeTruthy();
+    expect(getByText('PNG image')).toBeTruthy();
+    expect(getByText('PDF file')).toBeTruthy();
+    expect(container.querySelectorAll('.chat-attach-chip__meta')).toHaveLength(2);
+    const userMessage = container.querySelector('.chat-msg--user');
+    expect(userMessage?.children[0]).toHaveClass('chat-user-bubble');
+    expect(userMessage?.children[1]).toHaveClass('chat-msg__attachments');
+  });
+
+  it('preserves full sent filenames while exposing compact truncation hooks', () => {
+    const longName = 'CleanShot 2026-07-30 at 08.33.24@2x with recruiter location details.png';
+    const { container, getByText } = render(
+      <MessageView
+        message={userMsg('that is what recruiter has said', {
+          attachments: [
+            { path: 'c1/long.png', name: longName, mime: 'image/png', size: 10 },
+            { path: 'c1/notes.txt', name: 'notes.txt', mime: 'text/plain', size: 20 },
+          ],
+        })}
+      />,
+    );
+
+    const attachments = container.querySelector('.chat-msg__attachments');
+    expect(attachments?.querySelectorAll('.chat-attach-chip')).toHaveLength(2);
+    expect(attachments?.querySelectorAll('.chat-attach-chip__body')).toHaveLength(2);
+    expect(getByText(longName)).toHaveAttribute('title', longName);
   });
 
   it('renders no attachment row for a user message without attachments', () => {

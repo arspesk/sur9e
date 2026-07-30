@@ -781,7 +781,9 @@
 }
 .chat-msg--user {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 .chat-user-bubble {
   background: var(--accent-soft);
@@ -1773,12 +1775,25 @@
 .chat-attach-chip__thumb--sent {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
+}
+.chat-attach-chip__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
 }
 .chat-attach-chip__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.chat-attach-chip__meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
 }
 .chat-attach-chip__size {
   font-family: var(--font-mono);
@@ -1816,9 +1831,8 @@
   opacity: 0.4;
   cursor: default;
 }
-/* Composer-scoped preview-chip spec (Option A): warm surface-2 tile at the 6px
-   radius, filename truncated ~180px, snug above the textarea inside the box.
-   Sent-message chips (.chat-msg__attachments) keep the base look above. */
+/* Composer-scoped preview-chip spec: warm surface-2 tile at the 6px radius,
+   filename truncated ~180px, snug above the textarea inside the box. */
 .chat-attach-chips {
   padding: 2px 0 6px;
 }
@@ -1828,6 +1842,30 @@
 }
 .chat-attach-chips .chat-attach-chip__name {
   max-width: 180px;
+}
+.chat-msg__attachments {
+  width: min(100%, 320px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+}
+.chat-msg__attachments .chat-attach-chip {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: var(--radius);
+}
+.chat-msg__attachments .chat-attach-chip__icon {
+  display: inline-flex;
+  width: 56px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-2xs);
+  background: var(--surface-2);
+  font-size: 18px;
 }
 /* File/selection chip leading glyph — the ▤ file fallback and the selection
    chip's quote mark both live here; keep it a snug, muted, non-shrinking box. */
