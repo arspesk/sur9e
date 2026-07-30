@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react';
+import { createEvent, fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPage } from '@/features/chat/chat-page';
 import { useChatStore } from '@/stores/chat-store';
@@ -61,6 +61,9 @@ describe('ChatPage file drop', () => {
     const conversation = container.querySelector('.chat-page__main');
     if (!(conversation instanceof HTMLElement)) throw new Error('conversation surface missing');
     const file = new File([new Uint8Array([1])], 'cv.pdf', { type: 'application/pdf' });
+    const secondFile = new File([new Uint8Array([2])], 'cover-letter.pdf', {
+      type: 'application/pdf',
+    });
 
     fireEvent.drop(conversation, {
       dataTransfer: { files: [file], types: ['Files'] },
@@ -69,15 +72,35 @@ describe('ChatPage file drop', () => {
     expect(setDraftFiles).toHaveBeenCalledTimes(1);
     const update = setDraftFiles.mock.calls[0][0] as (previous: File[]) => File[];
     expect(update([])).toEqual([file]);
+
+    fireEvent.drop(conversation, {
+      dataTransfer: { files: [file, secondFile], types: ['Files'] },
+    });
+
+    const cappedUpdate = setDraftFiles.mock.calls[1][0] as (previous: File[]) => File[];
+    const existingFiles = Array.from(
+      { length: 7 },
+      (_, index) => new File([String(index)], `existing-${index}.txt`),
+    );
+    expect(cappedUpdate(existingFiles)).toEqual([...existingFiles, file]);
   });
 
-  it('shows and clears the same drag-over state as the bubble chat', () => {
+  it('keeps drag-over state between descendants and clears it on surface exit', () => {
     const { container } = render(<ChatPage />);
     const conversation = container.querySelector('.chat-page__main');
     if (!(conversation instanceof HTMLElement)) throw new Error('conversation surface missing');
+    const descendant = conversation.querySelector('[data-testid="conversation"]');
+    if (!(descendant instanceof HTMLElement)) throw new Error('conversation descendant missing');
+    const nextDescendant = conversation.querySelector('[data-testid="composer"]');
+    if (!(nextDescendant instanceof HTMLElement)) throw new Error('composer descendant missing');
     const dataTransfer = { files: [], types: ['Files'] };
 
     fireEvent.dragOver(conversation, { dataTransfer });
+    expect(conversation).toHaveAttribute('data-dragover');
+
+    const nestedLeave = createEvent.dragLeave(descendant, { dataTransfer });
+    Object.defineProperty(nestedLeave, 'relatedTarget', { value: nextDescendant });
+    fireEvent(descendant, nestedLeave);
     expect(conversation).toHaveAttribute('data-dragover');
 
     fireEvent.dragLeave(conversation, { dataTransfer });

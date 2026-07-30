@@ -296,7 +296,6 @@ for (const viewport of VIEWPORTS) {
       types: ['Files'],
     });
     await expect(surface).toHaveAttribute('data-dragover');
-    await page.screenshot({ path: `test-results/chat-file-drop-${viewport.name}.png` });
 
     await surface.evaluate(element => {
       const dataTransfer = new DataTransfer();

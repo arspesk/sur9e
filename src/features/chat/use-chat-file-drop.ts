@@ -17,7 +17,10 @@ export function useChatFileDrop(setFiles: React.Dispatch<React.SetStateAction<Fi
     setDragOver(true);
   }
 
-  function onDragLeave() {
+  function onDragLeave(event: React.DragEvent<HTMLElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
     setDragOver(false);
   }
 
