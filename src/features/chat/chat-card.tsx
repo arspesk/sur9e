@@ -4,17 +4,17 @@
 // conversation orchestration (send, streaming, reattach, per-thread
 // isolation) lives in useConversation, shared with the /chat page.
 
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
 import { useChatStore } from '@/stores/chat-store';
 import { ChatComposer } from './chat-composer';
 import { ChatConversationContent } from './chat-conversation-content';
 import { ChatHeader } from './chat-header';
+import { useChatFileDrop } from './use-chat-file-drop';
 import { useConversation } from './use-conversation';
 
 export function ChatCard() {
   const closeChat = useChatStore(s => s.closeChat);
-  const [dragOver, setDragOver] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   useFocusTrap(cardRef, true);
 
@@ -23,6 +23,7 @@ export function ChatCard() {
   // /chat, so the two surfaces are never mounted at once and only one can win
   // the read-and-clear.
   const convo = useConversation({ consumeAutoSend: true });
+  const fileDrop = useChatFileDrop(convo.setDraftFiles);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -38,21 +39,10 @@ export function ChatCard() {
       role="dialog"
       aria-label="sur9e chat"
       onKeyDown={onKeyDown}
-      data-dragover={dragOver || undefined}
-      onDragOver={e => {
-        // Drops are accepted mid-reply too — the dropped files become draft
-        // chips and Enter queues them for the post-'done' flush.
-        if (e.dataTransfer.types.includes('Files')) {
-          e.preventDefault();
-          setDragOver(true);
-        }
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={e => {
-        e.preventDefault();
-        setDragOver(false);
-        convo.setDraftFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)].slice(0, 8));
-      }}
+      data-dragover={fileDrop.dragOver || undefined}
+      onDragOver={fileDrop.onDragOver}
+      onDragLeave={fileDrop.onDragLeave}
+      onDrop={fileDrop.onDrop}
     >
       <ChatHeader />
       {/* Stream-status announcements for SR users. Status transitions only —

@@ -1740,7 +1740,8 @@
 }
 
 /* ── Attachments ── */
-.chat-card[data-dragover] {
+.chat-card[data-dragover],
+.chat-page__main[data-dragover] {
   outline: 2px dashed var(--accent);
   outline-offset: -4px;
 }
