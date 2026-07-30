@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/arspesk/sur9e/compare/v0.3.1...v0.3.2) (2026-07-30)
+
+
+### Bug Fixes
+
+* **chat:** compact attachments and narrow file tracing ([babbc85](https://github.com/arspesk/sur9e/commit/babbc85426ce994f26c38802fcf84f7429e4ce70))
+* **chat:** restore full-page file drops ([0a041a5](https://github.com/arspesk/sur9e/commit/0a041a519464cc775cb877af258876e28bfae044))
+
 ## [0.3.1](https://github.com/arspesk/sur9e/compare/v0.3.0...v0.3.1) (2026-07-30)
 
 
