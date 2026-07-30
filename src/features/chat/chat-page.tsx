@@ -12,6 +12,7 @@ import { ChatComposer } from './chat-composer';
 import { ChatConversationContent } from './chat-conversation-content';
 import { ChatJobsSlot } from './chat-jobs-slot';
 import { ChatThreadsSidebar } from './chat-threads-sidebar';
+import { useChatFileDrop } from './use-chat-file-drop';
 import { useChatUrlSync } from './use-chat-url-sync';
 import { useConversation } from './use-conversation';
 import { useMobileChatRedirect } from './use-mobile-chat-redirect';
@@ -25,6 +26,7 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   // when the bubble takes over on a phone.
   const redirectingToBubble = useMobileChatRedirect();
   const convo = useConversation({ consumeAutoSend: true });
+  const fileDrop = useChatFileDrop(convo.setDraftFiles);
   // Snapshot at mount so the value can't change under an in-flight animation.
   // The store copy is cleared on a timer (below) rather than here: a first
   // message rewrites /chat → /chat/[id], which remounts this page, and the
@@ -53,7 +55,14 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   return (
     <div className="chat-page" data-enter={entryOrigin ?? undefined}>
       <ChatThreadsSidebar />
-      <section className="chat-page__main" aria-label="Conversation">
+      <section
+        className="chat-page__main"
+        aria-label="Conversation"
+        data-dragover={fileDrop.dragOver || undefined}
+        onDragOver={fileDrop.onDragOver}
+        onDragLeave={fileDrop.onDragLeave}
+        onDrop={fileDrop.onDrop}
+      >
         <header className="chat-page__header">
           <span className="chat-page__title" title={headerTitle}>
             {headerTitle}

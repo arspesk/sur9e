@@ -245,6 +245,79 @@ for (const viewport of VIEWPORTS) {
 }
 
 for (const viewport of VIEWPORTS) {
+  test(`file drop reaches the active chat surface @ ${viewport.name}`, async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await mockChatApi(page);
+    await page.goto('/chat');
+    await suppressDevOverlay(page);
+
+    const surface =
+      viewport.width <= 640
+        ? page.getByRole('dialog', { name: 'sur9e chat' })
+        : page.locator('.chat-page__main');
+    await expect(surface).toBeVisible();
+    await expect(page.locator('html')).toHaveClass(/boot-ready/);
+    expect(pageErrors).toEqual([]);
+    const input = surface.getByRole('textbox', { name: 'Message' });
+    await input.fill('hydration probe');
+    await expect(surface.getByRole('button', { name: 'Send message' })).toBeEnabled();
+    await input.fill('');
+    if (viewport.width <= 640) {
+      // Let the mobile card's entrance animation settle before capturing its
+      // drag-over treatment; otherwise the underlying Home page composites
+      // through the still-transparent card.
+      await page.waitForTimeout(350);
+    }
+
+    const dragOverResult = await surface.evaluate(element => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(
+        new File(['resume'], 'cv.pdf', {
+          type: 'application/pdf',
+        }),
+      );
+      const event = new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      });
+      const dispatched = element.dispatchEvent(event);
+      return {
+        defaultPrevented: event.defaultPrevented,
+        dispatched,
+        types: Array.from(dataTransfer.types),
+      };
+    });
+    expect(dragOverResult).toEqual({
+      defaultPrevented: true,
+      dispatched: false,
+      types: ['Files'],
+    });
+    await expect(surface).toHaveAttribute('data-dragover');
+
+    await surface.evaluate(element => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(
+        new File(['resume'], 'cv.pdf', {
+          type: 'application/pdf',
+        }),
+      );
+      element.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        }),
+      );
+    });
+    await expect(surface.getByText('cv.pdf', { exact: true })).toBeVisible();
+    await expect(surface).not.toHaveAttribute('data-dragover');
+  });
+}
+
+for (const viewport of VIEWPORTS) {
   test(`new full-page thread never flashes the empty state @ ${viewport.name}`, async ({
     page,
   }) => {
