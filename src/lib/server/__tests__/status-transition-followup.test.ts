@@ -161,6 +161,25 @@ describe('updateStatusWithFollowup', () => {
     expectSavedStatus(root, 'Offer');
   });
 
+  it('keeps the saved status when post-write detail loading fails', () => {
+    const root = makeRoot('Applied');
+    mkdirSync(join(root, 'inputs', 'personalization'), { recursive: true });
+    writeFileSync(
+      join(root, 'inputs', 'personalization', 'profile.yml'),
+      'candidate:\n  full_name: Test User\n',
+    );
+    writeFileSync(join(root, 'artifacts', 'output'), 'not a directory');
+    let result: ReturnType<typeof transition> | undefined;
+
+    expect(() => {
+      result = transition(root, 'interview');
+    }).not.toThrow();
+
+    expect(result?.updated.status).toBe('Interview');
+    expect(result?.followup).toBeNull();
+    expectSavedStatus(root, 'Interview');
+  });
+
   it('does not suppress for a matching job on another offer', () => {
     const root = makeRoot('Applied');
     writeJob(root, 'otherofferjob001', 'interview-prep', 'queued', 1002);
