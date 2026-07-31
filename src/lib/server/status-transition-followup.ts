@@ -1,7 +1,7 @@
 import 'server-only';
 import type { ApplicationRow, ApplicationStatus } from '../schemas/applications';
 import { followupForStatusTransition, type StatusFollowup } from '../status-transitions';
-import { findByNum, updateStatus } from './applications';
+import { findByNum, loadApplications, updateStatus } from './applications';
 import { findJobConflict } from './jobs/start';
 
 export interface StatusTransitionResult {
@@ -14,7 +14,7 @@ export function updateStatusWithFollowup(
   num: number,
   status: ApplicationStatus,
 ): StatusTransitionResult {
-  const before = findByNum(root, num);
+  const before = loadApplications(root).find(row => row.num === num);
   if (!before) throw new Error(`num not found: ${num}`);
 
   const updated = updateStatus(root, num, status);
@@ -23,12 +23,16 @@ export function updateStatusWithFollowup(
   const followup = followupForStatusTransition(num, before.status, status);
   if (!followup) return { updated, followup: null };
 
-  const after = findByNum(root, num);
-  const alreadyComplete =
-    (followup.jobKind === 'interview-prep' && after?.has_interview_process) ||
-    (followup.jobKind === 'negotiate' && after?.has_negotiation);
-  if (alreadyComplete) return { updated, followup: null };
+  try {
+    const after = findByNum(root, num);
+    const alreadyComplete =
+      (followup.jobKind === 'interview-prep' && after?.has_interview_process) ||
+      (followup.jobKind === 'negotiate' && after?.has_negotiation);
+    if (alreadyComplete) return { updated, followup: null };
 
-  const conflict = findJobConflict(root, followup.jobKind, { num });
-  return { updated, followup: conflict ? null : followup };
+    const conflict = findJobConflict(root, followup.jobKind, { num });
+    return { updated, followup: conflict ? null : followup };
+  } catch {
+    return { updated, followup: null };
+  }
 }
