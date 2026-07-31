@@ -19,9 +19,14 @@ export function useActiveOptionScroll(
 ): void {
   useEffect(() => {
     if (activeIndex < 0) return;
-    const active = containerRef.current?.querySelector<HTMLElement>(
-      '[data-active="true"],[aria-selected="true"]',
-    );
+    // Prefer the owner-controlled data marker. Some headless list libraries
+    // update aria-selected through internal state one effect later, so during
+    // the controlling index change the old row and new row can briefly both
+    // match a combined selector. Falling back to aria-selected still supports
+    // native/third-party listboxes that do not expose data-active.
+    const active =
+      containerRef.current?.querySelector<HTMLElement>('[data-active="true"]') ??
+      containerRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
     active?.scrollIntoView({ block: 'nearest' });
   }, [containerRef, activeIndex]);
 }

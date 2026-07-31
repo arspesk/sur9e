@@ -66,6 +66,7 @@ export interface CancelJobPayload {
 
 export interface CreateOfferFromTextPayload {
   text: string;
+  url?: string;
   company?: string;
   role?: string;
   startKind?: TextOfferStartKind;
@@ -553,6 +554,7 @@ export function describeCancelJob(job: JobRecord): { summary: string; meta: stri
 export function describeCreateOfferFromText(
   preview: { reused: boolean; offer: ApplicationRow | null },
   input: {
+    url?: string;
     company?: string;
     role?: string;
     startKind?: TextOfferStartKind;
@@ -562,7 +564,9 @@ export function describeCreateOfferFromText(
   const identity = [input.company?.trim(), input.role?.trim()].filter(Boolean).join(' · ');
   const action = preview.reused
     ? `Reuse offer #${preview.offer?.num}`
-    : `Create offer from pasted text`;
+    : input.url
+      ? 'Import offer from source URL'
+      : `Create offer from pasted text`;
   const next = input.modes
     ? ` · then run ${input.modes.join(' → ')}`
     : input.startKind

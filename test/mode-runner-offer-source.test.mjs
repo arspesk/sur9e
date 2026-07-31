@@ -45,6 +45,28 @@ describe('resolveOfferSource', () => {
     });
   });
 
+  it('reads an imported URL source from its saved JD floor without calling the network', async () => {
+    root = mkdtempSync(join(tmpdir(), 'offer-source-'));
+    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
+    writeFileSync(join(root, 'inputs/jds/acme.md'), 'Fetched JD floor\n', 'utf-8');
+    const fetcher = vi.fn();
+    const result = await resolveOfferSource(
+      root,
+      {
+        sourceKind: 'url',
+        url: 'https://example.com/jobs/1',
+        jdPath: 'inputs/jds/acme.md',
+      },
+      { fetcher },
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      kind: 'url',
+      label: 'https://example.com/jobs/1',
+      jd: { status: 'ok', text: 'Fetched JD floor\n' },
+    });
+  });
+
   it('rejects a saved source path outside inputs/jds', async () => {
     root = mkdtempSync(join(tmpdir(), 'offer-source-'));
     await expect(

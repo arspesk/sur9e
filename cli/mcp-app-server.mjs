@@ -52,7 +52,7 @@ const READ_TOOLS = [
   {
     name: 'get_tracker',
     description:
-      'List every tracked application: num, date, company, role, score, status, report summary. Read-only.',
+      'List every tracked application: num, date, company, role, score, status, source URL, and report summary. Read-only.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -209,7 +209,7 @@ const ACTION_TOOLS = [
   {
     name: 'create_offer_from_text',
     description:
-      'Create or reuse a normal tracked offer from pasted job-description text, without a URL. ' +
+      'Create or reuse a normal tracked offer from pasted or fetched job-description text. Include url when the text came from a source URL. ' +
       'If company or role is missing, ask the user first; use Unknown only when the information is genuinely absent from the text. ' +
       'Screening and evaluation are separate modes. Unless the user already chose, ask whether they want: Create + screen, Create + evaluate, or Create only. ' +
       'Use screen-evaluate only when the user explicitly asks for both; the server schedules screening first and evaluation only after screening succeeds. ' +
@@ -222,7 +222,12 @@ const ACTION_TOOLS = [
           type: 'string',
           minLength: 1,
           maxLength: 32000,
-          description: 'The pasted job description text',
+          description: 'The pasted or fetched job description text',
+        },
+        url: {
+          type: 'string',
+          format: 'uri',
+          description: 'Optional source URL when text was fetched for direct evaluation',
         },
         company: { type: 'string', description: 'Company name, when known' },
         role: { type: 'string', description: 'Role title, when known' },
@@ -527,6 +532,7 @@ async function callTool(name, args) {
     case 'create_offer_from_text':
       return confirmGatedCall('/api/chat/actions/create-offer-from-text', {
         text: args?.text,
+        url: args?.url,
         company: args?.company,
         role: args?.role,
         startKind: args?.start_kind,
