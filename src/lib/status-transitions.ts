@@ -39,3 +39,20 @@ export function interceptStatusPick(
   if (next === 'evaluated') return { kind: 'evaluate-modal' };
   return { kind: 'proceed' };
 }
+
+export type StatusFollowup =
+  | { num: number; jobKind: 'interview-prep' }
+  | { num: number; jobKind: 'negotiate' };
+
+export function followupForStatusTransition(
+  num: number,
+  currentStatus: string | undefined,
+  nextStatus: string,
+): StatusFollowup | null {
+  const current = (currentStatus ?? '').trim().toLowerCase();
+  const next = nextStatus.trim().toLowerCase();
+  if (current === next) return null;
+  if (next === 'interview') return { num, jobKind: 'interview-prep' };
+  if (next === 'offer') return { num, jobKind: 'negotiate' };
+  return null;
+}

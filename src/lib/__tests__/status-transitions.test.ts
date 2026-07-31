@@ -6,7 +6,7 @@
 // screened (the report keeps its evaluated depth; maintainer decision
 // 2026-06-11) — proceeds as a plain status PATCH.
 import { describe, expect, it } from 'vitest';
-import { interceptStatusPick } from '@/lib/status-transitions';
+import { followupForStatusTransition, interceptStatusPick } from '@/lib/status-transitions';
 
 describe('interceptStatusPick', () => {
   it('screened → evaluated routes to the evaluate confirm modal', () => {
@@ -32,5 +32,42 @@ describe('interceptStatusPick', () => {
   it('handles missing/title-cased input defensively', () => {
     expect(interceptStatusPick(undefined, 'evaluated')).toEqual({ kind: 'evaluate-modal' });
     expect(interceptStatusPick('', 'applied')).toEqual({ kind: 'proceed' });
+  });
+});
+
+describe('followupForStatusTransition', () => {
+  it('maps a transition to interview to interview preparation', () => {
+    expect(followupForStatusTransition(1001, 'applied', 'interview')).toEqual({
+      num: 1001,
+      jobKind: 'interview-prep',
+    });
+  });
+
+  it('maps a transition to offer to negotiation', () => {
+    expect(followupForStatusTransition(1001, 'interview', 'offer')).toEqual({
+      num: 1001,
+      jobKind: 'negotiate',
+    });
+  });
+
+  it('returns null when interview or offer is already the current status', () => {
+    expect(followupForStatusTransition(1001, 'interview', 'interview')).toBeNull();
+    expect(followupForStatusTransition(1001, 'offer', 'offer')).toBeNull();
+  });
+
+  it('returns null for unrelated transitions', () => {
+    expect(followupForStatusTransition(1001, 'screened', 'applied')).toBeNull();
+  });
+
+  it('normalizes title-cased and whitespace-padded statuses defensively', () => {
+    expect(followupForStatusTransition(1001, ' Applied ', ' Interview ')).toEqual({
+      num: 1001,
+      jobKind: 'interview-prep',
+    });
+    expect(followupForStatusTransition(1001, ' Interview ', ' Offer ')).toEqual({
+      num: 1001,
+      jobKind: 'negotiate',
+    });
+    expect(followupForStatusTransition(1001, ' Offer ', ' offer ')).toBeNull();
   });
 });
