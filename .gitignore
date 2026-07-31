@@ -108,3 +108,4 @@ batch/*.pid
 # Scratch dir
 tmp/
 .playwright-mcp/
+.worktrees/
