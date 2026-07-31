@@ -189,14 +189,14 @@ ${jdText}`;
       num: ctx.num,
       date: today,
       ...(offer.url ? { url: offer.url } : {}),
-      ...(offer.sourceKind === "text"
-        ? { source_kind: "text", jd_path: offer.jdPath, jd_hash: offer.jdHash }
+      ...(offer.sourceKind === "text" || offer.sourceKind === "url"
+        ? { source_kind: offer.sourceKind, jd_path: offer.jdPath, jd_hash: offer.jdHash }
         : {}),
       status: "Evaluated",
       state: "evaluated",
     };
     if (offer.sourceKind === "text") delete fm.url;
-    else {
+    else if (offer.sourceKind !== "url") {
       delete fm.source_kind;
       delete fm.jd_path;
       delete fm.jd_hash;
