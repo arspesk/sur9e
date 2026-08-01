@@ -77,8 +77,17 @@ describe('status follow-up modal copy', () => {
     expect(runJob).not.toHaveBeenCalled();
   });
 
-  it('keeps EvaluateModal dismissal Cancel for manual use', () => {
-    renderModal('evaluate', <EvaluateModal />, { num: 7 });
+  it('labels bulk status-triggered EvaluateModal dismissal Not now', () => {
+    const onStatusOnly = vi.fn();
+    renderModal('evaluate', <EvaluateModal />, { count: 2, nums: [7, 8], onStatusOnly });
+
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set status only' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('keeps EvaluateModal dismissal Cancel for a manual batch', () => {
+    renderModal('evaluate', <EvaluateModal />, { count: 2, nums: [7, 8] });
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
