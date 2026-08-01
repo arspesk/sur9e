@@ -158,27 +158,31 @@ describe('runModeLLM fallback retry', () => {
 
   it.each([
     {
+      signature: 'overloaded_error',
       primary: { provider: 'claude', model: 'claude-sonnet-4-6' },
       fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
       stderr: '{"type":"error","error":{"type":"overloaded_error"}}',
     },
     {
+      signature: 'capacity',
       primary: { provider: 'codex', model: 'gpt-5.4-mini' },
       fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
       stderr: 'Selected model is at capacity. Please try a different model.',
     },
     {
+      signature: 'internal server error',
       primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
       fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
       stderr: 'AI_APICallError: Internal server error',
     },
     {
+      signature: 'no provider available',
       primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
       fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
       stderr: 'AI_APICallError: No provider available',
     },
   ])(
-    'runs $primary.provider failure → $fallback.provider fallback success',
+    '$primary.provider → $fallback.provider fallback succeeds after $signature failure',
     async ({ primary, fallback, stderr }) => {
       const f = makeFakes([
         { code: 1, stderr },
@@ -207,18 +211,33 @@ describe('runModeLLM fallback retry', () => {
   );
 
   it.each([
-    ['claude', 'claude-sonnet-4-6', 'opencode', 'opencode/big-pickle', 'overloaded_error'],
-    ['codex', 'gpt-5.4-mini', 'claude', 'claude-sonnet-4-6', 'at capacity'],
-    [
-      'opencode',
-      'opencode/deepseek-v4-flash-free',
-      'codex',
-      'gpt-5.4-mini',
-      'No provider available',
-    ],
+    {
+      signature: 'overloaded_error',
+      primary: { provider: 'claude', model: 'claude-sonnet-4-6' },
+      fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
+      primaryError: 'overloaded_error',
+    },
+    {
+      signature: 'capacity',
+      primary: { provider: 'codex', model: 'gpt-5.4-mini' },
+      fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
+      primaryError: 'at capacity',
+    },
+    {
+      signature: 'internal server error',
+      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
+      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
+      primaryError: 'Internal server error',
+    },
+    {
+      signature: 'no provider available',
+      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
+      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
+      primaryError: 'No provider available',
+    },
   ])(
-    '%s failure → %s fallback failure stops after exactly two attempts',
-    async (primaryProvider, primaryModel, fallbackProvider, fallbackModel, primaryError) => {
+    '$primary.provider → $fallback.provider exhausts after $signature primary failure',
+    async ({ primary, fallback, primaryError }) => {
       const f = makeFakes([
         { code: 1, stderr: primaryError },
         { code: 1, stderr: 'fallback process failed' },
@@ -226,17 +245,16 @@ describe('runModeLLM fallback retry', () => {
       const r = await runModeLLM(process.cwd(), 'screen', 'prompt', {
         logsDir,
         runtime: {
-          provider: primaryProvider,
-          model: primaryModel,
-          fallback: { provider: fallbackProvider, model: fallbackModel },
+          ...primary,
+          fallback,
         },
         execImpl: f.execImpl,
         spawnImpl: f.spawnImpl,
       });
 
       expect(r.ok).toBe(false);
-      expect(f.spawnedProviders).toEqual([primaryProvider, fallbackProvider]);
-      expect(f.spawnedModels).toEqual([primaryModel, fallbackModel]);
+      expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
+      expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
       expect(r.error).toBe('primary: exit 1 (overloaded); fallback: exit 1');
       expect(r.stderr).toBe('fallback process failed');
       expect(r.usedFallback).toBeUndefined();

@@ -119,10 +119,11 @@ describe('spawnJob fallback metadata', () => {
       };
       persistJobRecord(root, job);
       const child = fakeChild();
+      const spawnProcess = vi.fn(() => child);
       const trackUsage = vi.fn();
 
       await spawnJob(root, job, {
-        spawnProcess: vi.fn(() => child),
+        spawnProcess,
         trackUsage,
       });
       child.stdout.emit(
@@ -135,6 +136,7 @@ describe('spawnJob fallback metadata', () => {
       child.emit('close', 0);
       await new Promise<void>(resolve => setImmediate(resolve));
 
+      expect(spawnProcess).toHaveBeenCalledTimes(1);
       expect(readJobRecord(root, JOB_ID)).toMatchObject({
         status: 'done',
         provider: fallback.provider,
@@ -144,6 +146,7 @@ describe('spawnJob fallback metadata', () => {
           reason: 'overloaded',
         },
       });
+      expect(trackUsage).toHaveBeenCalledTimes(1);
       expect(trackUsage).toHaveBeenCalledWith(
         fallback.provider,
         10,
