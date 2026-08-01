@@ -102,6 +102,36 @@ describe('updateStatusWithFollowup', () => {
     expectSavedStatus(root, 'Offer');
   });
 
+  it.each(['Screened', 'Evaluated'])(
+    'offers interview preparation from %s when the report only has an evaluation placeholder',
+    status => {
+      const root = makeRoot(
+        status,
+        '## Interview Process\n\nExpect a technical round. Run `/interview-prep` before the interview.',
+      );
+
+      const result = transition(root, 'interview');
+
+      expect(result.followup).toEqual({ num: 1001, jobKind: 'interview-prep' });
+      expectSavedStatus(root, 'Interview');
+    },
+  );
+
+  it.each(['Screened', 'Evaluated'])(
+    'offers negotiation preparation from %s when the report only has an evaluation placeholder',
+    status => {
+      const root = makeRoot(
+        status,
+        '## Negotiation Strategy\n\nRun `/negotiate` after receiving an offer.',
+      );
+
+      const result = transition(root, 'offer');
+
+      expect(result.followup).toEqual({ num: 1001, jobKind: 'negotiate' });
+      expectSavedStatus(root, 'Offer');
+    },
+  );
+
   it('returns no follow-up for a same-status call', () => {
     const root = makeRoot('Interview');
 
