@@ -11,6 +11,7 @@ import {
   AgentSessionHandle,
   type ChatAttachment,
   ChatMessage,
+  ChatTurnEvent,
   Conversation,
 } from '../../schemas/chat';
 import { openChatDb } from './db';
@@ -72,6 +73,11 @@ function parseEvents(json: string | null): unknown[] | null {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
+}
+
+function isValidConfirmEvent(event: unknown, token: string): boolean {
+  const parsed = ChatTurnEvent.safeParse(event);
+  return parsed.success && parsed.data.type === 'confirm' && parsed.data.token === token;
 }
 
 function parseAttachments(json: string | null): unknown {
@@ -309,7 +315,7 @@ export function appendConfirmResolution(
     if (!events) continue;
     // Verify the LIKE hit is the real owner (the confirm event carrying this
     // token), not an incidental substring match elsewhere in the blob.
-    const owns = events.some(e => isRecord(e) && e.type === 'confirm' && e.token === token);
+    const owns = events.some(event => isValidConfirmEvent(event, token));
     if (!owns) continue;
     const alreadyResolved = events.some(
       e => isRecord(e) && e.type === 'confirm-resolved' && e.token === token,
@@ -329,6 +335,55 @@ export function appendConfirmResolution(
       ...(execution ? { execution } : {}),
       ...(presentation?.message ? { message: presentation.message } : {}),
       ...(presentation?.links ? { links: presentation.links } : {}),
+    });
+    db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
+      JSON.stringify(events),
+      row.id,
+    );
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Append a fresh start-job confirmation after the assistant message's parent
+ * confirmation. Candidate rows are narrowed by LIKE, then verified against
+ * the parsed event structure before any write so incidental token text can
+ * never redirect the child card to another message.
+ *
+ * Idempotent for the supplied child token. Corrupt/missing event arrays are
+ * left untouched. Returns true only when the owning message already contains,
+ * or was updated to contain, the child confirmation.
+ */
+export function appendConfirmAfter(
+  root: string,
+  parentToken: string,
+  child: { token: string; summary: string; meta: string },
+): boolean {
+  const db = openChatDb(root);
+  const rows = db
+    .prepare(
+      "SELECT id, events_json FROM messages WHERE role = 'assistant' AND events_json LIKE ? ORDER BY position DESC",
+    )
+    .all(`%${parentToken}%`) as { id: string; events_json: string | null }[];
+  for (const row of rows) {
+    const events = parseEvents(row.events_json);
+    if (!events) continue;
+    const owns = events.some(event => isValidConfirmEvent(event, parentToken));
+    if (!owns) continue;
+    const alreadyAppended = events.some(event => isValidConfirmEvent(event, child.token));
+    if (alreadyAppended) return true;
+    const maxSeq = events.reduce<number>((max, event) => {
+      const seq = isRecord(event) ? event.seq : undefined;
+      return typeof seq === 'number' && seq > max ? seq : max;
+    }, 0);
+    events.push({
+      seq: maxSeq + 1,
+      type: 'confirm',
+      token: child.token,
+      summary: child.summary,
+      meta: child.meta,
+      kind: 'start-job',
     });
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
       JSON.stringify(events),
