@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import {
   existsSync,
   mkdirSync,
@@ -378,14 +379,17 @@ describe('runUpdateRestartJob', () => {
   });
 
   it.each([
-    { checkpoint: 'apply-started', expectsRollback: true },
-    { checkpoint: 'applied', expectsRollback: true },
-    { checkpoint: 'server-stopped', expectsRollback: true },
-    { checkpoint: 'server-restarted', expectsRollback: true },
-    { checkpoint: 'rollback-complete', expectsRollback: false },
+    { checkpoint: 'apply-started', installedVersion: '0.3.2', expectsRollback: true },
+    { checkpoint: 'applied', installedVersion: '0.4.0', expectsRollback: true },
+    { checkpoint: 'server-stopped', installedVersion: '0.4.0', expectsRollback: true },
+    { checkpoint: 'server-restarted', installedVersion: '0.4.0', expectsRollback: true },
+    { checkpoint: 'rollback-complete', installedVersion: '0.3.2', expectsRollback: false },
+    { checkpoint: 'dependencies-restored', installedVersion: '0.4.0', expectsRollback: false },
+    { checkpoint: 'recovery-build-complete', installedVersion: '0.4.0', expectsRollback: false },
+    { checkpoint: 'recovery-server-started', installedVersion: '0.4.0', expectsRollback: false },
   ])(
-    'recovers an interrupted update from $checkpoint without applying again',
-    async ({ checkpoint, expectsRollback }) => {
+    'recovers an interrupted update from $checkpoint at v$installedVersion without applying again',
+    async ({ checkpoint, installedVersion, expectsRollback }) => {
       const root = makeRoot();
       const interrupted = queuedJob(root);
       writeFileSync(
@@ -398,7 +402,9 @@ describe('runUpdateRestartJob', () => {
           error: 'Update worker stopped before completion',
         })}\n`,
       );
-      const { runCommand, deps } = harness(root);
+      const { runCommand, deps } = harness(root, {
+        readVersion: vi.fn(() => installedVersion),
+      });
 
       const result = await runUpdateRestartJob(root, JOB_ID, deps, { recoveryOnly: true });
 
@@ -511,5 +517,83 @@ describe('recoverInterruptedUpdateOnStartup', () => {
       }),
     ).resolves.toEqual({ status: 'active', jobId: JOB_ID });
     expect(runJob).not.toHaveBeenCalled();
+  });
+});
+
+describe('owned command timeout', () => {
+  it('waits for SIGKILL escalation before recovery when the group leader exits on SIGTERM', async () => {
+    vi.useFakeTimers();
+    const children = [
+      Object.assign(new EventEmitter(), { pid: 1101 }),
+      Object.assign(new EventEmitter(), { pid: 1102 }),
+      Object.assign(new EventEmitter(), { pid: 1103 }),
+    ];
+    const spawnProcess = vi.fn(() => children[spawnProcess.mock.calls.length - 1]);
+    vi.doMock('node:child_process', async importOriginal => {
+      const actual = await importOriginal();
+      return {
+        ...actual,
+        default: { ...actual.default, spawn: spawnProcess },
+        spawn: spawnProcess,
+      };
+    });
+    vi.resetModules();
+    let timedOutGroupAlive = true;
+    const kill = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === -1102 && signal === 0 && !timedOutGroupAlive) {
+        throw Object.assign(new Error('process group is gone'), { code: 'ESRCH' });
+      }
+      return true;
+    });
+
+    try {
+      const isolatedWorker = await import('../scripts/update-worker.mjs');
+      const root = makeRoot();
+      const states = [];
+      void isolatedWorker.runUpdateRestartJob(root, JOB_ID, {
+        pid: 4242,
+        clock: () => NOW,
+        claimPid: vi.fn(),
+        persistJob: (_root, job) => states.push(structuredClone(job)),
+        waitForHealth: vi.fn().mockResolvedValue(undefined),
+        readLaunchIdentity: vi.fn(() => ({ launchId: 'launch-123' })),
+      });
+
+      expect(spawnProcess).toHaveBeenCalledTimes(1);
+      children[0].emit('exit', 0, null);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      expect(kill).toHaveBeenCalledWith(-1102, 'SIGTERM');
+      children[1].emit('exit', null, 'SIGTERM');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(kill).not.toHaveBeenCalledWith(-1102, 'SIGKILL');
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(kill).toHaveBeenCalledWith(-1102, 'SIGKILL');
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(spawnProcess).toHaveBeenCalledTimes(2);
+
+      timedOutGroupAlive = false;
+      await vi.advanceTimersByTimeAsync(50);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(spawnProcess).toHaveBeenCalledTimes(3);
+      expect(states.map(job => job.phase)).toContain('recovering');
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+      kill.mockRestore();
+      vi.doUnmock('node:child_process');
+      vi.resetModules();
+    }
   });
 });
