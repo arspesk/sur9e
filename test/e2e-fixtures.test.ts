@@ -16,4 +16,12 @@ describe('report fixture Markdown filtering', () => {
     const markdown = '# Report\n\n## First\nText\n## Second';
     expect(withoutFencedCode(markdown)).toBe(markdown);
   });
+
+  it('keeps four-space-indented backticks as code and preserves later headings', () => {
+    const markdown = '    ```\n    ## indented code\n    ```\n## First\n## Second';
+    const filtered = withoutFencedCode(markdown);
+
+    expect(filtered).toBe(markdown);
+    expect(filtered.match(/^##\s+/gm)).toHaveLength(2);
+  });
 });
