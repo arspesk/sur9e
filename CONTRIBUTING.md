@@ -106,9 +106,10 @@ Each PR must deliver one independently reviewable and revertible outcome:
   them would leave the feature incomplete or unsafe.
 - Group fixes that share a root cause or component; do not create a micro-PR for
   every line. Avoid both catch-all PRs and artificial fragmentation.
-- Open each completed, independent PR promptly instead of stockpiling several
-  finished changes for one bulk push. Base dependent work on updated `main`
-  after its prerequisite merges rather than opening a stack where practical.
+- AI agents must obtain explicit authorization before pushing or opening a PR.
+  Once authorized, open each completed, independent PR promptly instead of
+  stockpiling finished changes for one bulk push. Base dependent work on updated
+  `main` after its prerequisite merges rather than opening a stack where practical.
 - If a branch already mixes independent work, split it before detailed review.
   For example, submit an independent feature, an unrelated refactor, and
   unrelated fixes as separate PRs.

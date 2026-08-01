@@ -139,8 +139,9 @@ Before implementing a repository change, read [`CONTRIBUTING.md`](CONTRIBUTING.m
 in full. Treat each pull request as the unit of history because this repository
 squash-merges: one independently reviewable outcome per PR, with its required
 implementation, tests, documentation, and tightly coupled refactoring together.
-Publish each completed independent PR promptly. `CONTRIBUTING.md` is the source
-of truth for scope decisions, split examples, commit style, and review expectations.
+After explicit authorization to push and open PRs, publish each completed
+independent PR promptly. `CONTRIBUTING.md` is the source of truth for scope
+decisions, split examples, commit style, and review expectations.
 
 1. **Branch from current `main`.** Fetch first, then use a short-lived branch or
    isolated worktree. Never commit or push implementation work directly to
