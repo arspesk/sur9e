@@ -131,9 +131,10 @@ to be split before reviewing the implementation in detail.
   messages cannot affect Release Please. Remote enforcement is a maintainer
   prerequisite and must not be assumed active until the GitHub settings are
   verified.
-- Working commits may capture review iterations, but keep them understandable
-  enough to inspect while the PR is open. They are not the permanent project
-  history; the validated PR title becomes the single squash commit on `main`.
+- Working commits may capture review iterations, but keep them logically grouped,
+  well-described, and understandable enough to inspect while the PR is open. They
+  are not the permanent project history; the validated PR title becomes the single
+  squash commit on `main`.
 - Frontend changes: include desktop (1280×800), tablet (768×1024), and mobile
   (375×667) screenshots in the PR.
 - Accessibility is part of done: keyboard navigation, labels, and focus

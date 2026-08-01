@@ -135,8 +135,9 @@ weekly npm and GitHub Actions PRs; never auto-merge them. See
 
 ## Development and release lifecycle
 
-Before implementing a repository change, read [`CONTRIBUTING.md`](CONTRIBUTING.md)
-in full. Treat each pull request as the unit of history because this repository
+Before implementing, committing, pushing, or opening a PR for a repository
+change, read [`CONTRIBUTING.md`](CONTRIBUTING.md) in full. Treat each pull request
+as the unit of history because this repository
 squash-merges: one independently reviewable outcome per PR, with its required
 implementation, tests, documentation, and tightly coupled refactoring together.
 After explicit authorization to push and open PRs, publish each completed
