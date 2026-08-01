@@ -71,13 +71,26 @@ function parseEvents(json: string | null): unknown[] | null {
   }
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null;
+function validTurnEvent(event: unknown): ChatTurnEvent | null {
+  const parsed = ChatTurnEvent.safeParse(event);
+  return parsed.success ? parsed.data : null;
 }
 
-function isValidConfirmEvent(event: unknown, token: string): boolean {
-  const parsed = ChatTurnEvent.safeParse(event);
-  return parsed.success && parsed.data.type === 'confirm' && parsed.data.token === token;
+function isValidTokenEvent(
+  event: unknown,
+  type: 'confirm' | 'confirm-resolved',
+  token: string,
+): boolean {
+  const parsed = validTurnEvent(event);
+  return parsed?.type === type && parsed.token === token;
+}
+
+function nextValidEventSeq(events: unknown[]): number {
+  const maxSeq = events.reduce<number>((max, event) => {
+    const parsed = validTurnEvent(event);
+    return parsed && parsed.seq > max ? parsed.seq : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 function parseAttachments(json: string | null): unknown {
@@ -315,20 +328,16 @@ export function appendConfirmResolution(
     if (!events) continue;
     // Verify the LIKE hit is the real owner (the confirm event carrying this
     // token), not an incidental substring match elsewhere in the blob.
-    const owns = events.some(event => isValidConfirmEvent(event, token));
+    const owns = events.some(event => isValidTokenEvent(event, 'confirm', token));
     if (!owns) continue;
-    const alreadyResolved = events.some(
-      e => isRecord(e) && e.type === 'confirm-resolved' && e.token === token,
+    const alreadyResolved = events.some(event =>
+      isValidTokenEvent(event, 'confirm-resolved', token),
     );
     if (alreadyResolved) return true;
     // Seq after the current max so foldEvents' seq-sort keeps the resolution
     // last (it flips the confirm item in place regardless, but order is tidy).
-    const maxSeq = events.reduce<number>((m, e) => {
-      const s = isRecord(e) ? e.seq : undefined;
-      return typeof s === 'number' && s > m ? s : m;
-    }, 0);
-    events.push({
-      seq: maxSeq + 1,
+    const resolution = ChatTurnEvent.safeParse({
+      seq: nextValidEventSeq(events),
       type: 'confirm-resolved',
       token,
       outcome,
@@ -336,6 +345,8 @@ export function appendConfirmResolution(
       ...(presentation?.message ? { message: presentation.message } : {}),
       ...(presentation?.links ? { links: presentation.links } : {}),
     });
+    if (!resolution.success) return false;
+    events.push(resolution.data);
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
       JSON.stringify(events),
       row.id,
@@ -369,22 +380,20 @@ export function appendConfirmAfter(
   for (const row of rows) {
     const events = parseEvents(row.events_json);
     if (!events) continue;
-    const owns = events.some(event => isValidConfirmEvent(event, parentToken));
+    const owns = events.some(event => isValidTokenEvent(event, 'confirm', parentToken));
     if (!owns) continue;
-    const alreadyAppended = events.some(event => isValidConfirmEvent(event, child.token));
+    const alreadyAppended = events.some(event => isValidTokenEvent(event, 'confirm', child.token));
     if (alreadyAppended) return true;
-    const maxSeq = events.reduce<number>((max, event) => {
-      const seq = isRecord(event) ? event.seq : undefined;
-      return typeof seq === 'number' && seq > max ? seq : max;
-    }, 0);
-    events.push({
-      seq: maxSeq + 1,
+    const confirmation = ChatTurnEvent.safeParse({
+      seq: nextValidEventSeq(events),
       type: 'confirm',
       token: child.token,
       summary: child.summary,
       meta: child.meta,
       kind: 'start-job',
     });
+    if (!confirmation.success) return false;
+    events.push(confirmation.data);
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
       JSON.stringify(events),
       row.id,
