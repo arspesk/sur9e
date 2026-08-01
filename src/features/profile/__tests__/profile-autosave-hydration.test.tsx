@@ -76,12 +76,12 @@ describe('Profile auto-save — hydration must not save', () => {
   });
 
   it('a real edit still auto-saves after the debounce', async () => {
-    const { getByText } = renderHarness();
+    const { getByRole } = renderHarness();
     await act(async () => {
       vi.advanceTimersByTime(3000);
     });
     await act(async () => {
-      fireEvent.click(getByText('+ Add answer'));
+      fireEvent.click(getByRole('button', { name: 'Add answer' }));
     });
     await act(async () => {
       vi.advanceTimersByTime(700);

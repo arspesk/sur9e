@@ -98,7 +98,11 @@
   --space-10: 128px;
 
   /* ─── Icons ─── */
+  --icon-size-micro: 10px;
+  --icon-size-compact: 12px;
+  --icon-size-small: 14px;
   --icon-size-control: 16px;
+  --icon-size-feature: 24px;
   --icon-stroke-default: 1.7;
   --icon-stroke-menu: 2;
 

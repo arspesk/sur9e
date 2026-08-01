@@ -4,6 +4,7 @@
 
 'use client';
 
+import { Shield } from 'lucide-react';
 import { Fragment } from 'react';
 import { scoreLevel } from '@/components/domain';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
@@ -192,9 +193,7 @@ export function ReportHero({ r }: ReportHeroProps) {
           ))}
         </div>
         <div className={`legit-pill ${legitTierBand(tier)}`}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z" />
-          </svg>
+          <Shield aria-hidden="true" />
           {legitTierLabel(tier) || tier}
         </div>
       </div>

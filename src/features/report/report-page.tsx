@@ -9,7 +9,7 @@
 // All of the legacy "polish" / scroll-spy / overflow logic runs in a
 // useEffect after the host's innerHTML is filled.
 
-import { Undo2 } from 'lucide-react';
+import { Menu, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef } from 'react';
@@ -198,19 +198,7 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
           aria-haspopup="dialog"
           aria-controls="tocSheet"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
+          <Menu aria-hidden="true" />
           <span>Sections</span>
         </button>
       </aside>

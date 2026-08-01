@@ -14,7 +14,7 @@
 // mounted once elsewhere, so it keeps running for every tracked job
 // regardless of which one is currently cycled into view.
 
-import { ChevronDown, ChevronLeft, ChevronRight, OctagonX } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, OctagonX, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { useToastStore } from '@/components/toast/toast-store';
@@ -167,12 +167,12 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
         {!isTerminal && <span className="chat-jobs__spinner" aria-hidden="true" />}
         {isDone && (
           <span className="chat-jobs__check" aria-hidden="true">
-            ✓
+            <Check />
           </span>
         )}
         {isError && (
           <span className="chat-jobs__cross" aria-hidden="true">
-            ✕
+            <X />
           </span>
         )}
         {isCancelled && (
@@ -234,7 +234,7 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
             aria-label="Dismiss"
             onClick={() => dismiss(jobId)}
           >
-            ×
+            <X aria-hidden="true" />
           </button>
         )}
       </div>

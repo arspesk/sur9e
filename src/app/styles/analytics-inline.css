@@ -49,12 +49,20 @@
   font-variant-numeric: tabular-nums;
 }
 .stat-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 500;
   margin-top: 4px;
   min-height: 14px;
   font-variant-numeric: tabular-nums;
+}
+.stat-delta svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .stat-delta.up {
   color: var(--score-high);

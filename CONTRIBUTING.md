@@ -89,6 +89,18 @@ welcome — under these rules:
 - **No telemetry.** Sur9e collects nothing.
 - **English only** in code, comments, and docs.
 
+## Design and accessibility
+
+- Use the closest `lucide-react` icon through an existing shared primitive when
+  one exists. Do not hand-draw replacement SVGs, use Unicode/emoji glyphs as
+  controls, or add a parallel icon library. Brand marks, company logos, data
+  visualizations, and progress geometry are the only exceptions.
+- Size and stroke icons through shared CSS and the tokens in
+  `src/app/styles/tokens.css`. Decorative icons need `aria-hidden`; icon-only
+  controls need an accessible label.
+- Verify frontend changes at desktop (1280×800), tablet (768×1024), and mobile
+  (375×667), including focus, overflow, and icon alignment.
+
 ## Commit & PR style
 
 - PR titles must follow

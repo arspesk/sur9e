@@ -3,6 +3,7 @@
 // Pure widget: takes rows + per-cell callbacks. Sections wire it through
 // rhf via Controller (or the ControlledRowList wrapper).
 
+import { Plus, X } from 'lucide-react';
 import {
   Input,
   Select,
@@ -96,7 +97,7 @@ export function RowList<R extends Record<string, string>>(props: RowListProps<R>
                   aria-label="Remove row"
                   onClick={() => onRemove(i)}
                 >
-                  ×
+                  <X aria-hidden="true" />
                 </button>
                 <Input
                   className="row-cell row-cell--metric"
@@ -165,7 +166,7 @@ export function RowList<R extends Record<string, string>>(props: RowListProps<R>
                 aria-label="Remove row"
                 onClick={() => onRemove(i)}
               >
-                ×
+                <X aria-hidden="true" />
               </button>
             </div>
           );
@@ -177,7 +178,7 @@ export function RowList<R extends Record<string, string>>(props: RowListProps<R>
         type="button"
         onClick={() => onAdd()}
       >
-        {addLabel}
+        <Plus aria-hidden="true" /> {addLabel.replace(/^\+\s*/, '')}
       </button>
     </>
   );
