@@ -117,9 +117,12 @@ function findActiveUpdateJob(
     if (!file.endsWith('.json')) continue;
     const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
     if (!job || TERMINAL_PHASES.has(job.phase)) continue;
-    if (job.pid !== undefined && !pidAlive(job.pid)) {
-      failUpdateJob(root, job, now, WORKER_STOPPED_ERROR);
-      continue;
+    if (job.pid !== undefined) {
+      if (!pidAlive(job.pid)) {
+        failUpdateJob(root, job, now, WORKER_STOPPED_ERROR);
+        continue;
+      }
+      return job;
     }
     if (now.getTime() - Date.parse(job.updatedAt) >= UPDATE_JOB_LEASE_MS) {
       failUpdateJob(root, job, now, LEASE_EXPIRED_ERROR);

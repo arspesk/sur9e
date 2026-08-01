@@ -293,6 +293,27 @@ describe('update-job durable contract', () => {
     });
   });
 
+  it('keeps an expired nonterminal job busy while its persisted worker pid is alive', () => {
+    const active = { ...job('rebuilding'), pid: 98989 };
+    writeUpdateJob(root, active);
+    const replacement = fakeDeps();
+    const pidAlive = vi.fn(() => true);
+
+    const result = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...replacement.deps, pidAlive },
+    );
+
+    expect(result).toEqual({ status: 'busy', job: active });
+    expect(pidAlive).toHaveBeenCalledWith(98989);
+    expect(replacement.spawn).not.toHaveBeenCalled();
+    expect(loadUpdateJob(root, active.id)).toEqual(active);
+  });
+
   it('reaps a fresh nonterminal job whose persisted worker pid is no longer alive', () => {
     const interrupted = {
       ...job('applying'),
