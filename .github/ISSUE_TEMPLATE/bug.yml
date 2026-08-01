@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem in sur9e.
+title: "bug: "
+labels: ["type:bug", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve sur9e. Please keep personal job-search data out of this issue.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include the exact error when safe to share.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Give the smallest steps another contributor can follow.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and version
+      description: Include sur9e version or commit, OS, Node version, and browser when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional safe evidence
+      description: Add redacted logs or screenshots only. Never include tokens, CVs, or personal data.
+  - type: checkboxes
+    id: privacy_confirmation
+    attributes:
+      label: Privacy and duplicate check
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I have removed secrets, CV content, and personal data.
+          required: true
+    validations:
+      required: true

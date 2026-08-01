@@ -26,6 +26,7 @@
     "update:check": "node update-system.mjs check",
     "update:apply": "node update-system.mjs apply",
     "update:rollback": "node update-system.mjs rollback",
+    "github:labels": "node scripts/sync-github-labels.mjs",
     "jobs:liveness": "tsx cli/check-liveness.mjs",
     "scan": "node batch/scan-portals.mjs && node batch/scan-jobspy.mjs",
     "setup": "npm install && node scripts/setup.mjs",

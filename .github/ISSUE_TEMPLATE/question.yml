@@ -1,0 +1,47 @@
+name: Question
+description: Ask for help using or contributing to sur9e.
+title: "question: "
+labels: ["type:question", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Please do not include CVs, job-offer text, credentials, or other personal data.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What are you trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Exact question
+      description: Ask the specific question that would unblock you.
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Include relevant commands, documentation, or safe error details.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Include sur9e version, OS, and other non-personal context that matters.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy_confirmation
+    attributes:
+      label: Privacy and duplicate check
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I have removed secrets, CV content, and personal data.
+          required: true
+    validations:
+      required: true
