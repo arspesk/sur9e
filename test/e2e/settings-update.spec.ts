@@ -18,6 +18,7 @@ function job(phase: string) {
     'restarting',
     'verifying',
     'recovering',
+    'recovery-queued',
   ].includes(phase);
   return {
     id: JOB_ID,
@@ -37,6 +38,13 @@ async function stubReadOnlySystemEndpoints(page: Page) {
   );
   await page.route('**/api/update/**', route => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/update/status' && route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"job":null}',
+      });
+    }
     if (pathname === '/api/update/check' && route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,
@@ -81,6 +89,14 @@ test('runs the one-click update flow through restart downtime and restores the e
   await page.route('**/api/update/**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
+
+    if (pathname === '/api/update/status' && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"job":null}',
+      });
+    }
 
     if (pathname === '/api/update/check' && request.method() === 'GET') {
       checkCalls += 1;
