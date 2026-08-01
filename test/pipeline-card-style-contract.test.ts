@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
@@ -22,17 +23,87 @@ function declarationsFor(source: string, selector: string): Map<string, string> 
   );
 }
 
-function cardIdLineSubtree(source: string): { markup: string; end: number } {
-  const opening = '<div className="card-id-line">';
-  const start = source.indexOf(opening);
-  expect(start, 'Expected .card-id-line JSX').toBeGreaterThan(-1);
+interface DirectJsxChild {
+  tag: string;
+  className: string | null;
+}
 
-  const end = source.indexOf('</div>', start) + '</div>'.length;
-  expect(end, 'Expected .card-id-line closing tag').toBeGreaterThan(start + opening.length);
-  return { markup: source.slice(start, end), end };
+function classNameFor(element: ts.JsxOpeningLikeElement, sourceFile: ts.SourceFile): string | null {
+  for (const property of element.attributes.properties) {
+    if (!ts.isJsxAttribute(property) || property.name.getText(sourceFile) !== 'className') continue;
+    const initializer = property.initializer;
+    if (!initializer) return null;
+    if (ts.isStringLiteral(initializer)) return initializer.text;
+    if (!ts.isJsxExpression(initializer) || !initializer.expression) return null;
+    if (
+      ts.isStringLiteral(initializer.expression) ||
+      ts.isNoSubstitutionTemplateLiteral(initializer.expression)
+    ) {
+      return initializer.expression.text;
+    }
+    if (ts.isTemplateExpression(initializer.expression)) {
+      return initializer.expression.getText(sourceFile).slice(1, -1);
+    }
+    return null;
+  }
+  return null;
+}
+
+function cardIdLineShape(source: string): { directChildren: DirectJsxChild[]; end: number } {
+  const sourceFile = ts.createSourceFile(
+    'board-card.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let cardIdLine: ts.JsxElement | undefined;
+
+  function visit(node: ts.Node) {
+    if (ts.isJsxElement(node) && classNameFor(node.openingElement, sourceFile) === 'card-id-line') {
+      cardIdLine = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  expect(cardIdLine, 'Expected .card-id-line JSX').toBeDefined();
+  if (!cardIdLine) throw new Error('Expected .card-id-line JSX');
+
+  const directChildren = cardIdLine.children
+    .filter(
+      (child): child is ts.JsxElement | ts.JsxSelfClosingElement =>
+        ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child),
+    )
+    .map(child => {
+      const opening = ts.isJsxElement(child) ? child.openingElement : child;
+      return {
+        tag: opening.tagName.getText(sourceFile),
+        className: classNameFor(opening, sourceFile),
+      };
+    });
+
+  return { directChildren, end: cardIdLine.end };
 }
 
 describe('pipeline card style contract', () => {
+  it('does not treat nested spans as direct identity-line children', () => {
+    const nestedFixture = `
+      const card = (
+        <div className="card-id-line">
+          <div className="unexpected-wrapper">
+            <span className="card-company">Acme</span>
+            <span className={\`score-num high\`}>5.0</span>
+          </div>
+        </div>
+      );
+    `;
+    const { directChildren } = cardIdLineShape(nestedFixture);
+
+    expect(directChildren).toEqual([{ tag: 'div', className: 'unexpected-wrapper' }]);
+  });
+
   it('keeps the score beside a shrinkable company name and clear of the overflow menu', () => {
     const cardIdLine = declarationsFor(pipelineCss, '.card-id-line');
     const cardCompany = declarationsFor(pipelineCss, '.card-company');
@@ -49,14 +120,13 @@ describe('pipeline card style contract', () => {
   });
 
   it('keeps company and score as ordered siblings inside the identity-line subtree', () => {
-    const { markup, end } = cardIdLineSubtree(boardCard);
-    const childClasses = [...markup.matchAll(/<span className=(?:"([^"]+)"|\{`([^`]+)`\})/g)].map(
-      match => match[1] ?? match[2],
-    );
+    const { directChildren, end } = cardIdLineShape(boardCard);
     const kebabIndex = boardCard.indexOf('className="board-card-kebab"', end);
 
-    expect(childClasses).toEqual(['card-company', 'score-num ${scoreLevel(score)}']);
-    expect(markup).not.toContain('board-card-kebab');
+    expect(directChildren).toEqual([
+      { tag: 'span', className: 'card-company' },
+      { tag: 'span', className: 'score-num ${scoreLevel(score)}' },
+    ]);
     expect(kebabIndex).toBeGreaterThan(end);
   });
 });
