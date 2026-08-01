@@ -1,18 +1,39 @@
 export const runtime = 'nodejs';
 
 import { jsonError } from '@/lib/http-errors';
-import { runUpdateSystem } from '@/lib/server/update-system';
+import { ROOT } from '@/lib/root';
+import { rejectCrossOrigin } from '@/lib/server/same-origin';
+import { parseUpdateApplyBody, resolveUpdateLaunchMode } from '@/lib/server/update-api';
+import { startUpdateJob } from '@/lib/server/update-orchestrator';
+import packageJson from '../../../../../package.json';
 
-export function POST(req: Request) {
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (origin && new URL(origin).host !== host) {
-    return new Response('Forbidden', { status: 403 });
-  }
+export async function POST(request: Request) {
+  const forbidden = rejectCrossOrigin(request);
+  if (forbidden) return forbidden;
+
+  const body = await parseUpdateApplyBody(request);
+  if (!body) return jsonError('Invalid request body', 400);
+
   try {
-    const out = runUpdateSystem('apply', 120000);
-    return Response.json({ ok: true, output: out });
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : 'Failed to apply update', 500);
+    const result = await startUpdateJob(ROOT, {
+      mode: resolveUpdateLaunchMode(request),
+      fromVersion: packageJson.version,
+      ...(body.toVersion === undefined ? {} : { toVersion: body.toVersion }),
+    });
+    if (result.status === 'started') {
+      return Response.json({ jobId: result.job.id }, { status: 202 });
+    }
+    if (result.status === 'busy') {
+      return Response.json(
+        {
+          error: 'An update is already running',
+          ...(result.job ? { jobId: result.job.id } : {}),
+        },
+        { status: 409 },
+      );
+    }
+    return jsonError('Failed to start update', 500);
+  } catch {
+    return jsonError('Failed to start update', 500);
   }
 }
