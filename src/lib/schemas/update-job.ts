@@ -16,6 +16,9 @@ export const UPDATE_JOB_PHASES = [
 export const UpdateJobPhase = z.enum(UPDATE_JOB_PHASES);
 export type UpdateJobPhase = z.infer<typeof UpdateJobPhase>;
 
+export const UpdateJobLaunchState = z.enum(['ownership-unknown', 'owned']);
+export type UpdateJobLaunchState = z.infer<typeof UpdateJobLaunchState>;
+
 export const UpdateJob = z
   .object({
     id: z.string().uuid(),
@@ -32,6 +35,7 @@ export const UpdateJob = z
     updatedAt: z.string().datetime(),
     error: z.string().optional(),
     pid: z.number().int().positive().optional(),
+    launchState: UpdateJobLaunchState.optional(),
   })
   .strict();
 export type UpdateJob = z.infer<typeof UpdateJob>;

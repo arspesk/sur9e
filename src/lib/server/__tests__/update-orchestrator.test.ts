@@ -24,6 +24,7 @@ const SECOND_JOB_ID = '22222222-2222-4222-8222-222222222222';
 const THIRD_JOB_ID = '33333333-3333-4333-8333-333333333333';
 const NOW = new Date('2026-07-31T12:00:00.000Z');
 const LATER = new Date('2026-07-31T12:01:00.000Z');
+const FUTURE = new Date('2026-08-01T12:00:00.000Z');
 const EARLIER = '2026-07-30T12:00:00.000Z';
 
 const ALL_PHASES = [
@@ -121,6 +122,16 @@ describe('update-job durable contract', () => {
     });
   });
 
+  it('parses durable launch ownership state', () => {
+    expect(UpdateJob.parse({ ...job('queued'), launchState: 'ownership-unknown' })).toMatchObject({
+      launchState: 'ownership-unknown',
+    });
+    expect(UpdateJob.parse({ ...job('applying'), launchState: 'owned', pid: 4242 })).toMatchObject({
+      launchState: 'owned',
+      pid: 4242,
+    });
+  });
+
   it('rejects invalid JSON when loading a persisted job', () => {
     const path = join(root, 'data/update/jobs', `${JOB_ID}.json`);
     mkdirSync(join(root, 'data/update/jobs'), { recursive: true });
@@ -176,6 +187,7 @@ describe('update-job durable contract', () => {
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
         pid: 4242,
+        launchState: 'owned',
       },
     });
     expect(loadUpdateJob(root, SECOND_JOB_ID)).toEqual(result.job);
@@ -224,12 +236,14 @@ describe('update-job durable contract', () => {
         phase: 'applying',
         updatedAt: LATER.toISOString(),
         pid: 4242,
+        launchState: 'owned',
       },
     });
     expect(loadUpdateJob(root, SECOND_JOB_ID)).toMatchObject({
       phase: 'applying',
       updatedAt: LATER.toISOString(),
       pid: 4242,
+      launchState: 'owned',
     });
     expect(
       JSON.parse(readFileSync(join(root, 'data/update/jobs', `${SECOND_JOB_ID}.json`), 'utf-8')),
@@ -237,6 +251,105 @@ describe('update-job durable contract', () => {
       phase: 'applying',
       updatedAt: LATER.toISOString(),
     });
+  });
+
+  it('allows only one spawn when another process interleaves before the first scan', () => {
+    const first = fakeDeps(SECOND_JOB_ID);
+    const contender = fakeDeps(THIRD_JOB_ID);
+    let contenderResult: ReturnType<typeof startUpdateJob> | undefined;
+    const mkdirLock = vi.fn((path: string) => {
+      mkdirSync(path);
+      contenderResult = startUpdateJob(
+        root,
+        {
+          mode: { prod: true, tailscale: false },
+          fromVersion: '0.3.2',
+        },
+        contender.deps,
+      );
+    });
+
+    const firstResult = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, mkdirLock },
+    );
+
+    expect(firstResult.status).toBe('started');
+    expect(contenderResult).toEqual({ status: 'busy', job: null });
+    expect(first.spawn).toHaveBeenCalledTimes(1);
+    expect(contender.spawn).not.toHaveBeenCalled();
+  });
+
+  it('recovers a start lock whose owner pid is dead', () => {
+    const lockDirectory = join(root, 'data/update/start.lock');
+    mkdirSync(lockDirectory, { recursive: true });
+    writeFileSync(
+      join(lockDirectory, 'owner.json'),
+      JSON.stringify({ token: JOB_ID, pid: 98989, acquiredAt: NOW.toISOString() }),
+      'utf-8',
+    );
+    const replacement = fakeDeps(SECOND_JOB_ID);
+    const pidAlive = vi.fn(() => false);
+
+    const result = startUpdateJob(
+      root,
+      {
+        mode: { prod: false, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...replacement.deps, pidAlive },
+    );
+
+    expect(result.status).toBe('started');
+    expect(replacement.spawn).toHaveBeenCalledTimes(1);
+    expect(existsSync(lockDirectory)).toBe(false);
+  });
+
+  it('permits only one spawn when another process recovers the stale lock first', () => {
+    const lockDirectory = join(root, 'data/update/start.lock');
+    mkdirSync(lockDirectory, { recursive: true });
+    writeFileSync(
+      join(lockDirectory, 'owner.json'),
+      JSON.stringify({ token: JOB_ID, pid: 98989, acquiredAt: NOW.toISOString() }),
+      'utf-8',
+    );
+    const first = fakeDeps(SECOND_JOB_ID);
+    const contender = fakeDeps(THIRD_JOB_ID);
+    const pidAlive = vi.fn((pid: number) => pid === 4242);
+    let contenderResult: ReturnType<typeof startUpdateJob> | undefined;
+    const mkdirLock = vi.fn((path: string) => {
+      try {
+        mkdirSync(path);
+      } catch (error) {
+        contenderResult = startUpdateJob(
+          root,
+          {
+            mode: { prod: true, tailscale: false },
+            fromVersion: '0.3.2',
+          },
+          { ...contender.deps, pidAlive },
+        );
+        throw error;
+      }
+    });
+
+    const firstResult = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, mkdirLock, pidAlive },
+    );
+
+    expect(contenderResult?.status).toBe('started');
+    expect(firstResult.status).toBe('busy');
+    expect(contender.spawn).toHaveBeenCalledTimes(1);
+    expect(first.spawn).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -407,6 +520,7 @@ describe('update-job durable contract', () => {
         updatedAt: LATER.toISOString(),
       },
     });
+    if (failed.status !== 'failed') throw new Error('expected failed update launch');
     expect(failed.job.error).not.toContain('secret');
     expect(() => fstatSync(logFileDescriptor as number)).toThrow();
 
@@ -453,5 +567,140 @@ describe('update-job durable contract', () => {
         retry.deps,
       ).status,
     ).toBe('started');
+  });
+
+  it('keeps launch ownership nonterminal when spawn returns no pid and blocks later retry', () => {
+    const first = fakeDeps(SECOND_JOB_ID);
+    const spawn = vi.fn<UpdateOrchestratorDeps['spawn']>((...args) => {
+      const worker = first.spawn(...args);
+      return { once: worker.once.bind(worker), unref: worker.unref.bind(worker) };
+    });
+
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, spawn },
+    );
+
+    expect(started).toMatchObject({
+      status: 'started',
+      job: { phase: 'queued', launchState: 'ownership-unknown' },
+    });
+    const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
+    expect(
+      startUpdateJob(
+        root,
+        {
+          mode: { prod: true, tailscale: false },
+          fromVersion: '0.3.2',
+        },
+        retry.deps,
+      ).status,
+    ).toBe('busy');
+    expect(retry.spawn).not.toHaveBeenCalled();
+  });
+
+  it('keeps launch ownership nonterminal when spawn returns an invalid pid', () => {
+    const first = fakeDeps(SECOND_JOB_ID);
+    const spawn = vi.fn<UpdateOrchestratorDeps['spawn']>((...args) => ({
+      ...first.spawn(...args),
+      pid: 0,
+    }));
+
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, spawn },
+    );
+
+    expect(started).toMatchObject({
+      status: 'started',
+      job: { phase: 'queued', launchState: 'ownership-unknown' },
+    });
+    const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
+    expect(
+      startUpdateJob(
+        root,
+        {
+          mode: { prod: true, tailscale: false },
+          fromVersion: '0.3.2',
+        },
+        retry.deps,
+      ).status,
+    ).toBe('busy');
+    expect(retry.spawn).not.toHaveBeenCalled();
+  });
+
+  it('keeps launch ownership nonterminal when pid persistence fails', () => {
+    const first = fakeDeps(SECOND_JOB_ID);
+    const persistPid = vi.fn(() => {
+      throw new Error('pid storage unavailable');
+    });
+
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, persistPid },
+    );
+
+    expect(persistPid).toHaveBeenCalledTimes(1);
+    expect(started).toMatchObject({
+      status: 'started',
+      job: { phase: 'queued', launchState: 'ownership-unknown' },
+    });
+    const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
+    expect(
+      startUpdateJob(
+        root,
+        {
+          mode: { prod: true, tailscale: false },
+          fromVersion: '0.3.2',
+        },
+        retry.deps,
+      ).status,
+    ).toBe('busy');
+    expect(retry.spawn).not.toHaveBeenCalled();
+  });
+
+  it('keeps launch ownership nonterminal when the post-spawn reload fails', () => {
+    const first = fakeDeps(SECOND_JOB_ID);
+    const reloadJob = vi.fn(() => {
+      throw new Error('reload unavailable');
+    });
+
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...first.deps, reloadJob },
+    );
+
+    expect(reloadJob).toHaveBeenCalledTimes(1);
+    expect(started).toMatchObject({
+      status: 'started',
+      job: { phase: 'queued', launchState: 'owned', pid: 4242 },
+    });
+    const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
+    const retryResult = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...retry.deps, pidAlive: () => true },
+    );
+    expect(retryResult.status).toBe('busy');
+    expect(retry.spawn).not.toHaveBeenCalled();
   });
 });
