@@ -479,6 +479,60 @@ describe('update-job durable contract', () => {
     });
   });
 
+  it('marks an expired pre-claim queued job failed when status reconciles it', () => {
+    const interrupted = { ...job('queued'), launchState: 'claim-pending' as const };
+    writeUpdateJob(root, interrupted);
+    const worker = fakeDeps();
+
+    const reconciled = reconcileUpdateJob(root, JOB_ID, worker.deps);
+
+    expect(reconciled).toMatchObject({
+      phase: 'failed',
+      error: 'Update worker did not claim ownership',
+      updatedAt: NOW.toISOString(),
+    });
+    expect(worker.spawn).not.toHaveBeenCalled();
+  });
+
+  it('retries an expired recovery claim instead of leaving it queued forever', () => {
+    const interrupted = {
+      ...job('recovery-queued'),
+      launchState: 'claim-pending' as const,
+      checkpoint: 'applied' as const,
+      error: 'Update worker stopped before completion',
+    };
+    writeUpdateJob(root, interrupted);
+    const worker = fakeDeps();
+
+    const reconciled = reconcileUpdateJob(root, JOB_ID, worker.deps);
+
+    expect(reconciled).toMatchObject({
+      phase: 'recovery-queued',
+      launchState: 'claim-pending',
+      checkpoint: 'applied',
+      updatedAt: NOW.toISOString(),
+    });
+    expect(worker.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [join(root, 'scripts/update-worker.mjs'), '--root', root, '--job-id', JOB_ID, '--recover'],
+      expect.objectContaining({ cwd: root, detached: true }),
+    );
+  });
+
+  it('does not steal a fresh claim-pending job during status polling', () => {
+    const active = {
+      ...job('queued'),
+      createdAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+      launchState: 'claim-pending' as const,
+    };
+    writeUpdateJob(root, active);
+    const worker = fakeDeps(SECOND_JOB_ID, [new Date(NOW.getTime() + 1_000)]);
+
+    expect(reconcileUpdateJob(root, JOB_ID, worker.deps)).toEqual(active);
+    expect(worker.spawn).not.toHaveBeenCalled();
+  });
+
   it('keeps an expired nonterminal job busy while its persisted worker pid is alive', () => {
     const active = { ...job('rebuilding'), launchState: 'owned' as const, pid: 98989 };
     writeUpdateJob(root, active);
