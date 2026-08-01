@@ -140,16 +140,25 @@ describe('Board status follow-ups', () => {
     expect(openStatusFollowup).not.toHaveBeenCalled();
   });
 
-  it('continues to intercept Evaluated without starting a direct status mutation', () => {
+  it('persists Evaluated before opening its optional evaluation follow-up', async () => {
+    vi.mocked(updateApplicationStatusAction).mockResolvedValueOnce({
+      updated: { num: 7, status: 'Evaluated' },
+      followup: null,
+    } as Awaited<ReturnType<typeof updateApplicationStatusAction>>);
     renderBoard();
 
     dropCard('evaluated');
 
-    expect(updateApplicationStatusAction).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(updateApplicationStatusAction).toHaveBeenCalledWith({
+        num: 7,
+        status: 'evaluated',
+      }),
+    );
     expect(openStatusFollowup).not.toHaveBeenCalled();
-    expect(useModalStore.getState().modal).toBe('evaluate');
+    await waitFor(() => expect(useModalStore.getState().modal).toBe('evaluate'));
     expect(useModalStore.getState().context).toEqual(
-      expect.objectContaining({ num: 7, patchToEvaluated: true }),
+      expect.objectContaining({ num: 7, statusFollowup: true }),
     );
   });
 });

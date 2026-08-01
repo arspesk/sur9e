@@ -2666,8 +2666,6 @@ input[type="range"]::-moz-range-track {
 .delete-confirm-modal__foot,
 .range-modal__foot {
   display: flex;
-  /* wrap: the evaluate modal grows a third "Set status only" button on the
-     bulk status-change path — three buttons overflow a 375px-wide dialog. */
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: flex-end;
