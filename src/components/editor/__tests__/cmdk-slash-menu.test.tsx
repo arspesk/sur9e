@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CmdkSlashMenu } from '../cmdk-slash-menu';
 import type { SlashItem } from '../slash-registry';
 
@@ -11,7 +11,18 @@ const items: SlashItem[] = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 describe('CmdkSlashMenu', () => {
+  let originalScrollIntoView: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+  });
+
   afterEach(() => {
+    if (originalScrollIntoView) {
+      Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+    } else {
+      delete (Element.prototype as { scrollIntoView?: Element['scrollIntoView'] }).scrollIntoView;
+    }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });

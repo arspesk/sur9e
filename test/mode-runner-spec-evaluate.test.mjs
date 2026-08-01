@@ -243,6 +243,7 @@ imported
     );
     expect(frontmatter.source_kind).toBe('url');
     expect(frontmatter.jd_path).toBe('inputs/jds/acme.md');
+    expect(frontmatter.jd_hash).toBe('c'.repeat(64));
     expect(frontmatter.url).toBe('https://acme.com/jobs/1');
   });
 });

@@ -35,13 +35,25 @@ describe('fallbackTitleFrom', () => {
   it('short messages pass through', () => {
     expect(fallbackTitleFrom('Compare my offers')).toBe('Compare my offers');
   });
-  it('long messages use the wider title budget and show an explicit ellipsis', () => {
+  it('a 65-character message remains untruncated under the wider title budget', () => {
     const t = fallbackTitleFrom(
       'Please compare the Attio offer against the Linear offer in detail',
     );
     expect(t.length).toBeGreaterThan(40);
     expect(t.length).toBeLessThanOrEqual(80);
     expect(t).toBe('Please compare the Attio offer against the Linear offer in detail');
+  });
+  it('messages over 80 characters truncate at a word boundary with an explicit ellipsis', () => {
+    const message =
+      'Please compare the Attio offer against the Linear offer in detail and explain which role fits my goals better';
+    const t = fallbackTitleFrom(message);
+    const content = t.slice(0, -3);
+
+    expect(t.length).toBeGreaterThan(65);
+    expect(t.length).toBeLessThanOrEqual(80);
+    expect(t).toMatch(/\.\.\.$/);
+    expect(message.startsWith(content)).toBe(true);
+    expect(message.at(content.length)).toBe(' ');
   });
   it('hard-truncated URLs end in three dots instead of looking complete', () => {
     const t = fallbackTitleFrom(
@@ -78,6 +90,25 @@ describe('generateConversationTitle', () => {
     _setTitleExecImpl(async () => ({ stdout: '"Offer Comparison Deep Dive."\n' }));
     await generateConversationTitle(baseOpts(c.id));
     expect(getConversation(root, c.id)?.title).toBe('Offer Comparison Deep Dive');
+  });
+  it('accepts a generated title at the exact 80-character boundary', async () => {
+    const c = createConversation(root);
+    const title = 'x'.repeat(80);
+    applyFallbackTitle(root, c.id, 'fallback');
+    _setTitleExecImpl(async () => ({ stdout: title }));
+
+    await generateConversationTitle(baseOpts(c.id));
+
+    expect(getConversation(root, c.id)?.title).toBe(title);
+  });
+  it('rejects a generated title over the 80-character boundary', async () => {
+    const c = createConversation(root);
+    applyFallbackTitle(root, c.id, 'fallback');
+    _setTitleExecImpl(async () => ({ stdout: 'x'.repeat(81) }));
+
+    await generateConversationTitle(baseOpts(c.id));
+
+    expect(getConversation(root, c.id)?.title).toBe('fallback');
   });
   it('never overwrites a manual rename', async () => {
     const c = createConversation(root);
