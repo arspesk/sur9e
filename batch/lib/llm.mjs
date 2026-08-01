@@ -25,6 +25,61 @@ function defaultExec(cmd, args, opts) {
   return spawnSync(cmd, args, { encoding: "utf-8", ...opts });
 }
 
+const TERMINAL_FAILURE_GRACE_MS = 1000;
+
+function descendantPids(pid) {
+  if (!Number.isInteger(pid) || pid <= 1 || process.platform === "win32") return [];
+  const found = [];
+  const visited = new Set([pid]);
+  const visit = (parentPid) => {
+    // `ps --ppid` is GNU-only; macOS ships BSD ps. `pgrep -P` is available
+    // on both supported Unix families and returns one direct child per line.
+    const result = spawnSync("pgrep", ["-P", String(parentPid)], {
+      encoding: "utf-8",
+    });
+    if (result.status !== 0) return;
+    const children = String(result.stdout ?? "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(Number)
+      .filter(
+        (childPid) =>
+          Number.isInteger(childPid) && childPid > 1 && childPid !== process.pid && !visited.has(childPid),
+      );
+    for (const childPid of children) {
+      visited.add(childPid);
+      visit(childPid);
+      found.push(childPid);
+    }
+  };
+  visit(pid);
+  return found;
+}
+
+/** Stop the provider wrapper and every descendant it spawned. */
+export function terminateProviderTree(child, signal = "SIGTERM") {
+  const pid = child?.pid;
+  if (process.platform === "win32" && Number.isInteger(pid)) {
+    const args = ["/PID", String(pid), "/T"];
+    if (signal === "SIGKILL") args.push("/F");
+    spawnSync("taskkill", args, { stdio: "ignore" });
+    return;
+  }
+  for (const childPid of descendantPids(pid)) {
+    try {
+      process.kill(childPid, signal);
+    } catch (error) {
+      if (error?.code !== "ESRCH") throw error;
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+  }
+}
+
 export function resolveRuntimeForMode(rootPath, modeId, { execImpl = defaultExec } = {}) {
   const overrideArgs = [];
   // Per-run override forwarded by runner.ts (params.platform/model →
@@ -113,6 +168,7 @@ function runOnce(
     logsDir,
     execImpl = defaultExec,
     spawnImpl = nodeSpawn,
+    signal,
     // Echo the provider's streams to OUR stdout/stderr as they arrive, so a
     // parent that captures this process's output (the job runner persisting
     // mode-runner stdout into the job record) shows progress live. Opt-in:
@@ -135,11 +191,74 @@ function runOnce(
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let stoppingCategory = null;
+    let cancelled = false;
+    let forceTimer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
+      signal?.removeEventListener("abort", abort);
+      resolvePromise(result);
+    };
+    const stopGracefully = () => {
+      try {
+        terminateProviderTree(child, "SIGTERM");
+      } catch {}
+      forceTimer = setTimeout(() => {
+        try {
+          terminateProviderTree(child, "SIGKILL");
+        } catch {}
+        // A broken wrapper can fail to emit `close` even after its process
+        // tree is gone. Do not turn a recognized provider failure into the
+        // full mode timeout; settle from the diagnostic that initiated stop.
+        const settleTimer = setTimeout(() => {
+          finish(
+            cancelled
+              ? {
+                  ok: false,
+                  cancelled: true,
+                  error: "cancelled",
+                  stdout,
+                  stderr,
+                  promptText: prompt,
+                }
+              : {
+                  ok: false,
+                  error: `provider ${stoppingCategory}`,
+                  failureCategory: stoppingCategory,
+                  stdout,
+                  stderr,
+                  promptText: prompt,
+                },
+          );
+        }, 50);
+        settleTimer.unref?.();
+      }, TERMINAL_FAILURE_GRACE_MS);
+      forceTimer.unref?.();
+    };
+    const abort = () => {
+      if (settled || cancelled) return;
+      cancelled = true;
+      stopGracefully();
+    };
+    const detectStreamedTerminalFailure = () => {
+      if (settled || cancelled || stoppingCategory) return;
+      // Provider CLIs reserve stderr for diagnostics. Restrict early
+      // termination to that channel so a successful model answer that merely
+      // discusses a "rate limit" cannot be mistaken for a CLI failure.
+      const category = classifyProviderError(runtime?.provider ?? "claude", stderr);
+      if (!isRetryable(category)) return;
+      stoppingCategory = category;
+      stopGracefully();
+    };
     const timer = setTimeout(() => {
       try {
-        child.kill("SIGKILL");
+        terminateProviderTree(child, "SIGKILL");
       } catch {}
-      resolvePromise({
+      finish({
         ok: false,
         error: `timeout ${timeoutMs}ms`,
         stdout,
@@ -156,18 +275,30 @@ function runOnce(
       const text = d.toString();
       stderr += text;
       if (tee) process.stderr.write(text);
+      detectStreamedTerminalFailure();
     });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolvePromise(
-        code === 0
+      finish(
+        cancelled
+          ? { ok: false, cancelled: true, error: "cancelled", stdout, stderr, promptText: prompt }
+          : stoppingCategory && (code === null || code === 0)
+            ? {
+                ok: false,
+                error: `provider ${stoppingCategory}`,
+                failureCategory: stoppingCategory,
+                stdout,
+                stderr,
+                promptText: prompt,
+              }
+            : code === 0
           ? { ok: true, stdout, stderr, promptText: prompt }
           : { ok: false, error: `exit ${code}`, stdout, stderr, promptText: prompt },
       );
     });
     child.on("error", (err) => {
-      clearTimeout(timer);
-      resolvePromise({ ok: false, error: err.message, stdout, stderr, promptText: prompt });
+      finish({ ok: false, error: err.message, stdout, stderr, promptText: prompt });
     });
   });
 }
@@ -176,6 +307,7 @@ export async function runModeLLM(rootPath, modeId, prompt, opts = {}) {
   const { runtime, tee = false } = opts;
   const first = await runOnce(rootPath, modeId, prompt, opts, runtime);
   if (first.ok) return first;
+  if (first.cancelled) return first;
   // Timeouts never retry: a fallback attempt would double a multi-minute
   // hang, and a timeout is not evidence of a model-side problem.
   if (typeof first.error === "string" && first.error.startsWith("timeout")) return first;
@@ -186,7 +318,8 @@ export async function runModeLLM(rootPath, modeId, prompt, opts = {}) {
   // from the PRIMARY provider's CLI, so classifying under any other provider's
   // signature table would invite false-positive retries (e.g. job output
   // quoting a JD phrase that matches another provider's needle).
-  const category = classifyProviderError(runtime?.provider ?? "claude", combined);
+  const category =
+    first.failureCategory ?? classifyProviderError(runtime?.provider ?? "claude", combined);
   if (!isRetryable(category)) return first;
 
   const fromTo = {
@@ -204,10 +337,17 @@ export async function runModeLLM(rootPath, modeId, prompt, opts = {}) {
     model: fallback.model,
   });
   if (!second.ok) {
+    const primaryLabel = `${runtime.provider}/${runtime.model}`;
+    const fallbackLabel = `${fallback.provider}/${fallback.model}`;
+    const primaryDiagnostic = String(first.stderr || first.stdout || first.error || "(no output)");
+    const fallbackDiagnostic = String(
+      second.stderr || second.stdout || second.error || "(no output)",
+    );
     return {
       ...second,
       stdout: `${marker}\n${second.stdout}`,
-      error: `primary: ${first.error} (${category}); fallback: ${second.error}`,
+      stderr: `[PRIMARY ${primaryLabel}]\n${primaryDiagnostic}\n[FALLBACK ${fallbackLabel}]\n${fallbackDiagnostic}`,
+      error: `primary ${primaryLabel}: ${first.error} (${category}); fallback ${fallbackLabel}: ${second.error}`,
     };
   }
   return { ...second, stdout: `${marker}\n${second.stdout}`, usedFallback: fromTo };

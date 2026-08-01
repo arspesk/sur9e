@@ -92,10 +92,19 @@ const CATEGORY_ORDER = [
   'rate_limit',
 ];
 
-// Categories that justify a one-shot retry on the fallback pair. `auth`
-// (user must re-login), `context_overflow` (fails again), and `unknown`
-// (not model-related per the design decision) are deliberately excluded.
-const RETRYABLE = new Set(['model_not_found', 'rate_limit', 'overloaded', 'quota', 'install']);
+// Categories that justify a one-shot retry on the fallback pair. Auth is
+// provider-scoped: an expired Claude session says nothing about whether the
+// configured Codex/OpenCode fallback is authenticated, so it belongs on the
+// fallback path. `context_overflow` (same prompt fails again) and `unknown`
+// (not safely attributable to the provider) remain deliberately excluded.
+const RETRYABLE = new Set([
+  'auth',
+  'model_not_found',
+  'rate_limit',
+  'overloaded',
+  'quota',
+  'install',
+]);
 
 /**
  * Classify a provider CLI failure from its combined stdout+stderr text.

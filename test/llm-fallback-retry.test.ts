@@ -1,9 +1,10 @@
-import { EventEmitter } from 'node:events';
+import { spawn as nodeSpawn } from 'node:child_process';
+import { EventEmitter, once } from 'node:events';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { runModeLLM } from '../batch/lib/llm.mjs';
+import { describe, expect, it, vi } from 'vitest';
+import { runModeLLM, terminateProviderTree } from '../batch/lib/llm.mjs';
 
 type Attempt = { code: number; stdout?: string; stderr?: string };
 
@@ -50,6 +51,37 @@ const RUNTIME = {
 };
 
 describe('runModeLLM fallback retry', () => {
+  it.runIf(process.platform !== 'win32')(
+    'terminates the provider wrapper and its descendant process',
+    async () => {
+      const child = nodeSpawn('/bin/sh', ['-c', 'sleep 30 & echo $!; wait'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const [chunk] = (await once(child.stdout, 'data')) as [Buffer];
+      const descendantPid = Number(chunk.toString().trim());
+
+      try {
+        terminateProviderTree(child, 'SIGKILL');
+        await once(child, 'close');
+        await vi.waitFor(
+          () => {
+            expect(() => process.kill(descendantPid, 0)).toThrow(
+              expect.objectContaining({ code: 'ESRCH' }),
+            );
+          },
+          { timeout: 1000, interval: 20 },
+        );
+      } finally {
+        try {
+          process.kill(descendantPid, 'SIGKILL');
+        } catch {}
+        try {
+          child.kill('SIGKILL');
+        } catch {}
+      }
+    },
+  );
+
   it('retries once on a retryable failure and reports usedFallback', async () => {
     const f = makeFakes([
       { code: 1, stderr: 'exceeded retry limit, last status: 429 Too Many Requests' },
@@ -70,8 +102,35 @@ describe('runModeLLM fallback retry', () => {
     });
   });
 
-  it('does NOT retry a non-retryable failure (auth)', async () => {
-    const f = makeFakes([{ code: 1, stderr: 'OAuth token revoked' }]);
+  it.each([
+    ['claude', 'claude-sonnet-4-6', 'OAuth token revoked'],
+    ['codex', 'gpt-5.4-mini', 'refresh token expired'],
+    ['opencode', 'opencode/deepseek-v4-flash-free', 'ProviderAuthError: run opencode auth login'],
+  ])(
+    'retries a configured fallback after a terminal %s auth failure',
+    async (provider, model, stderr) => {
+      const f = makeFakes([
+        { code: 1, stderr },
+        { code: 0, stdout: 'fallback output' },
+      ]);
+      const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+        logsDir,
+        runtime: {
+          provider,
+          model,
+          fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
+        },
+        execImpl: f.execImpl,
+        spawnImpl: f.spawnImpl,
+      });
+      expect(r.ok).toBe(true);
+      expect(f.spawnedModels).toEqual([model, 'claude-sonnet-4-6']);
+      expect(r.usedFallback?.reason).toBe('auth');
+    },
+  );
+
+  it('does NOT retry a non-retryable context-overflow failure', async () => {
+    const f = makeFakes([{ code: 1, stderr: 'prompt is too long for the context window' }]);
     const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
       logsDir,
       runtime: RUNTIME,
@@ -116,6 +175,92 @@ describe('runModeLLM fallback retry', () => {
     expect(r.usedFallback).toBeUndefined();
   });
 
+  it.each([
+    ['claude', 'claude-sonnet-4-6', "You've hit your session limit. It resets at 3pm"],
+    ['codex', 'gpt-5.4-mini', "You've hit your usage limit. Switch to another model now."],
+    ['opencode', 'opencode/deepseek-v4-flash-free', 'Weekly usage limit reached. Resets in 1 day.'],
+  ])(
+    'terminates a hung %s process after streamed quota output and immediately uses fallback',
+    async (provider, model, stderr) => {
+      const f = makeFakes([{ code: 0 }]);
+      let spawnCount = 0;
+      const killed: Array<{ provider: string; signal: string }> = [];
+      const spawnImpl = () => {
+        const currentProvider = spawnCount === 0 ? provider : 'claude';
+        spawnCount += 1;
+        const child = new EventEmitter() as any;
+        child.pid = 9000 + spawnCount;
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = (signal: string) => {
+          killed.push({ provider: currentProvider, signal });
+          setImmediate(() => child.emit('close', null));
+          return true;
+        };
+        setImmediate(() => {
+          if (spawnCount === 1) {
+            child.stderr.emit('data', Buffer.from(stderr));
+            return;
+          }
+          child.stdout.emit('data', Buffer.from('fallback output'));
+          child.emit('close', 0);
+        });
+        return child;
+      };
+
+      const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+        logsDir,
+        runtime: {
+          provider,
+          model,
+          fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
+        },
+        timeoutMs: 100,
+        execImpl: f.execImpl,
+        spawnImpl,
+      });
+
+      expect(r.ok).toBe(true);
+      expect(r.stdout).toContain('fallback output');
+      expect(r.usedFallback?.reason).toBe('quota');
+      expect(killed).toContainEqual({ provider, signal: 'SIGTERM' });
+      expect(spawnCount).toBe(2);
+    },
+  );
+
+  it('cancellation terminates the active provider without invoking fallback', async () => {
+    const f = makeFakes([{ code: 0 }]);
+    const controller = new AbortController();
+    let spawnCount = 0;
+    const spawnImpl = () => {
+      spawnCount += 1;
+      const child = new EventEmitter() as any;
+      child.pid = 9100;
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {
+        setImmediate(() => child.emit('close', null));
+        return true;
+      };
+      setImmediate(() => controller.abort());
+      return child;
+    };
+
+    const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+      logsDir,
+      runtime: RUNTIME,
+      timeoutMs: 100,
+      signal: controller.signal,
+      execImpl: f.execImpl,
+      spawnImpl,
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.cancelled).toBe(true);
+    expect(r.error).toBe('cancelled');
+    expect(spawnCount).toBe(1);
+  });
+
   it('both attempts fail → combined error naming both attempts', async () => {
     const f = makeFakes([
       {
@@ -133,6 +278,10 @@ describe('runModeLLM fallback retry', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toContain('primary');
     expect(r.error).toContain('fallback');
+    expect(r.error).toContain('claude/claude-opus-4-7');
+    expect(r.error).toContain('codex/gpt-5-codex');
+    expect(r.stderr).toContain('overloaded_error');
+    expect(r.stderr).toContain('Unauthorized');
     expect(f.spawnedModels).toEqual(['claude-opus-4-7', 'gpt-5-codex']);
     expect(r.usedFallback).toBeUndefined();
   });
@@ -255,8 +404,11 @@ describe('runModeLLM fallback retry', () => {
       expect(r.ok).toBe(false);
       expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
       expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
-      expect(r.error).toBe('primary: exit 1 (overloaded); fallback: exit 1');
-      expect(r.stderr).toBe('fallback process failed');
+      expect(r.error).toBe(
+        `primary ${primary.provider}/${primary.model}: exit 1 (overloaded); fallback ${fallback.provider}/${fallback.model}: exit 1`,
+      );
+      expect(r.stderr).toContain(primaryError);
+      expect(r.stderr).toContain('fallback process failed');
       expect(r.usedFallback).toBeUndefined();
     },
   );
