@@ -487,6 +487,13 @@ export function reconcileUpdateJob(
   if (!releaseStartLock) return loadUpdateJob(root, id);
   try {
     const job = loadUpdateJob(root, id);
+    if (job?.launchState === 'claim-pending' && !TERMINAL_PHASES.has(job.phase)) {
+      if (now.getTime() - Date.parse(job.updatedAt) < CLAIM_PENDING_LEASE_MS) return job;
+      if (job.phase === 'recovery-queued') {
+        return startRecoveryWorkerUnderLock(root, job, deps, now);
+      }
+      return failUpdateJob(root, job, now, CLAIM_EXPIRED_ERROR);
+    }
     if (
       !job ||
       TERMINAL_PHASES.has(job.phase) ||
