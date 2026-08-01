@@ -11,7 +11,7 @@
 // confirm modal, which PATCHes status→evaluated and spawns the evaluation
 // job; evaluated rows get the terminal picks, Mark applied / Discard.
 
-import { BadgeCheck, Sparkles, Trash2 } from 'lucide-react';
+import { BadgeCheck, EllipsisVertical, Sparkles, Trash2 } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -45,7 +45,7 @@ function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
       >
-        ⋮
+        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
       </button>
       {open && (
         <KebabActionsMenu

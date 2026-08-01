@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, ChevronsRight, Maximize2, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsRight, Ellipsis, Maximize2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { IconButton } from '@/components/primitives';
@@ -299,7 +299,7 @@ function DrawerNavRow({
           title="More actions"
           aria-haspopup="menu"
           onClick={onKebab}
-          icon={<MoreHorizontal aria-hidden="true" strokeWidth={2} size={16} />}
+          icon={<Ellipsis className="menu-dots-icon" aria-hidden="true" />}
         />
       </div>
     </div>
