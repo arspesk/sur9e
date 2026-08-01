@@ -6,6 +6,7 @@ import { join as joinPath } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   cmdStart,
+  cmdStatus,
   cmdStop,
   enableServe,
   findTailscaleCli,
@@ -21,6 +22,38 @@ function tmpStateDir() {
 
 function readState(stateDir) {
   return JSON.parse(readFileSync(joinPath(stateDir, 'web.json'), 'utf-8'));
+}
+
+const CHECKOUT_ROOT = '/repo/sur9e';
+const PROCESS_START = 'Fri Jul 31 18:29:59 2026';
+const LAUNCH_ID = '11111111-1111-4111-8111-111111111111';
+const STARTED_AT = '2026-07-31T18:30:00.000Z';
+
+function writeVerifiedState(stateDir, overrides = {}) {
+  const meta = {
+    pid: 3333,
+    prod: false,
+    tailscale: false,
+    startedAt: STARTED_AT,
+    root: CHECKOUT_ROOT,
+    processStart: PROCESS_START,
+    launchId: LAUNCH_ID,
+    ...overrides,
+  };
+  writeFs(joinPath(stateDir, 'web.pid'), String(meta.pid));
+  writeFs(joinPath(stateDir, 'web.json'), JSON.stringify(meta));
+  return meta;
+}
+
+function verifiedIdentity(pid = 3333, overrides = {}) {
+  return {
+    pid,
+    ppid: 1,
+    command: `node ${CHECKOUT_ROOT}/scripts/web.mjs`,
+    cwd: CHECKOUT_ROOT,
+    start: PROCESS_START,
+    ...overrides,
+  };
 }
 
 function fakeChild(pid = 7001) {
@@ -215,6 +248,9 @@ describe('enableServe', () => {
 
 describe('managed launch mode', () => {
   const startedAt = '2026-07-31T18:30:00.000Z';
+  const checkoutRoot = '/repo/sur9e';
+  const launchId = '11111111-1111-4111-8111-111111111111';
+  const processStart = 'Fri Jul 31 18:29:59 2026';
 
   function startForeground({ prod = false, tailscale = false } = {}) {
     const stateDir = tmpStateDir();
@@ -250,6 +286,15 @@ describe('managed launch mode', () => {
         env: { SUR9E_WEB_SKIP_BUILD: '1' },
         processImpl,
         now: () => startedAt,
+        root: checkoutRoot,
+        launchId: () => launchId,
+        inspectProcess: pid => ({
+          pid,
+          ppid: 1,
+          command: `node ${checkoutRoot}/scripts/web.mjs`,
+          cwd: checkoutRoot,
+          start: processStart,
+        }),
       },
     );
     return { child, exec, processImpl, spawnImpl, stateDir };
@@ -260,15 +305,29 @@ describe('managed launch mode', () => {
     ['prod', true, false],
     ['prod + tailscale', true, true],
   ])('persists foreground %s metadata for orchestrator readers', (_label, prod, tailscale) => {
-    const { processImpl, stateDir } = startForeground({ prod, tailscale });
+    const { processImpl, spawnImpl, stateDir } = startForeground({ prod, tailscale });
     expect(readFileSync(joinPath(stateDir, 'web.pid'), 'utf-8')).toBe(String(processImpl.pid));
-    expect(readState(stateDir)).toEqual({ pid: processImpl.pid, prod, tailscale, startedAt });
-
-    const exec = vi.fn().mockReturnValue({
-      status: 0,
-      stdout: 'node /repo/scripts/web.mjs\n',
+    expect(readState(stateDir)).toEqual({
+      pid: processImpl.pid,
+      prod,
+      tailscale,
+      startedAt,
+      root: checkoutRoot,
+      processStart,
+      launchId,
     });
-    expect(getWebLaunchMode({ stateDir, exec })).toEqual({ prod, tailscale });
+
+    expect(spawnImpl.mock.calls[0][2].env).toMatchObject({
+      SUR9E_WEB_LAUNCH_ID: launchId,
+    });
+
+    expect(
+      getWebLaunchMode({
+        stateDir,
+        inspectProcess: pid => verifiedIdentity(pid),
+        root: checkoutRoot,
+      }),
+    ).toEqual({ prod, tailscale });
   });
 
   it('clears foreground state after signal-driven clean child exit', () => {
@@ -284,15 +343,23 @@ describe('managed launch mode', () => {
 
   it('does not clear state replaced by a different launcher before its child exits', () => {
     const { child, processImpl, stateDir } = startForeground({ prod: true });
-    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(joinPath(stateDir, 'web.pid'), String(processImpl.pid));
     writeFs(
       joinPath(stateDir, 'web.json'),
-      JSON.stringify({ pid: 8123, prod: false, tailscale: true, startedAt: 'later' }),
+      JSON.stringify({
+        pid: processImpl.pid,
+        prod: false,
+        tailscale: true,
+        startedAt: '2026-07-31T19:30:00.000Z',
+        root: checkoutRoot,
+        processStart: 'Fri Jul 31 19:29:59 2026',
+        launchId: '22222222-2222-4222-8222-222222222222',
+      }),
     );
 
     child.emit('exit', 1);
-    expect(readFileSync(joinPath(stateDir, 'web.pid'), 'utf-8')).toBe('8123');
-    expect(readState(stateDir).pid).toBe(8123);
+    expect(readFileSync(joinPath(stateDir, 'web.pid'), 'utf-8')).toBe(String(processImpl.pid));
+    expect(readState(stateDir).launchId).toBe('22222222-2222-4222-8222-222222222222');
     expect(processImpl.exit).toHaveBeenCalledWith(1);
   });
 
@@ -308,6 +375,68 @@ describe('managed launch mode', () => {
     );
     const exec = vi.fn().mockReturnValue(psResult);
     expect(getWebLaunchMode({ stateDir, exec })).toEqual({ prod: false, tailscale: false });
+  });
+
+  it('rejects a launcher from another checkout even when the command and PID look valid', () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(
+      joinPath(stateDir, 'web.json'),
+      JSON.stringify({
+        pid: 8123,
+        prod: true,
+        tailscale: true,
+        startedAt,
+        root: '/repo/sur9e',
+        processStart,
+        launchId,
+      }),
+    );
+    const exec = vi.fn().mockReturnValue({
+      status: 0,
+      stdout: 'node /repo/sur9e/scripts/web.mjs\n',
+    });
+    const inspectProcess = vi.fn().mockReturnValue({
+      pid: 8123,
+      ppid: 1,
+      command: 'node /repo/other/scripts/web.mjs',
+      cwd: '/repo/other',
+      start: processStart,
+    });
+
+    expect(getWebLaunchMode({ stateDir, exec, inspectProcess, root: '/repo/sur9e' })).toEqual({
+      prod: false,
+      tailscale: false,
+    });
+  });
+
+  it('rejects a reused PID whose process start identity no longer matches', () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(
+      joinPath(stateDir, 'web.json'),
+      JSON.stringify({
+        pid: 8123,
+        prod: true,
+        tailscale: true,
+        startedAt,
+        root: '/repo/sur9e',
+        processStart,
+        launchId,
+      }),
+    );
+    const inspectProcess = vi.fn().mockReturnValue({
+      pid: 8123,
+      ppid: 1,
+      command: 'node /repo/sur9e/scripts/web.mjs',
+      cwd: '/repo/sur9e',
+      start: 'Sat Aug  1 01:00:00 2026',
+    });
+
+    expect(getWebLaunchMode({ stateDir, inspectProcess, root: '/repo/sur9e' })).toEqual({
+      prod: false,
+      tailscale: false,
+    });
   });
 
   it('returns the safe dev-only fallback for malformed persisted state', () => {
@@ -337,6 +466,15 @@ describe('managed launch mode', () => {
         env: { TEST_MARKER: 'yes' },
         processImpl,
         now: () => startedAt,
+        root: checkoutRoot,
+        launchId: () => launchId,
+        inspectProcess: pid => ({
+          pid,
+          ppid: processImpl.pid,
+          command: `node ${checkoutRoot}/scripts/web.mjs`,
+          cwd: checkoutRoot,
+          start: processStart,
+        }),
       },
     );
 
@@ -346,7 +484,11 @@ describe('managed launch mode', () => {
       [expect.stringMatching(/scripts\/web\.mjs$/)],
       expect.objectContaining({
         detached: true,
-        env: { TEST_MARKER: 'yes', SUR9E_WEB_SKIP_BUILD: '1' },
+        env: {
+          TEST_MARKER: 'yes',
+          SUR9E_WEB_SKIP_BUILD: '1',
+          SUR9E_WEB_LAUNCH_ID: launchId,
+        },
       }),
     );
     expect(readState(stateDir)).toEqual({
@@ -354,6 +496,9 @@ describe('managed launch mode', () => {
       prod: false,
       tailscale: false,
       startedAt,
+      root: checkoutRoot,
+      processStart,
+      launchId,
     });
     expect(child.unref).toHaveBeenCalledOnce();
     expect(processImpl.on).not.toHaveBeenCalled();
@@ -392,7 +537,15 @@ describe('cmdStart — port guard', () => {
       const spawnImpl = vi.fn().mockReturnValue({ kill: vi.fn(), on: vi.fn() });
       void cmdStart(
         { command: 'start', prod: false, tailscale: true, detach: false },
-        { exec, spawnImpl, error: vi.fn(), log: vi.fn(), stateDir: tmpStateDir() },
+        {
+          exec,
+          spawnImpl,
+          error: vi.fn(),
+          log: vi.fn(),
+          stateDir: tmpStateDir(),
+          root: CHECKOUT_ROOT,
+          inspectProcess: pid => verifiedIdentity(pid),
+        },
       );
       expect(spawnImpl).toHaveBeenCalledTimes(1);
       const opts = spawnImpl.mock.calls[0][2];
@@ -418,7 +571,15 @@ describe('cmdStart — port guard', () => {
       // synchronously before the first await, so the assertion is safe.
       void cmdStart(
         { command: 'start', prod: false, tailscale: false, detach: false },
-        { exec, spawnImpl, error: vi.fn(), log: vi.fn(), stateDir: tmpStateDir() },
+        {
+          exec,
+          spawnImpl,
+          error: vi.fn(),
+          log: vi.fn(),
+          stateDir: tmpStateDir(),
+          root: CHECKOUT_ROOT,
+          inspectProcess: pid => verifiedIdentity(pid),
+        },
       );
       expect(spawnImpl).toHaveBeenCalledTimes(1);
       const [bin, args] = spawnImpl.mock.calls[0];
@@ -433,7 +594,212 @@ describe('cmdStart — port guard', () => {
   });
 });
 
+describe('cmdStatus — verified ownership only', () => {
+  it('does not report reused launcher metadata as managed or expose its tailscale mode', () => {
+    const stateDir = tmpStateDir();
+    const root = '/repo/sur9e';
+    writeFs(joinPath(stateDir, 'web.pid'), '3333');
+    writeFs(
+      joinPath(stateDir, 'web.json'),
+      JSON.stringify({
+        pid: 3333,
+        prod: true,
+        tailscale: true,
+        startedAt: '2026-07-31T18:30:00.000Z',
+        root,
+        processStart: 'Fri Jul 31 18:29:59 2026',
+        launchId: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    const exec = vi.fn(cmd =>
+      cmd === 'lsof' ? { status: 0, stdout: 'p9999\ncnode\n' } : { status: 1, stdout: '' },
+    );
+    const log = vi.fn();
+
+    expect(
+      cmdStatus({
+        exec,
+        inspectProcess: () => ({
+          pid: 3333,
+          ppid: 1,
+          command: `node ${root}/scripts/web.mjs`,
+          cwd: root,
+          start: 'Sat Aug  1 01:00:00 2026',
+        }),
+        log,
+        root,
+        stateDir,
+      }),
+    ).toBe(0);
+    expect(log.mock.calls.flat().join('\n')).toMatch(/not managed/i);
+    expect(log.mock.calls.flat().join('\n')).not.toMatch(/tailnet/i);
+  });
+});
+
 describe('cmdStop — never kills foreign processes', () => {
+  const checkoutRoot = '/repo/sur9e';
+  const processStart = 'Fri Jul 31 18:29:59 2026';
+  const launchId = '11111111-1111-4111-8111-111111111111';
+
+  function writeManagedState(stateDir, overrides = {}) {
+    const meta = {
+      pid: 3333,
+      prod: false,
+      tailscale: false,
+      startedAt: '2026-07-31T18:30:00.000Z',
+      root: checkoutRoot,
+      processStart,
+      launchId,
+      ...overrides,
+    };
+    writeFs(joinPath(stateDir, 'web.pid'), String(meta.pid));
+    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify(meta));
+    return meta;
+  }
+
+  it('refuses a reused managed PID before sending any signal', async () => {
+    const stateDir = tmpStateDir();
+    writeManagedState(stateDir);
+    const exec = vi.fn((cmd, args) => {
+      if (cmd === 'ps' && args?.includes('command=')) {
+        return { status: 0, stdout: `node ${checkoutRoot}/scripts/web.mjs\n` };
+      }
+      return { status: 1, stdout: '' };
+    });
+    const inspectProcess = vi.fn().mockReturnValue({
+      pid: 3333,
+      ppid: 1,
+      command: `node ${checkoutRoot}/scripts/web.mjs`,
+      cwd: checkoutRoot,
+      start: 'Sat Aug  1 01:00:00 2026',
+    });
+    const kill = vi.fn();
+    const error = vi.fn();
+
+    const code = await cmdStop({
+      exec,
+      inspectProcess,
+      kill,
+      error,
+      log: vi.fn(),
+      stateDir,
+      root: checkoutRoot,
+    });
+
+    expect(code).toBe(1);
+    expect(kill).not.toHaveBeenCalled();
+    expect(error.mock.calls.flat().join('\n')).toMatch(/ownership.*not killing/i);
+  });
+
+  it('refuses a launcher owned by another checkout before sending any signal', async () => {
+    const stateDir = tmpStateDir();
+    writeManagedState(stateDir);
+    const inspectProcess = vi.fn().mockReturnValue({
+      pid: 3333,
+      ppid: 1,
+      command: 'node /repo/other/scripts/web.mjs',
+      cwd: '/repo/other',
+      start: processStart,
+    });
+    const kill = vi.fn();
+    const error = vi.fn();
+
+    const code = await cmdStop({
+      exec: vi.fn().mockReturnValue({ status: 0, stdout: 'node scripts/web.mjs\n' }),
+      inspectProcess,
+      kill,
+      error,
+      log: vi.fn(),
+      stateDir,
+      root: checkoutRoot,
+    });
+
+    expect(code).toBe(1);
+    expect(kill).not.toHaveBeenCalled();
+    expect(error.mock.calls.flat().join('\n')).toMatch(/ownership.*not killing/i);
+  });
+
+  it('rechecks managed ownership immediately before each signal', async () => {
+    const stateDir = tmpStateDir();
+    writeManagedState(stateDir);
+    const validIdentity = {
+      pid: 3333,
+      ppid: 1,
+      command: `node ${checkoutRoot}/scripts/web.mjs`,
+      cwd: checkoutRoot,
+      start: processStart,
+    };
+    const inspectProcess = vi
+      .fn()
+      .mockReturnValueOnce(validIdentity)
+      .mockReturnValueOnce(validIdentity)
+      .mockReturnValue({ ...validIdentity, start: 'Sat Aug  1 01:00:00 2026' });
+    const kill = vi.fn();
+
+    const code = await cmdStop({
+      exec: vi.fn().mockReturnValue({ status: 1, stdout: '' }),
+      inspectProcess,
+      kill,
+      error: vi.fn(),
+      log: vi.fn(),
+      stateDir,
+      root: checkoutRoot,
+    });
+
+    expect(code).toBe(1);
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('never signals a foreign listener that takes or holds port 3000 during escalation', async () => {
+    const stateDir = tmpStateDir();
+    writeManagedState(stateDir);
+    const identities = new Map([
+      [
+        3333,
+        {
+          pid: 3333,
+          ppid: 1,
+          command: `node ${checkoutRoot}/scripts/web.mjs`,
+          cwd: checkoutRoot,
+          start: processStart,
+        },
+      ],
+      [
+        9999,
+        {
+          pid: 9999,
+          ppid: 1,
+          command: '/usr/local/bin/foreign-server',
+          cwd: '/repo/foreign',
+          start: 'Sat Aug  1 01:00:00 2026',
+        },
+      ],
+    ]);
+    const inspectProcess = vi.fn(pid => identities.get(pid) ?? null);
+    const exec = vi.fn(cmd =>
+      cmd === 'lsof'
+        ? { status: 0, stdout: 'p9999\ncforeign-server\n' }
+        : { status: 1, stdout: '' },
+    );
+    const kill = vi.fn();
+
+    const code = await cmdStop({
+      exec,
+      inspectProcess,
+      kill,
+      error: vi.fn(),
+      log: vi.fn(),
+      stateDir,
+      root: checkoutRoot,
+      termWaitMs: 0,
+      killWaitMs: 0,
+      pollMs: 0,
+    });
+
+    expect(code).toBe(1);
+    expect(kill).not.toHaveBeenCalledWith(9999, expect.anything());
+  });
+
   it('refuses when the PID file process is not our launcher', () => {
     const stateDir = tmpStateDir();
     writeFs(joinPath(stateDir, 'web.pid'), '2222');
@@ -453,8 +819,7 @@ describe('cmdStop — never kills foreign processes', () => {
 
   it('kills a live managed launcher and resets tailscale serve when we enabled it', async () => {
     const stateDir = tmpStateDir();
-    writeFs(joinPath(stateDir, 'web.pid'), '3333');
-    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: true, tailscale: true }));
+    writeVerifiedState(stateDir, { prod: true, tailscale: true });
     const calls = [];
     const exec = vi.fn((cmd, args) => {
       calls.push([cmd, ...(args ?? [])].join(' '));
@@ -463,7 +828,15 @@ describe('cmdStop — never kills foreign processes', () => {
       return { status: 0, stdout: '' };
     });
     const kill = vi.fn();
-    await cmdStop({ exec, kill, error: vi.fn(), log: vi.fn(), stateDir });
+    await cmdStop({
+      exec,
+      inspectProcess: pid => verifiedIdentity(pid),
+      kill,
+      error: vi.fn(),
+      log: vi.fn(),
+      root: CHECKOUT_ROOT,
+      stateDir,
+    });
     expect(kill).toHaveBeenCalledWith(3333, 'SIGTERM');
     expect(calls.some(c => c.includes('serve reset'))).toBe(true);
     // State files must be gone after a successful stop.
@@ -473,8 +846,7 @@ describe('cmdStop — never kills foreign processes', () => {
 
   it('waits for the :3000 listener to clear after killing — stop && start must not race', async () => {
     const stateDir = tmpStateDir();
-    writeFs(joinPath(stateDir, 'web.pid'), '3333');
-    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    writeVerifiedState(stateDir);
     // The next-server child holds the port for the first two lsof polls
     // after SIGTERM, then releases it.
     let lsofCalls = 0;
@@ -486,7 +858,15 @@ describe('cmdStop — never kills foreign processes', () => {
           : { status: 1, stdout: '' };
       return { status: 1, stdout: '' };
     });
-    await cmdStop({ exec, kill: vi.fn(), error: vi.fn(), log: vi.fn(), stateDir });
+    await cmdStop({
+      exec,
+      inspectProcess: pid => verifiedIdentity(pid),
+      kill: vi.fn(),
+      error: vi.fn(),
+      log: vi.fn(),
+      root: CHECKOUT_ROOT,
+      stateDir,
+    });
     expect(lsofCalls).toBeGreaterThanOrEqual(3); // polled until the port was free
   });
 
@@ -521,20 +901,26 @@ describe('cmdStop — never kills foreign processes', () => {
 describe('cmdStop — suspended / wedged servers', () => {
   it('resumes a suspended tree (SIGCONT) before asking it to exit (SIGTERM)', async () => {
     const stateDir = tmpStateDir();
-    writeFs(joinPath(stateDir, 'web.pid'), '3333');
-    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    writeVerifiedState(stateDir);
     // lsof returns no listener → port is already free, no escalation needed.
     const exec = vi.fn(cmd => ({ status: cmd === 'ps' ? 0 : 1, stdout: 'node scripts/web.mjs\n' }));
     const kill = vi.fn();
-    await cmdStop({ exec, kill, error: vi.fn(), log: vi.fn(), stateDir });
+    await cmdStop({
+      exec,
+      inspectProcess: pid => verifiedIdentity(pid),
+      kill,
+      error: vi.fn(),
+      log: vi.fn(),
+      root: CHECKOUT_ROOT,
+      stateDir,
+    });
     const signals = kill.mock.calls.filter(c => c[0] === 3333).map(c => c[1]);
     expect(signals.slice(0, 2)).toEqual(['SIGCONT', 'SIGTERM']); // resume, then terminate
   });
 
   it('escalates to SIGKILL (launcher + actual port holder) when SIGTERM does not free :3000', async () => {
     const stateDir = tmpStateDir();
-    writeFs(joinPath(stateDir, 'web.pid'), '3333');
-    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    writeVerifiedState(stateDir);
     let sigkilled = false;
     const kill = vi.fn((_pid, sig) => {
       if (sig === 'SIGKILL') sigkilled = true;
@@ -549,10 +935,15 @@ describe('cmdStop — suspended / wedged servers', () => {
     const error = vi.fn();
     const code = await cmdStop({
       exec,
+      inspectProcess: pid =>
+        pid === 9999
+          ? verifiedIdentity(9999, { ppid: 3333, command: 'next-server' })
+          : verifiedIdentity(pid),
       kill,
       error,
       log: vi.fn(),
       stateDir,
+      root: CHECKOUT_ROOT,
       termWaitMs: 60,
       killWaitMs: 300,
       pollMs: 10,
@@ -566,8 +957,7 @@ describe('cmdStop — suspended / wedged servers', () => {
 
   it('reports failure honestly and KEEPS state when :3000 will not free even after SIGKILL', async () => {
     const stateDir = tmpStateDir();
-    writeFs(joinPath(stateDir, 'web.pid'), '3333');
-    writeFs(joinPath(stateDir, 'web.json'), JSON.stringify({ prod: false, tailscale: false }));
+    writeVerifiedState(stateDir);
     const exec = vi.fn(cmd => {
       if (cmd === 'ps') return { status: 0, stdout: 'node scripts/web.mjs\n' };
       if (cmd === 'lsof') return { status: 0, stdout: 'p9999\ncnode\n' }; // never clears
@@ -576,10 +966,15 @@ describe('cmdStop — suspended / wedged servers', () => {
     const error = vi.fn();
     const code = await cmdStop({
       exec,
+      inspectProcess: pid =>
+        pid === 9999
+          ? verifiedIdentity(9999, { ppid: 3333, command: 'next-server' })
+          : verifiedIdentity(pid),
       kill: vi.fn(),
       error,
       log: vi.fn(),
       stateDir,
+      root: CHECKOUT_ROOT,
       termWaitMs: 40,
       killWaitMs: 40,
       pollMs: 10,
@@ -591,7 +986,7 @@ describe('cmdStop — suspended / wedged servers', () => {
     expect(existsSync(joinPath(stateDir, 'web.pid'))).toBe(true);
   });
 
-  it("kills an untracked foreground dev server (Ctrl-Z'd `npm run web`) identified by its command", async () => {
+  it('refuses an untracked foreground dev server because no persisted ownership can be proved', async () => {
     const stateDir = tmpStateDir(); // foreground start writes no state file
     const root = '/repo/sur9e';
     let groupKilled = false;
@@ -615,20 +1010,21 @@ describe('cmdStop — suspended / wedged servers', () => {
       return { status: 1, stdout: '' };
     });
     const log = vi.fn();
+    const error = vi.fn();
     const code = await cmdStop({
       exec,
       kill,
-      error: vi.fn(),
+      error,
       log,
       stateDir,
       root,
       killWaitMs: 300,
       pollMs: 10,
     });
-    expect(kill).toHaveBeenCalledWith(77001, 'SIGCONT'); // resume the suspended tree
-    expect(kill).toHaveBeenCalledWith(-77000, 'SIGKILL'); // kill the whole process group
-    expect(code).toBe(0);
-    expect(log.mock.calls.flat().join('\n')).toMatch(/untracked sur9e dev server/i);
+    expect(kill).not.toHaveBeenCalled();
+    expect(code).toBe(1);
+    expect(log).not.toHaveBeenCalledWith(expect.stringMatching(/stopped/i));
+    expect(error.mock.calls.flat().join('\n')).toMatch(/not killing/i);
   });
 
   it('refuses (kill -9 hint, exit 1) a foreign listener that is NOT a sur9e server', async () => {
@@ -639,6 +1035,8 @@ describe('cmdStop — suspended / wedged servers', () => {
     const error = vi.fn();
     const code = await cmdStop({ exec, kill: vi.fn(), error, log: vi.fn(), stateDir });
     expect(code).toBe(1);
-    expect(error.mock.calls.flat().join('\n')).toMatch(/not a sur9e server.*kill -9 91548/s);
+    expect(error.mock.calls.flat().join('\n')).toMatch(
+      /no verified sur9e launch metadata.*not killing.*kill -9 91548/s,
+    );
   });
 });
