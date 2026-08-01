@@ -40,6 +40,15 @@ const ALL_PHASES = [
   'failed',
 ] as const;
 
+const ACTIVE_WORKER_PHASES = [
+  'applying',
+  'stopping',
+  'rebuilding',
+  'restarting',
+  'verifying',
+  'recovering',
+] as const;
+
 function job(phase: (typeof ALL_PHASES)[number] = 'queued', id = JOB_ID) {
   return {
     id,
@@ -107,41 +116,60 @@ describe('update-job durable contract', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('accepts every supported phase and parses the complete job shape', () => {
+  it('exposes every supported phase', () => {
     expect(UpdateJobPhase.options).toEqual(ALL_PHASES);
-
-    for (const phase of ALL_PHASES) {
-      expect(
-        UpdateJob.parse({ ...job(phase), error: phase === 'failed' ? 'build failed' : undefined }),
-      ).toMatchObject({
-        id: JOB_ID,
-        phase,
-        mode: { prod: true, tailscale: false },
-        fromVersion: '0.3.2',
-        toVersion: '0.4.0',
-        createdAt: EARLIER,
-        updatedAt: EARLIER,
-      });
-    }
   });
 
-  it('parses an optional persisted worker pid', () => {
-    expect(UpdateJob.parse({ ...job('applying'), pid: 4242 })).toMatchObject({
-      id: JOB_ID,
-      phase: 'applying',
-      pid: 4242,
-    });
+  it.each([
+    {
+      label: 'queued before claim',
+      candidate: { ...job('queued'), launchState: 'claim-pending' },
+    },
+    {
+      label: 'queued after claim',
+      candidate: { ...job('queued'), launchState: 'owned', pid: 4242 },
+    },
+    ...ACTIVE_WORKER_PHASES.map(phase => ({
+      label: `${phase} after claim`,
+      candidate: { ...job(phase), launchState: 'owned', pid: 4242 },
+    })),
+    { label: 'failed before spawn', candidate: { ...job('failed'), error: 'spawn failed' } },
+    {
+      label: 'failed before claim',
+      candidate: { ...job('failed'), launchState: 'claim-pending', error: 'claim expired' },
+    },
+    {
+      label: 'succeeded after claim',
+      candidate: { ...job('succeeded'), launchState: 'owned', pid: 4242 },
+    },
+    { label: 'rolled back without ownership metadata', candidate: job('rolled-back') },
+  ])('accepts valid ownership state: $label', ({ candidate }) => {
+    expect(UpdateJob.parse(candidate)).toMatchObject(candidate);
   });
 
-  it('parses durable launch ownership state', () => {
-    expect(UpdateJob.parse({ ...job('queued'), launchState: 'claim-pending' })).toMatchObject({
-      launchState: 'claim-pending',
-    });
-    expect(UpdateJob.parse({ ...job('applying'), launchState: 'owned', pid: 4242 })).toMatchObject({
-      launchState: 'owned',
-      pid: 4242,
-    });
-    expect(() => UpdateJob.parse({ ...job('applying'), launchState: 'owned' })).toThrow();
+  it.each([
+    ...ACTIVE_WORKER_PHASES.flatMap(phase => [
+      { label: `${phase} without ownership`, candidate: job(phase) },
+      {
+        label: `${phase} before claim`,
+        candidate: { ...job(phase), launchState: 'claim-pending', pid: 4242 },
+      },
+      { label: `${phase} without pid`, candidate: { ...job(phase), launchState: 'owned' } },
+      {
+        label: `${phase} with invalid pid`,
+        candidate: { ...job(phase), launchState: 'owned', pid: 0 },
+      },
+    ]),
+    {
+      label: 'queued ownership without pid',
+      candidate: { ...job('queued'), launchState: 'owned' },
+    },
+    {
+      label: 'terminal ownership without pid',
+      candidate: { ...job('failed'), launchState: 'owned' },
+    },
+  ])('rejects invalid ownership state: $label', ({ candidate }) => {
+    expect(() => UpdateJob.parse(candidate)).toThrow();
   });
 
   it('rejects invalid JSON when loading a persisted job', () => {
@@ -156,6 +184,8 @@ describe('update-job durable contract', () => {
     writeUpdateJob(root, job('queued'));
     writeUpdateJob(root, {
       ...job('applying'),
+      launchState: 'owned',
+      pid: 4242,
       updatedAt: '2026-07-31T12:01:00.000Z',
     });
 
@@ -375,6 +405,9 @@ describe('update-job durable contract', () => {
       ...job(phase as (typeof ALL_PHASES)[number]),
       createdAt: NOW.toISOString(),
       updatedAt: NOW.toISOString(),
+      ...(phase === 'queued'
+        ? { launchState: 'claim-pending' as const }
+        : { launchState: 'owned' as const, pid: 4242 }),
     };
     writeUpdateJob(root, active);
     const { deps, spawn } = fakeDeps();
@@ -385,7 +418,7 @@ describe('update-job durable contract', () => {
         mode: { prod: false, tailscale: false },
         fromVersion: '0.3.2',
       },
-      deps,
+      { ...deps, pidAlive: () => true },
     );
 
     expect(result).toEqual({ status: 'busy', job: active });
@@ -393,8 +426,8 @@ describe('update-job durable contract', () => {
     expect(existsSync(join(root, 'data/update/jobs', `${SECOND_JOB_ID}.json`))).toBe(false);
   });
 
-  it('reaps an expired nonterminal lease before starting a replacement job', () => {
-    const interrupted = job('rebuilding');
+  it('reaps an expired legacy queued lease before starting a replacement job', () => {
+    const interrupted = job('queued');
     writeUpdateJob(root, interrupted);
     const { deps, spawn } = fakeDeps();
 
@@ -440,7 +473,7 @@ describe('update-job durable contract', () => {
   });
 
   it('keeps an expired nonterminal job busy while its persisted worker pid is alive', () => {
-    const active = { ...job('rebuilding'), pid: 98989 };
+    const active = { ...job('rebuilding'), launchState: 'owned' as const, pid: 98989 };
     writeUpdateJob(root, active);
     const replacement = fakeDeps();
     const pidAlive = vi.fn(() => true);
@@ -465,6 +498,7 @@ describe('update-job durable contract', () => {
       ...job('applying'),
       createdAt: NOW.toISOString(),
       updatedAt: NOW.toISOString(),
+      launchState: 'owned' as const,
       pid: 98989,
     };
     writeUpdateJob(root, interrupted);
