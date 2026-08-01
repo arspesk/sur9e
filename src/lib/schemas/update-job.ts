@@ -19,6 +19,15 @@ export type UpdateJobPhase = z.infer<typeof UpdateJobPhase>;
 export const UpdateJobLaunchState = z.enum(['claim-pending', 'owned']);
 export type UpdateJobLaunchState = z.infer<typeof UpdateJobLaunchState>;
 
+const ACTIVE_WORKER_PHASES = new Set<UpdateJobPhase>([
+  'applying',
+  'stopping',
+  'rebuilding',
+  'restarting',
+  'verifying',
+  'recovering',
+]);
+
 export const UpdateJob = z
   .object({
     id: z.string().uuid(),
@@ -39,6 +48,16 @@ export const UpdateJob = z
   })
   .strict()
   .superRefine((job, context) => {
+    if (
+      ACTIVE_WORKER_PHASES.has(job.phase) &&
+      (job.launchState !== 'owned' || job.pid === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['launchState'],
+        message: 'active update jobs require owned worker metadata',
+      });
+    }
     if (job.launchState === 'owned' && job.pid === undefined) {
       context.addIssue({
         code: 'custom',
