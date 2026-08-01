@@ -195,6 +195,50 @@ describe('update-job durable contract', () => {
     expect(unref).toHaveBeenCalledTimes(1);
   });
 
+  it('does not regress worker progress when spawn advances the persisted phase before returning', () => {
+    const workerHarness = fakeDeps(SECOND_JOB_ID);
+    const spawn = vi.fn<UpdateOrchestratorDeps['spawn']>((...args) => {
+      const queued = loadUpdateJob(root, SECOND_JOB_ID);
+      expect(queued).not.toBeNull();
+      writeUpdateJob(root, {
+        ...(queued as NonNullable<typeof queued>),
+        phase: 'applying',
+        updatedAt: LATER.toISOString(),
+      });
+      return workerHarness.spawn(...args);
+    });
+
+    const result = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...workerHarness.deps, spawn },
+    );
+
+    expect(result).toMatchObject({
+      status: 'started',
+      job: {
+        id: SECOND_JOB_ID,
+        phase: 'applying',
+        updatedAt: LATER.toISOString(),
+        pid: 4242,
+      },
+    });
+    expect(loadUpdateJob(root, SECOND_JOB_ID)).toMatchObject({
+      phase: 'applying',
+      updatedAt: LATER.toISOString(),
+      pid: 4242,
+    });
+    expect(
+      JSON.parse(readFileSync(join(root, 'data/update/jobs', `${SECOND_JOB_ID}.json`), 'utf-8')),
+    ).toMatchObject({
+      phase: 'applying',
+      updatedAt: LATER.toISOString(),
+    });
+  });
+
   it.each([
     'queued',
     'applying',

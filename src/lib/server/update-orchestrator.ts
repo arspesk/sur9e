@@ -62,10 +62,20 @@ function updateJobPath(root: string, id: string): string {
   return join(updateJobsDir(root), `${id}.json`);
 }
 
+function updateJobPidPath(root: string, id: string): string {
+  return join(updateJobsDir(root), `${id}.pid`);
+}
+
 export function loadUpdateJob(root: string, id: string): UpdateJob | null {
   const path = updateJobPath(root, id);
   if (!existsSync(path)) return null;
-  return UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
+  const job = UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
+  const pidPath = updateJobPidPath(root, id);
+  if (!existsSync(pidPath)) return job;
+  return UpdateJobSchema.parse({
+    ...job,
+    pid: Number(readFileSync(pidPath, 'utf-8').trim()),
+  });
 }
 
 export function writeUpdateJob(root: string, job: UpdateJob): void {
@@ -162,16 +172,21 @@ export function startUpdateJob(
       }
     });
     worker.unref();
-    const startedJob = UpdateJobSchema.parse({
-      ...job,
-      ...(worker.pid === undefined ? {} : { pid: worker.pid }),
-    });
-    writeUpdateJob(root, startedJob);
+    if (worker.pid !== undefined) {
+      const pid = UpdateJobSchema.shape.pid.unwrap().parse(worker.pid);
+      atomicWrite(updateJobPidPath(root, job.id), `${pid}\n`);
+    }
+    const startedJob = loadUpdateJob(root, job.id);
+    if (!startedJob) throw new Error('Update job disappeared during launch');
     return { status: 'started', job: startedJob };
   } catch {
+    const failed = failPersistedUpdateJob(root, job.id, deps, START_FAILED_ERROR);
+    if (failed && TERMINAL_PHASES.has(failed.phase) && failed.phase !== 'failed') {
+      return { status: 'started', job: failed };
+    }
     return {
       status: 'failed',
-      job: failUpdateJob(root, job, deps.clock(), START_FAILED_ERROR),
+      job: failed ?? failUpdateJob(root, job, deps.clock(), START_FAILED_ERROR),
     };
   } finally {
     if (logFileDescriptor !== undefined) closeSync(logFileDescriptor);
