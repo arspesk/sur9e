@@ -178,7 +178,7 @@ export function EvaluateModal() {
         </div>
         <footer className="evaluate-modal__foot">
           <Button variant="secondary" className="evaluate-modal__cancel" onClick={close}>
-            Cancel
+            {patchToEvaluated ? 'Not now' : 'Cancel'}
           </Button>
           {onStatusOnly ? (
             <Button

@@ -26,6 +26,7 @@ import { useGeneratorRun } from './use-generator-run';
 export function InterviewProcessModal() {
   const { num, isBatch, count, close, handleSubmit } = useGeneratorRun('interview-prep');
   const returnFocus = useModalStore(s => s.context?.returnFocus as HTMLElement | undefined);
+  const statusFollowup = useModalStore(s => s.context?.statusFollowup === true);
 
   let title = num != null ? `Generate interview prep for #${num}?` : 'Generate interview prep?';
   if (isBatch) title = `Prepare interview prep for ${count} offers?`;
@@ -50,7 +51,7 @@ export function InterviewProcessModal() {
         </div>
         <footer className="evaluate-modal__foot">
           <Button variant="secondary" className="evaluate-modal__cancel" onClick={close}>
-            Cancel
+            {statusFollowup ? 'Not now' : 'Cancel'}
           </Button>
           <Button variant="primary" className="evaluate-modal__submit" onClick={handleSubmit}>
             Generate interview prep
