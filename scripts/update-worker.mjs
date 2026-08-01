@@ -21,6 +21,12 @@ const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_INTERVAL_MS = 1_000;
 const CLAIM_PENDING_LEASE_MS = 60_000;
 const TERMINAL_PHASES = new Set(['succeeded', 'rolled-back', 'failed']);
+const POST_ROLLBACK_CHECKPOINTS = new Set([
+  'rollback-complete',
+  'dependencies-restored',
+  'recovery-build-complete',
+  'recovery-server-started',
+]);
 const COMMAND_TIMEOUTS_MS = {
   apply: 15 * 60_000,
   stop: 2 * 60_000,
@@ -102,13 +108,24 @@ function runCommand(
     let settled = false;
     let timedOut = false;
     let escalation = null;
+    let terminationPoll = null;
     const finish = callback => value => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (escalation) clearTimeout(escalation);
+      if (terminationPoll) clearTimeout(terminationPoll);
       if (heartbeat) clearInterval(heartbeat);
       callback(value);
+    };
+    const ownedGroupAlive = () => {
+      if (!child.pid) return false;
+      try {
+        process.kill(-child.pid, 0);
+        return true;
+      } catch (error) {
+        return error?.code !== 'ESRCH';
+      }
     };
     const timer = setTimeout(() => {
       if (settled) return;
@@ -124,19 +141,26 @@ function runCommand(
         } catch {
           // The owned command group already exited.
         }
-        finish(reject)(new Error('Command timed out'));
+        const waitForTermination = () => {
+          if (!ownedGroupAlive()) {
+            finish(reject)(new Error('Command timed out'));
+            return;
+          }
+          terminationPoll = setTimeout(waitForTermination, 50);
+          terminationPoll.unref?.();
+        };
+        waitForTermination();
       }, 2_000);
       escalation.unref?.();
     }, timeoutMs);
     timer.unref?.();
     const heartbeat = onHeartbeat ? setInterval(onHeartbeat, heartbeatMs) : null;
     heartbeat?.unref?.();
-    child.once('error', finish(reject));
+    child.once('error', error => {
+      if (!timedOut) finish(reject)(error);
+    });
     child.once('exit', (code, signal) => {
-      if (timedOut) {
-        finish(reject)(new Error('Command timed out'));
-        return;
-      }
+      if (timedOut) return;
       if (code === 0 && signal === null) finish(resolvePromise)();
       else finish(reject)(new Error('Command failed'));
     });
@@ -264,7 +288,7 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps, optio
         });
       }
       recoveryStage = 'rollback';
-      if (job.checkpoint !== 'rollback-complete' && runtime.readVersion(root) !== job.fromVersion) {
+      if (!POST_ROLLBACK_CHECKPOINTS.has(job.checkpoint)) {
         await runPhaseCommand(process.execPath, [join(root, 'update-system.mjs'), 'rollback'], {
           cwd: root,
           timeoutMs: COMMAND_TIMEOUTS_MS.rollback,
