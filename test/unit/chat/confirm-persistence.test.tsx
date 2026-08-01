@@ -37,9 +37,13 @@ function renderCard(ui: ReactElement) {
 }
 
 const emitTurnEventMock = vi.fn();
+const getTurnMock = vi.fn();
 const spawnJobMock = vi.fn();
 
-vi.mock('@/lib/server/chat/turn-runner', () => ({ emitTurnEvent: emitTurnEventMock }));
+vi.mock('@/lib/server/chat/turn-runner', () => ({
+  emitTurnEvent: emitTurnEventMock,
+  getTurn: getTurnMock,
+}));
 vi.mock('@/lib/server/jobs/runner', () => ({ spawnJob: spawnJobMock }));
 
 const APPLICATIONS_MD = [
@@ -98,6 +102,7 @@ describe('confirm resolution persists to the owning message', () => {
     store = await import('@/lib/server/chat/store');
     db = await import('@/lib/server/chat/db');
     emitTurnEventMock.mockReset();
+    getTurnMock.mockReset();
     spawnJobMock.mockReset();
   });
 
@@ -239,6 +244,70 @@ describe('confirm resolution persists to the owning message', () => {
     expect(res.outcome).toBe('approved');
     // No assistant message existed, so listMessages is empty and nothing threw.
     expect(store.listMessages(root, conversation.id)).toHaveLength(0);
+  });
+
+  it('persists a follow-up placement warning on the resolved parent for reload', async () => {
+    const conversation = store.createConversation(root);
+    const inMemory = (globalThis as unknown as { __sur9eChatConfirms: Map<string, unknown> })
+      .__sur9eChatConfirms;
+    const before = inMemory.size;
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-status-placement-failure',
+      kind: 'set-status',
+      payload: { num: 1001, status: 'interview' },
+      summary: 'Set offer #1001 status to "interview"',
+      meta: 'tracker write · no AI spend',
+    });
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Change status?',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token,
+          summary: 'Set offer #1001 status to "interview"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+      ],
+    });
+    db.openChatDb(root).exec(`
+      CREATE TRIGGER fail_child_confirm_placement
+      BEFORE UPDATE OF events_json ON messages
+      WHEN NEW.events_json LIKE '%"kind":"start-job"%'
+      BEGIN
+        SELECT RAISE(FAIL, 'child placement failed');
+      END;
+    `);
+
+    const result = await confirms.resolveConfirm(root, token, true);
+
+    expect(result).toMatchObject({
+      outcome: 'approved',
+      execution: 'succeeded',
+      result: {
+        ok: true,
+        message: 'Status updated, but the preparation prompt could not be shown.',
+      },
+    });
+    expect(result.followupConfirm).toBeUndefined();
+    expect(inMemory.size).toBe(before);
+
+    const [message] = store.listMessages(root, conversation.id);
+    const reloaded = reloadEvents(message.events);
+    const confirm = foldEvents(reloaded).find(
+      item => item.kind === 'confirm' && item.token === token,
+    );
+    expect(confirm).toMatchObject({
+      kind: 'confirm',
+      outcome: 'approved',
+      message: 'Status updated, but the preparation prompt could not be shown.',
+    });
+    expect(
+      reloaded.filter(event => event.type === 'confirm' && event.token !== token),
+    ).toHaveLength(0);
   });
 
   it('appends a start-job confirm after the resolved parent with monotonic sequence and reload order', () => {

@@ -55,6 +55,14 @@ describe('followupForStatusTransition', () => {
     expect(followupForStatusTransition(1001, 'offer', 'offer')).toBeNull();
   });
 
+  it('treats legacy bold Interview as the same canonical status', () => {
+    expect(followupForStatusTransition(1001, '**Interview**', 'interview')).toBeNull();
+  });
+
+  it('treats legacy bold Offer as the same canonical status', () => {
+    expect(followupForStatusTransition(1001, '**Offer**', 'offer')).toBeNull();
+  });
+
   it('returns null for unrelated transitions', () => {
     expect(followupForStatusTransition(1001, 'screened', 'applied')).toBeNull();
   });

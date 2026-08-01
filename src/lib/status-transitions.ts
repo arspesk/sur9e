@@ -29,12 +29,16 @@ export type StatusPickInterception =
   | { kind: 'blocked'; message: string }
   | { kind: 'evaluate-modal' };
 
+function canonicalStatus(status: string | null | undefined): string {
+  return (status ?? '').replace(/\*\*/g, '').trim().toLowerCase();
+}
+
 export function interceptStatusPick(
   currentStatus: string | null | undefined,
   nextStatus: string,
 ): StatusPickInterception {
-  const prev = (currentStatus || '').toLowerCase();
-  const next = (nextStatus || '').toLowerCase();
+  const prev = canonicalStatus(currentStatus);
+  const next = canonicalStatus(nextStatus);
   if (prev === next) return { kind: 'proceed' }; // no-op — callers treat as plain pick
   if (next === 'evaluated') return { kind: 'evaluate-modal' };
   return { kind: 'proceed' };
@@ -49,8 +53,8 @@ export function followupForStatusTransition(
   currentStatus: string | undefined,
   nextStatus: string,
 ): StatusFollowup | null {
-  const current = (currentStatus ?? '').trim().toLowerCase();
-  const next = nextStatus.trim().toLowerCase();
+  const current = canonicalStatus(currentStatus);
+  const next = canonicalStatus(nextStatus);
   if (current === next) return null;
   if (next === 'interview') return { num, jobKind: 'interview-prep' };
   if (next === 'offer') return { num, jobKind: 'negotiate' };

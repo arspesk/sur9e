@@ -405,10 +405,15 @@ export async function resolveConfirm(
       });
       followupConfirm = { token: childToken };
     } else {
+      const message = 'Status updated, but the preparation prompt could not be shown.';
       result = {
         ...result,
-        message: 'Status updated, but the preparation prompt could not be shown.',
+        message,
       };
+      // The parent resolution was persisted before child placement so the
+      // child could be appended after it. Merge the late warning back onto
+      // that durable event; otherwise reload would lose this failure detail.
+      persistResolution(root, token, outcome, execution, { message });
     }
   }
   return {
