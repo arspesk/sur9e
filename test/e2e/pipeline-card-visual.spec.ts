@@ -47,6 +47,9 @@ for (const viewport of viewports) {
       if (!cardBox || !companyBox || !scoreBox || !menuBox || !iconBox) return;
 
       expect(scoreBox.x).toBeGreaterThan(companyBox.x);
+      expect(companyBox.x + companyBox.width).toBeLessThanOrEqual(scoreBox.x + 1);
+      expect(companyBox.y + companyBox.height).toBeGreaterThan(scoreBox.y);
+      expect(scoreBox.y + scoreBox.height).toBeGreaterThan(companyBox.y);
       expect(scoreBox.x + scoreBox.width).toBeLessThanOrEqual(menuBox.x + 1);
       expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
       expect(iconBox.width).toBeCloseTo(16, 0);
