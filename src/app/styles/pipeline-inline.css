@@ -183,6 +183,10 @@
 }
 .column {
   flex: 0 0 340px;
+  /* Flex items default to min-width:auto, which lets a long nowrap company
+     name expand the entire column past its 340px basis before ellipsis can
+     engage. Keep the column at its declared width and let card content shrink. */
+  min-width: 0;
   background: transparent;
   border-radius: var(--radius);
   display: flex;
