@@ -76,4 +76,17 @@ describe('resolveOfferSource', () => {
       }),
     ).rejects.toThrow('invalid saved JD path');
   });
+
+  it('rejects an imported URL source without a saved JD instead of fetching live', async () => {
+    const fetcher = vi.fn();
+
+    await expect(
+      resolveOfferSource(
+        '/tmp/unused',
+        { sourceKind: 'url', url: 'https://example.com/jobs/changed' },
+        { fetcher },
+      ),
+    ).rejects.toThrow('invalid saved JD path');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });
