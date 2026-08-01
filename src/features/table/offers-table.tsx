@@ -145,15 +145,14 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
     // accepts the setOptimistic call. TanStack's `mutate` is fire-and-forget
     // here — onError pops a toast via the host hook; on success the
     // ['applications'] invalidation triggers a refetch + auto-reconcile.
-    const patchStatus = (status: ApplicationStatus) =>
+    const patchStatus = (status: ApplicationStatus, onSuccess?: () => void) =>
       startTransition(() => {
         applyOptimistic({ type: 'status', num, status });
-        updateStatus({ num, status });
+        updateStatus({ num, status }, { onSuccess });
       });
     // Same rules as the kanban drag (interceptStatusPick): picking
-    // "evaluated" opens the evaluate confirm modal, which offers "Run
-    // evaluation" (PATCH + spawn the eval job) and "Set status only" (plain
-    // PATCH, no job). Every other transition flips the pill directly.
+    // "evaluated" persists the status first, then opens the optional
+    // evaluation follow-up. Every other transition flips the pill directly.
     const row = optimisticRows.find(r => r.num === num);
     const intercept = interceptStatusPick(row?.status, newStatus);
     if (intercept.kind === 'blocked') {
@@ -161,11 +160,7 @@ export function OffersTable({ rows, tableRef, wrapRef }: OffersTableProps) {
       return;
     }
     if (intercept.kind === 'evaluate-modal') {
-      openModal('evaluate', {
-        num,
-        patchToEvaluated: true,
-        onStatusOnly: () => patchStatus(newStatus),
-      });
+      patchStatus(newStatus, () => openModal('evaluate', { num, statusFollowup: true }));
       return;
     }
     patchStatus(newStatus);

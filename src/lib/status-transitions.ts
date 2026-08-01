@@ -4,10 +4,9 @@
 // (StatusPopoverHost), and the table's status pill (offers-table.tsx).
 //
 // Rules (originally encoded only in the board's drag handler):
-//   - anything → evaluated: the change must go through the evaluate confirm
-//     modal (openModal('evaluate', { num, patchToEvaluated: true })) so the
-//     status flip and the evaluation job stay one gesture — a silent PATCH
-//     would leave an "Evaluated" row with no evaluation behind it.
+//   - anything → evaluated: persist the new status first, then open the
+//     evaluation modal as an optional follow-up. Dismissing with "Not now"
+//     keeps the already-saved status.
 //   - evaluated → screened: a plain PATCH like any other transition
 //     (maintainer decision 2026-06-11; previously blocked). The status is
 //     the pipeline stage only — the evaluation report keeps its `state:
@@ -17,9 +16,8 @@
 // Bulk surfaces (batch-action-bar.tsx) can't call this directly — the
 // selection's per-row statuses vary, so there is no single `currentStatus`.
 // They apply the same intent by keying off the pick alone: choosing
-// 'evaluated' opens the evaluate confirm modal with the selected nums[]
-// (confirm = spawn real evaluation jobs; an explicit "Set status only"
-// button = plain bulk PATCH; Cancel/Escape = abort).
+// 'evaluated' persists the bulk status change first, then opens the optional
+// evaluation follow-up with the successfully updated nums[].
 //
 // Client-safe, framework-free, pure — unit-tested in
 // src/lib/__tests__/status-transitions.test.ts.
