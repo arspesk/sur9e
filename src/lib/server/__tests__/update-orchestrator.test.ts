@@ -54,16 +54,16 @@ function job(phase: (typeof ALL_PHASES)[number] = 'queued', id = JOB_ID) {
 
 function fakeDeps(id = SECOND_JOB_ID, clockValues: Date[] = [NOW]) {
   const unref = vi.fn();
-  let errorListener: ((error: Error) => void) | undefined;
+  const listeners = new Map<string, (...args: unknown[]) => void>();
   let worker: {
     pid: number;
-    once: (event: 'error', listener: (error: Error) => void) => typeof worker;
+    once: (event: string, listener: (...args: unknown[]) => void) => typeof worker;
     unref: typeof unref;
   };
   worker = {
     pid: 4242,
-    once: vi.fn((event: 'error', listener: (error: Error) => void) => {
-      if (event === 'error') errorListener = listener;
+    once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, listener);
       return worker;
     }),
     unref,
@@ -77,8 +77,19 @@ function fakeDeps(id = SECOND_JOB_ID, clockValues: Date[] = [NOW]) {
       spawn,
     },
     emitError(error: Error) {
-      if (!errorListener) throw new Error('worker error listener was not registered');
-      errorListener(error);
+      const listener = listeners.get('error');
+      if (!listener) throw new Error('worker error listener was not registered');
+      listener(error);
+    },
+    emitExit(code: number | null, signal: NodeJS.Signals | null = null) {
+      const listener = listeners.get('exit');
+      if (!listener) throw new Error('worker exit listener was not registered');
+      listener(code, signal);
+    },
+    emitClose(code: number | null, signal: NodeJS.Signals | null = null) {
+      const listener = listeners.get('close');
+      if (!listener) throw new Error('worker close listener was not registered');
+      listener(code, signal);
     },
     spawn,
     unref,
@@ -123,13 +134,14 @@ describe('update-job durable contract', () => {
   });
 
   it('parses durable launch ownership state', () => {
-    expect(UpdateJob.parse({ ...job('queued'), launchState: 'ownership-unknown' })).toMatchObject({
-      launchState: 'ownership-unknown',
+    expect(UpdateJob.parse({ ...job('queued'), launchState: 'claim-pending' })).toMatchObject({
+      launchState: 'claim-pending',
     });
     expect(UpdateJob.parse({ ...job('applying'), launchState: 'owned', pid: 4242 })).toMatchObject({
       launchState: 'owned',
       pid: 4242,
     });
+    expect(() => UpdateJob.parse({ ...job('applying'), launchState: 'owned' })).toThrow();
   });
 
   it('rejects invalid JSON when loading a persisted job', () => {
@@ -153,10 +165,7 @@ describe('update-job durable contract', () => {
       phase: 'applying',
       updatedAt: '2026-07-31T12:01:00.000Z',
     });
-    expect(JSON.parse(readFileSync(`${path}.bak`, 'utf-8'))).toMatchObject({
-      id: JOB_ID,
-      phase: 'queued',
-    });
+    expect(existsSync(`${path}.bak`)).toBe(false);
     expect(readdirSync(join(root, 'data/update/jobs')).some(file => file.endsWith('.tmp'))).toBe(
       false,
     );
@@ -186,8 +195,7 @@ describe('update-job durable contract', () => {
         toVersion: '0.4.0',
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
-        pid: 4242,
-        launchState: 'owned',
+        launchState: 'claim-pending',
       },
     });
     expect(loadUpdateJob(root, SECOND_JOB_ID)).toEqual(result.job);
@@ -215,6 +223,8 @@ describe('update-job durable contract', () => {
       writeUpdateJob(root, {
         ...(queued as NonNullable<typeof queued>),
         phase: 'applying',
+        launchState: 'owned',
+        pid: 4242,
         updatedAt: LATER.toISOString(),
       });
       return workerHarness.spawn(...args);
@@ -406,6 +416,29 @@ describe('update-job durable contract', () => {
     });
   });
 
+  it('reaps a claim-pending job left behind by a crash before spawn', () => {
+    const interrupted = { ...job('queued'), launchState: 'claim-pending' as const };
+    writeUpdateJob(root, interrupted);
+    const replacement = fakeDeps();
+
+    const result = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      replacement.deps,
+    );
+
+    expect(result.status).toBe('started');
+    expect(replacement.spawn).toHaveBeenCalledTimes(1);
+    expect(loadUpdateJob(root, interrupted.id)).toMatchObject({
+      phase: 'failed',
+      error: 'Update worker did not claim ownership',
+      updatedAt: NOW.toISOString(),
+    });
+  });
+
   it('keeps an expired nonterminal job busy while its persisted worker pid is alive', () => {
     const active = { ...job('rebuilding'), pid: 98989 };
     writeUpdateJob(root, active);
@@ -569,7 +602,64 @@ describe('update-job durable contract', () => {
     ).toBe('started');
   });
 
-  it('keeps launch ownership nonterminal when spawn returns no pid and blocks later retry', () => {
+  it('persists an abnormal child exit as failed and permits retry', () => {
+    const first = fakeDeps(SECOND_JOB_ID, [NOW, LATER]);
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: true },
+        fromVersion: '0.3.2',
+      },
+      first.deps,
+    );
+    expect(started.status).toBe('started');
+
+    first.emitExit(2);
+
+    expect(loadUpdateJob(root, SECOND_JOB_ID)).toMatchObject({
+      phase: 'failed',
+      error: 'Update worker exited before completion',
+      updatedAt: LATER.toISOString(),
+    });
+    const retry = fakeDeps(THIRD_JOB_ID);
+    expect(
+      startUpdateJob(
+        root,
+        {
+          mode: { prod: true, tailscale: true },
+          fromVersion: '0.3.2',
+        },
+        retry.deps,
+      ).status,
+    ).toBe('started');
+  });
+
+  it('does not overwrite a terminal job when an abnormal child close arrives late', () => {
+    const first = fakeDeps(SECOND_JOB_ID, [NOW, LATER]);
+    const started = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      first.deps,
+    );
+    if (started.status !== 'started') throw new Error('expected update launch');
+    writeUpdateJob(root, {
+      ...started.job,
+      phase: 'succeeded',
+      updatedAt: LATER.toISOString(),
+    });
+
+    first.emitClose(null, 'SIGTERM');
+
+    expect(loadUpdateJob(root, SECOND_JOB_ID)).toMatchObject({
+      phase: 'succeeded',
+      updatedAt: LATER.toISOString(),
+    });
+  });
+
+  it('reaps a worker that never claims a pid and permits retry after the claim lease', () => {
     const first = fakeDeps(SECOND_JOB_ID);
     const spawn = vi.fn<UpdateOrchestratorDeps['spawn']>((...args) => {
       const worker = first.spawn(...args);
@@ -587,7 +677,7 @@ describe('update-job durable contract', () => {
 
     expect(started).toMatchObject({
       status: 'started',
-      job: { phase: 'queued', launchState: 'ownership-unknown' },
+      job: { phase: 'queued', launchState: 'claim-pending' },
     });
     const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
     expect(
@@ -599,11 +689,11 @@ describe('update-job durable contract', () => {
         },
         retry.deps,
       ).status,
-    ).toBe('busy');
-    expect(retry.spawn).not.toHaveBeenCalled();
+    ).toBe('started');
+    expect(retry.spawn).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps launch ownership nonterminal when spawn returns an invalid pid', () => {
+  it('ignores an invalid parent-observed pid and recovers through the claim lease', () => {
     const first = fakeDeps(SECOND_JOB_ID);
     const spawn = vi.fn<UpdateOrchestratorDeps['spawn']>((...args) => ({
       ...first.spawn(...args),
@@ -621,7 +711,7 @@ describe('update-job durable contract', () => {
 
     expect(started).toMatchObject({
       status: 'started',
-      job: { phase: 'queued', launchState: 'ownership-unknown' },
+      job: { phase: 'queued', launchState: 'claim-pending' },
     });
     const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
     expect(
@@ -633,15 +723,12 @@ describe('update-job durable contract', () => {
         },
         retry.deps,
       ).status,
-    ).toBe('busy');
-    expect(retry.spawn).not.toHaveBeenCalled();
+    ).toBe('started');
+    expect(retry.spawn).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps launch ownership nonterminal when pid persistence fails', () => {
+  it('leaves pid claiming to the worker instead of persisting the parent-observed pid', () => {
     const first = fakeDeps(SECOND_JOB_ID);
-    const persistPid = vi.fn(() => {
-      throw new Error('pid storage unavailable');
-    });
 
     const started = startUpdateJob(
       root,
@@ -649,26 +736,15 @@ describe('update-job durable contract', () => {
         mode: { prod: true, tailscale: false },
         fromVersion: '0.3.2',
       },
-      { ...first.deps, persistPid },
+      first.deps,
     );
 
-    expect(persistPid).toHaveBeenCalledTimes(1);
     expect(started).toMatchObject({
       status: 'started',
-      job: { phase: 'queued', launchState: 'ownership-unknown' },
+      job: { phase: 'queued', launchState: 'claim-pending' },
     });
-    const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
-    expect(
-      startUpdateJob(
-        root,
-        {
-          mode: { prod: true, tailscale: false },
-          fromVersion: '0.3.2',
-        },
-        retry.deps,
-      ).status,
-    ).toBe('busy');
-    expect(retry.spawn).not.toHaveBeenCalled();
+    expect(existsSync(join(root, 'data/update/jobs', `${SECOND_JOB_ID}.pid`))).toBe(false);
+    expect(loadUpdateJob(root, SECOND_JOB_ID)).not.toHaveProperty('pid');
   });
 
   it('keeps launch ownership nonterminal when the post-spawn reload fails', () => {
@@ -689,7 +765,7 @@ describe('update-job durable contract', () => {
     expect(reloadJob).toHaveBeenCalledTimes(1);
     expect(started).toMatchObject({
       status: 'started',
-      job: { phase: 'queued', launchState: 'owned', pid: 4242 },
+      job: { phase: 'queued', launchState: 'claim-pending' },
     });
     const retry = fakeDeps(THIRD_JOB_ID, [FUTURE]);
     const retryResult = startUpdateJob(
@@ -698,9 +774,9 @@ describe('update-job durable contract', () => {
         mode: { prod: true, tailscale: false },
         fromVersion: '0.3.2',
       },
-      { ...retry.deps, pidAlive: () => true },
+      retry.deps,
     );
-    expect(retryResult.status).toBe('busy');
-    expect(retry.spawn).not.toHaveBeenCalled();
+    expect(retryResult.status).toBe('started');
+    expect(retry.spawn).toHaveBeenCalledTimes(1);
   });
 });

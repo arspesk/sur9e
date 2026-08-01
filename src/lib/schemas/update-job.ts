@@ -16,7 +16,7 @@ export const UPDATE_JOB_PHASES = [
 export const UpdateJobPhase = z.enum(UPDATE_JOB_PHASES);
 export type UpdateJobPhase = z.infer<typeof UpdateJobPhase>;
 
-export const UpdateJobLaunchState = z.enum(['ownership-unknown', 'owned']);
+export const UpdateJobLaunchState = z.enum(['claim-pending', 'owned']);
 export type UpdateJobLaunchState = z.infer<typeof UpdateJobLaunchState>;
 
 export const UpdateJob = z
@@ -37,5 +37,14 @@ export const UpdateJob = z
     pid: z.number().int().positive().optional(),
     launchState: UpdateJobLaunchState.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((job, context) => {
+    if (job.launchState === 'owned' && job.pid === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pid'],
+        message: 'owned update jobs require a worker pid',
+      });
+    }
+  });
 export type UpdateJob = z.infer<typeof UpdateJob>;

@@ -1,6 +1,6 @@
 import 'server-only';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -8,20 +8,24 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { type UpdateJob, UpdateJob as UpdateJobSchema } from '../schemas/update-job';
-import { atomicWrite } from './atomic-write';
 import { isPidAlive } from './jobs/stale';
 
 const TERMINAL_PHASES = new Set<UpdateJob['phase']>(['succeeded', 'rolled-back', 'failed']);
 const UPDATE_JOB_LEASE_MS = 15 * 60 * 1000;
+const CLAIM_PENDING_LEASE_MS = 60 * 1000;
 const START_LOCK_LEASE_MS = 60 * 1000;
 const LEASE_EXPIRED_ERROR = 'Update worker lease expired';
+const CLAIM_EXPIRED_ERROR = 'Update worker did not claim ownership';
 const WORKER_STOPPED_ERROR = 'Update worker stopped before completion';
 const START_FAILED_ERROR = 'Update worker failed to start';
+const WORKER_EXITED_ERROR = 'Update worker exited before completion';
 
 export interface UpdateRequestContext {
   mode: UpdateJob['mode'];
@@ -31,7 +35,10 @@ export interface UpdateRequestContext {
 
 interface SpawnedUpdateWorker {
   pid?: number;
-  once(event: 'error', listener: (error: Error) => void): SpawnedUpdateWorker;
+  once(
+    event: 'error' | 'exit' | 'close',
+    listener: (...args: unknown[]) => void,
+  ): SpawnedUpdateWorker;
   unref(): void;
 }
 
@@ -46,7 +53,6 @@ export interface UpdateOrchestratorDeps {
   uuid: () => string;
   pidAlive?: (pid: number) => boolean;
   mkdirLock?: (path: string) => void;
-  persistPid?: (path: string, content: string) => void;
   reloadJob?: (root: string, id: string) => UpdateJob | null;
   spawn: (
     command: string,
@@ -64,7 +70,20 @@ const defaultDeps: UpdateOrchestratorDeps = {
   clock: () => new Date(),
   uuid: randomUUID,
   pidAlive: isPidAlive,
-  spawn: (command, args, options) => nodeSpawn(command, args, options),
+  spawn: (command, args, options) => {
+    const child = nodeSpawn(command, args, options);
+    const worker: SpawnedUpdateWorker = {
+      pid: child.pid,
+      once(event, listener) {
+        child.once(event, (...args: unknown[]) => listener(...args));
+        return worker;
+      },
+      unref() {
+        child.unref();
+      },
+    };
+    return worker;
+  },
 };
 
 function updateJobsDir(root: string): string {
@@ -73,10 +92,6 @@ function updateJobsDir(root: string): string {
 
 function updateJobPath(root: string, id: string): string {
   return join(updateJobsDir(root), `${id}.json`);
-}
-
-function updateJobPidPath(root: string, id: string): string {
-  return join(updateJobsDir(root), `${id}.pid`);
 }
 
 function updateStartLockDir(root: string): string {
@@ -110,6 +125,18 @@ function readStartLockOwner(root: string): StartLockOwner | null {
 
 function isAlreadyExistsError(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === 'EEXIST';
+}
+
+function atomicReplace(filePath: string, content: string): void {
+  const temporaryPath = `${filePath}.${randomBytes(4).toString('hex')}.tmp`;
+  mkdirSync(dirname(filePath), { recursive: true });
+  try {
+    writeFileSync(temporaryPath, content, 'utf-8');
+    renameSync(temporaryPath, filePath);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
 }
 
 function acquireStartLock(
@@ -176,7 +203,7 @@ function acquireStartLock(
       pid: process.pid,
       acquiredAt: now.toISOString(),
     };
-    atomicWrite(join(directory, 'owner.json'), `${JSON.stringify(owner, null, 2)}\n`);
+    atomicReplace(join(directory, 'owner.json'), `${JSON.stringify(owner, null, 2)}\n`);
   } catch (error) {
     rmSync(directory, { recursive: true, force: true });
     throw error;
@@ -192,23 +219,12 @@ function acquireStartLock(
 export function loadUpdateJob(root: string, id: string): UpdateJob | null {
   const path = updateJobPath(root, id);
   if (!existsSync(path)) return null;
-  const job = UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
-  const pidPath = updateJobPidPath(root, id);
-  if (!existsSync(pidPath)) return job;
-  try {
-    return UpdateJobSchema.parse({
-      ...job,
-      pid: Number(readFileSync(pidPath, 'utf-8').trim()),
-      launchState: 'owned',
-    });
-  } catch {
-    return job;
-  }
+  return UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
 }
 
 export function writeUpdateJob(root: string, job: UpdateJob): void {
   const parsed = UpdateJobSchema.parse(job);
-  atomicWrite(updateJobPath(root, parsed.id), `${JSON.stringify(parsed, null, 2)}\n`);
+  atomicReplace(updateJobPath(root, parsed.id), `${JSON.stringify(parsed, null, 2)}\n`);
 }
 
 function failUpdateJob(root: string, job: UpdateJob, updatedAt: Date, error: string): UpdateJob {
@@ -245,8 +261,13 @@ function findActiveUpdateJob(
     if (!file.endsWith('.json')) continue;
     const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
     if (!job || TERMINAL_PHASES.has(job.phase)) continue;
-    if (job.launchState === 'ownership-unknown') return job;
-    if (job.launchState === 'owned' && job.pid === undefined) return job;
+    if (job.launchState === 'claim-pending') {
+      if (now.getTime() - Date.parse(job.updatedAt) >= CLAIM_PENDING_LEASE_MS) {
+        failUpdateJob(root, job, now, CLAIM_EXPIRED_ERROR);
+        continue;
+      }
+      return job;
+    }
     if (job.pid !== undefined) {
       if (!pidAlive(job.pid)) {
         failUpdateJob(root, job, now, WORKER_STOPPED_ERROR);
@@ -295,7 +316,7 @@ function startUpdateJobUnderLock(
   const job = UpdateJobSchema.parse({
     id,
     phase: 'queued',
-    launchState: 'ownership-unknown',
+    launchState: 'claim-pending',
     mode: requestContext.mode,
     fromVersion: requestContext.fromVersion,
     ...(requestContext.toVersion === undefined ? {} : { toVersion: requestContext.toVersion }),
@@ -326,13 +347,18 @@ function startUpdateJobUnderLock(
         // Event handlers cannot return persistence failures to the caller.
       }
     });
+    const handleAbnormalCompletion = (...args: unknown[]) => {
+      const [code, signal] = args;
+      if (code === 0 && (signal === null || signal === undefined)) return;
+      try {
+        failPersistedUpdateJob(root, job.id, deps, WORKER_EXITED_ERROR);
+      } catch {
+        // Event handlers cannot return persistence failures to the caller.
+      }
+    };
+    worker.once('exit', handleAbnormalCompletion);
+    worker.once('close', handleAbnormalCompletion);
     worker.unref();
-    if (worker.pid !== undefined) {
-      const pid = UpdateJobSchema.shape.pid.unwrap().parse(worker.pid);
-      const persistPid = deps.persistPid ?? atomicWrite;
-      persistPid(updateJobPidPath(root, job.id), `${pid}\n`);
-      launchedJob = UpdateJobSchema.parse({ ...job, pid, launchState: 'owned' });
-    }
     const reloadJob = deps.reloadJob ?? loadUpdateJob;
     launchedJob = reloadJob(root, job.id) ?? launchedJob;
     return { status: 'started', job: launchedJob };
