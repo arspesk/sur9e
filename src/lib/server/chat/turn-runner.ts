@@ -676,10 +676,9 @@ function runAttempt(ctx: AttemptCtx): void {
     // header → confirms.ts) instead of falling back to model-adjudicated
     // `terminalApproved` with no card:
     //   claude.ts   — --mcp-config --strict-mcp-config (turn-scoped server file)
-    //   codex.ts    — -c mcp_servers.sur9e-app.env.SUR9E_CHAT_TURN_ID=… merged
-    //                 onto the project .codex/config.toml registration
-    //   opencode.ts — the same turn env injected onto the sur9e-app server in
-    //                 the per-turn read-only opencode config
+    //   codex.ts    — both generated servers re-expressed as turn-scoped -c
+    //                 overrides, including the sur9e-app turn environment
+    //   opencode.ts — both servers registered in the per-turn read-only config
     // codex/opencode chat is still flagged experimental for OTHER reasons, but
     // the confirm-card gating itself is now wired for all three — not claude-only.
     built = provider.buildChatArgs({

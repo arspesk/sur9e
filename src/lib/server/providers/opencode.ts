@@ -54,7 +54,7 @@ import { join } from 'node:path';
 import { getEncoding } from 'js-tiktoken';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
-import { readTurnMcpConfig } from '../chat/mcp-config';
+import { PLAYWRIGHT_CHAT_TOOLS, readTurnMcpConfig, readTurnMcpServers } from '../chat/mcp-config';
 import { escapeForBash } from './shell';
 import type { ExitClassification, Provider } from './types';
 
@@ -84,6 +84,8 @@ function buildReadOnlyChatConfig(): Record<string, unknown> {
       glob: 'allow',
       webfetch: 'allow',
       websearch: 'allow',
+      'playwright_*': 'deny',
+      ...Object.fromEntries(PLAYWRIGHT_CHAT_TOOLS.map(tool => [`playwright_${tool}`, 'allow'])),
     },
   };
 }
@@ -255,7 +257,18 @@ const opencode: Provider = {
     if (mcpConfigPath) {
       const turn = readTurnMcpConfig(mcpConfigPath);
       if (turn) {
+        const servers = readTurnMcpServers(mcpConfigPath);
+        const playwright = servers.playwright;
         config.mcp = {
+          ...(playwright
+            ? {
+                playwright: {
+                  type: 'local',
+                  command: [playwright.command, ...playwright.args],
+                  enabled: true,
+                },
+              }
+            : {}),
           'sur9e-app': {
             type: 'local',
             command: [turn.command, ...turn.args],

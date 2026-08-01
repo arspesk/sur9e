@@ -34,6 +34,10 @@ describe('writeMcpConfigForTurn', () => {
     const config = JSON.parse(readFileSync(path, 'utf-8'));
     expect(config).toEqual({
       mcpServers: {
+        playwright: {
+          command: 'npx',
+          args: ['-y', '@playwright/mcp@latest', '--headless', '--isolated'],
+        },
         'sur9e-app': {
           command: 'node',
           args: [join('/repo/root', 'cli/mcp-app-server.mjs')],
@@ -45,6 +49,20 @@ describe('writeMcpConfigForTurn', () => {
         },
       },
     });
+  });
+
+  it('exposes only the read-only Playwright tool contract to chat adapters', () => {
+    expect(mod.PLAYWRIGHT_CHAT_TOOLS).toEqual([
+      'browser_navigate',
+      'browser_snapshot',
+      'browser_wait_for',
+      'browser_tabs',
+      'browser_console_messages',
+      'browser_network_requests',
+    ]);
+    expect(mod.PLAYWRIGHT_CHAT_TOOLS).not.toEqual(
+      expect.arrayContaining(['browser_click', 'browser_type', 'browser_fill_form']),
+    );
   });
 
   it('sanitizes hostile turn ids out of the filename', () => {

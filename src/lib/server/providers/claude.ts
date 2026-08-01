@@ -45,6 +45,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
+import { PLAYWRIGHT_CHAT_TOOLS } from '../chat/mcp-config';
 import { escapeForBash } from './shell';
 import type { ExitClassification, ModelChoice, Provider } from './types';
 
@@ -230,7 +231,15 @@ export const __testing = {
 // grants exactly the read-only set + the sur9e-app MCP tools, and the
 // denylist hard-blocks mutation tools (spec §3.7 — chat never gets
 // Bash/Write/Edit; mutations go through confirm-gated MCP actions only).
-const CHAT_ALLOWED_TOOLS = 'Read,Glob,Grep,WebFetch,WebSearch,mcp__sur9e-app__*';
+const CHAT_ALLOWED_TOOLS = [
+  'Read',
+  'Glob',
+  'Grep',
+  'WebFetch',
+  'WebSearch',
+  'mcp__sur9e-app__*',
+  ...PLAYWRIGHT_CHAT_TOOLS.map(tool => `mcp__playwright__${tool}`),
+].join(',');
 const CHAT_DISALLOWED_TOOLS = 'Bash,Write,Edit,NotebookEdit,Task';
 
 const claude: Provider = {

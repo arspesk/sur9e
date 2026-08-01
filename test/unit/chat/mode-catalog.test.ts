@@ -44,6 +44,31 @@ describe('mode catalog', () => {
     );
   });
 
+  it('gives every canonical mode an MCP execution path', () => {
+    for (const mode of Object.values(MODE_CATALOG)) {
+      if (mode.execution === 'background') {
+        expect(mode.singleJob, `${mode.id} must route through start_job/start_workflow`).toBe(true);
+      } else if (mode.execution === 'composite') {
+        expect(
+          mode.expandsTo?.length,
+          `${mode.id} must route through start_workflow`,
+        ).toBeGreaterThan(0);
+        for (const step of mode.expandsTo ?? []) {
+          const expanded = MODE_CATALOG[step as keyof typeof MODE_CATALOG];
+          expect(expanded, `${mode.id} -> ${step}`).toBeDefined();
+          expect(expanded?.execution, `${mode.id} -> ${step} must be a background mode`).toBe(
+            'background',
+          );
+          expect(expanded?.singleJob, `${mode.id} -> ${step} must route through start_job`).toBe(
+            true,
+          );
+        }
+      } else {
+        expect(['inline', 'handoff']).toContain(mode.execution);
+      }
+    }
+  });
+
   it('marks composites and report dependencies explicitly', () => {
     expect(MODE_CATALOG['screen-evaluate'].expandsTo).toEqual(['screen', 'evaluate']);
     expect(MODE_CATALOG['evaluate-offer'].expandsTo).toEqual(['screen', 'evaluate']);
