@@ -31,6 +31,7 @@ export const UpdateJob = z
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     error: z.string().optional(),
+    pid: z.number().int().positive().optional(),
   })
   .strict();
 export type UpdateJob = z.infer<typeof UpdateJob>;
