@@ -28,17 +28,27 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     error: null,
   } as Record<string, unknown>,
+  active: {
+    data: { job: null },
+    isError: false,
+    error: null,
+  } as Record<string, unknown>,
   rollback: {
     isPending: false,
     mutateAsync: vi.fn(),
   } as Record<string, unknown>,
   requestedJobIds: [] as Array<string | null | undefined>,
+  activeEnabled: [] as boolean[],
 }));
 
 vi.mock('@/hooks/use-system', () => ({
   useVersion: () => mocks.version,
   useUpdateCheck: () => mocks.check,
   useUpdateApply: () => mocks.apply,
+  useActiveUpdateJob: (enabled: boolean) => {
+    mocks.activeEnabled.push(enabled);
+    return mocks.active;
+  },
   useUpdateJob: (jobId: string | null | undefined) => {
     mocks.requestedJobIds.push(jobId);
     return jobId ? mocks.job : { data: undefined, isError: false, error: null };
@@ -85,8 +95,10 @@ beforeEach(() => {
   mocks.check = { isPending: false, mutateAsync: vi.fn() };
   mocks.apply = { isPending: false, mutateAsync: vi.fn() };
   mocks.job = { data: undefined, isError: false, error: null };
+  mocks.active = { data: { job: null }, isError: false, error: null };
   mocks.rollback = { isPending: false, mutateAsync: vi.fn() };
   mocks.requestedJobIds = [];
+  mocks.activeEnabled = [];
   Object.assign(window, {
     deleteConfirmModal: { confirm: vi.fn(async () => true) },
   });
@@ -97,6 +109,41 @@ afterEach(() => {
 });
 
 describe('SystemSection update status', () => {
+  it('discovers and attaches the latest durable job when this tab has no retained id', async () => {
+    window.history.replaceState({}, '', '/settings?view=system#system');
+    mocks.active = {
+      data: { job: makeJob({ phase: 'recovery-queued' }) },
+      isError: false,
+      error: null,
+    };
+    mocks.job = {
+      data: makeJob({ phase: 'recovery-queued' }),
+      isError: false,
+      error: null,
+    };
+
+    renderSection();
+
+    await waitFor(() => expect(window.sessionStorage.getItem(ACTIVE_JOB_KEY)).toBe(JOB_ID));
+    expect(window.sessionStorage.getItem(RETURN_HREF_KEY)).toBe(
+      'http://localhost:3000/settings?view=system#system',
+    );
+    expect(mocks.activeEnabled).toContain(true);
+    expect(mocks.activeEnabled.at(-1)).toBe(false);
+    expect(mocks.requestedJobIds).toContain(JOB_ID);
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing recovery');
+  });
+
+  it('does not run discovery when sessionStorage already retains a job id', () => {
+    window.sessionStorage.setItem(ACTIVE_JOB_KEY, JOB_ID);
+    mocks.job = { data: makeJob(), isError: false, error: null };
+
+    renderSection();
+
+    expect(mocks.activeEnabled.length).toBeGreaterThan(0);
+    expect(mocks.activeEnabled.every(enabled => !enabled)).toBe(true);
+  });
+
   it('discards a corrupt retained job id instead of trapping the controls', () => {
     window.sessionStorage.setItem(ACTIVE_JOB_KEY, 'not-a-job-id');
     renderSection();

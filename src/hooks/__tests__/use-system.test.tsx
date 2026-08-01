@@ -3,8 +3,10 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
+  activeUpdateJobKey,
   type UpdateCheckResponse,
   updateJobKey,
+  useActiveUpdateJob,
   useUpdateApply,
   useUpdateJob,
 } from '@/hooks/use-system';
@@ -124,6 +126,44 @@ describe('useUpdateApply', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ toVersion: '0.4.0' }),
     });
+  });
+});
+
+describe('useActiveUpdateJob', () => {
+  it('does not discover when Settings already has a retained job id', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { wrapper } = makeWrapper();
+
+    const { result } = renderHook(() => useActiveUpdateJob(false), { wrapper });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(activeUpdateJobKey()).toEqual(['system', 'active-update-job']);
+  });
+
+  it('polls until it discovers a recovery-queued job, then stops', async () => {
+    vi.useFakeTimers();
+    const recoveryQueued = makeJob({ phase: 'recovery-queued' });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ job: null }))
+      .mockResolvedValueOnce(jsonResponse({ job: recoveryQueued }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useActiveUpdateJob(true), { wrapper });
+
+    await flushMicrotasks();
+    expect(result.current.data).toEqual({ job: null });
+
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    await flushMicrotasks();
+    expect(result.current.data).toEqual({ job: recoveryQueued });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/update/status', undefined);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

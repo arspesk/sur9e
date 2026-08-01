@@ -23,6 +23,10 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  hasInterruptedUpdateOnStartup,
+  recoverInterruptedUpdateOnStartup,
+} from './update-worker.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Exported so the runtime commands (and any caller) can resolve the
@@ -283,6 +287,8 @@ export async function cmdStart(opts, deps = {}) {
     root = ROOT,
     launchId: launchIdFactory = randomUUID,
     inspectProcess = pid => inspectLiveProcess(pid, { exec }),
+    recoverUpdate = recoverInterruptedUpdateOnStartup,
+    hasInterruptedUpdate = hasInterruptedUpdateOnStartup,
   } = deps;
   const launchId = env.SUR9E_WEB_LAUNCH_ID || launchIdFactory();
 
@@ -291,6 +297,18 @@ export async function cmdStart(opts, deps = {}) {
     error(`:${PORT} is already in use by PID ${listener.pid} (${listener.command}).`);
     error('Not starting a second server. `npm run web:status` to inspect it.');
     return 1;
+  }
+
+  if (hasInterruptedUpdate(root)) {
+    const recovery = await recoverUpdate(root);
+    if (recovery.status === 'recovered') {
+      if (recovery.result.status === 'failed') {
+        error('Interrupted update recovery failed — the server was not started.');
+        return 1;
+      }
+      log('Recovered the previous Sur9e version after an interrupted update.');
+      return 0;
+    }
   }
 
   // Prod always rebuilds; a failed build aborts with nothing left running.

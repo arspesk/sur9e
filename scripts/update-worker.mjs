@@ -2,14 +2,33 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { closeSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { UpdateJob } from '../src/lib/schemas/update-job.ts';
 
-const HEALTH_URL = 'http://127.0.0.1:3000';
+const HEALTH_URL = 'http://127.0.0.1:3000/api/version';
 const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_INTERVAL_MS = 1_000;
+const CLAIM_PENDING_LEASE_MS = 60_000;
+const TERMINAL_PHASES = new Set(['succeeded', 'rolled-back', 'failed']);
+const COMMAND_TIMEOUTS_MS = {
+  apply: 15 * 60_000,
+  stop: 2 * 60_000,
+  build: 15 * 60_000,
+  start: 2 * 60_000,
+  rollback: 10 * 60_000,
+  install: 10 * 60_000,
+};
 
 const UPDATE_FAILURES = {
   stopping: 'Update restart failed while stopping',
@@ -68,26 +87,77 @@ function persistJob(root, job) {
   }
 }
 
-function runCommand(command, args, options) {
+function runCommand(
+  command,
+  args,
+  { timeoutMs = 10 * 60_000, onHeartbeat, heartbeatMs = 10_000, ...options },
+) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, { ...options, shell: false, stdio: 'ignore' });
-    child.once('error', reject);
+    const child = spawn(command, args, {
+      ...options,
+      detached: true,
+      shell: false,
+      stdio: 'ignore',
+    });
+    let settled = false;
+    let timedOut = false;
+    let escalation = null;
+    const finish = callback => value => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (escalation) clearTimeout(escalation);
+      if (heartbeat) clearInterval(heartbeat);
+      callback(value);
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGTERM');
+      } catch {
+        // The command may have exited between the timeout and the signal.
+      }
+      escalation = setTimeout(() => {
+        try {
+          if (child.pid) process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          // The owned command group already exited.
+        }
+        finish(reject)(new Error('Command timed out'));
+      }, 2_000);
+      escalation.unref?.();
+    }, timeoutMs);
+    timer.unref?.();
+    const heartbeat = onHeartbeat ? setInterval(onHeartbeat, heartbeatMs) : null;
+    heartbeat?.unref?.();
+    child.once('error', finish(reject));
     child.once('exit', (code, signal) => {
-      if (code === 0 && signal === null) resolvePromise();
-      else reject(new Error('Command failed'));
+      if (timedOut) {
+        finish(reject)(new Error('Command timed out'));
+        return;
+      }
+      if (code === 0 && signal === null) finish(resolvePromise)();
+      else finish(reject)(new Error('Command failed'));
     });
   });
 }
 
-async function waitForHealth(url, { timeoutMs, intervalMs }) {
+export async function waitForSur9eHealth(
+  url,
+  { timeoutMs, intervalMs, expectedVersion, launchId, fetchImpl = fetch },
+) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const remaining = deadline - Date.now();
     try {
-      const response = await fetch(url, {
+      const response = await fetchImpl(url, {
         signal: AbortSignal.timeout(Math.max(1, Math.min(intervalMs, remaining))),
       });
-      if (response.ok) return;
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload?.version === expectedVersion && payload?.launchId === launchId) return;
+      }
     } catch {
       // The server may still be starting.
     }
@@ -97,13 +167,27 @@ async function waitForHealth(url, { timeoutMs, intervalMs }) {
   throw new Error('Health verification timed out');
 }
 
+function readLaunchIdentity(root) {
+  const value = JSON.parse(readFileSync(join(root, 'data/web/web.json'), 'utf-8'));
+  if (typeof value?.launchId !== 'string' || value.launchId.length === 0) {
+    throw new Error('Managed launch identity is missing');
+  }
+  return { launchId: value.launchId };
+}
+
+function readVersion(root) {
+  return readFileSync(join(root, 'VERSION'), 'utf-8').trim();
+}
+
 const defaultDeps = {
   pid: process.pid,
   clock: () => new Date(),
   claimPid,
   persistJob,
   runCommand,
-  waitForHealth,
+  waitForHealth: waitForSur9eHealth,
+  readLaunchIdentity,
+  readVersion,
 };
 
 /**
@@ -112,7 +196,7 @@ const defaultDeps = {
  * are dependencies so the state machine can be tested without touching a real
  * checkout, server, port, or Tailscale process.
  */
-export async function runUpdateRestartJob(root, jobId, deps = defaultDeps) {
+export async function runUpdateRestartJob(root, jobId, deps = defaultDeps, options = {}) {
   const runtime = { ...defaultDeps, ...deps };
   try {
     runtime.claimPid(root, jobId, runtime.pid);
@@ -126,7 +210,7 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps) {
   } catch {
     return { status: 'failed' };
   }
-  const transition = (phase, error) => {
+  const transition = (phase, error, checkpoint = job.checkpoint) => {
     const { error: _previousError, ...current } = job;
     job = UpdateJob.parse({
       ...current,
@@ -134,10 +218,17 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps) {
       launchState: 'owned',
       pid: runtime.pid,
       updatedAt: runtime.clock().toISOString(),
+      ...(checkpoint === undefined ? {} : { checkpoint }),
       ...(error === undefined ? {} : { error }),
     });
     runtime.persistJob(root, job);
   };
+
+  const runPhaseCommand = (command, args, commandOptions) =>
+    runtime.runCommand(command, args, {
+      ...commandOptions,
+      onHeartbeat: () => transition(job.phase, job.error, job.checkpoint),
+    });
 
   const startServer = () => {
     const startArgs = [join(root, 'scripts/web.mjs')];
@@ -145,81 +236,189 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps) {
     else if (job.mode.tailscale) startArgs.push('--dev');
     if (job.mode.tailscale) startArgs.push('--tailscale');
     startArgs.push('--detach');
-    return runtime.runCommand(process.execPath, startArgs, {
+    return runPhaseCommand(process.execPath, startArgs, {
       cwd: root,
+      timeoutMs: COMMAND_TIMEOUTS_MS.start,
       ...(job.mode.prod ? { env: { ...process.env, SUR9E_WEB_SKIP_BUILD: '1' } } : {}),
     });
   };
 
-  const verifyHealth = () =>
-    runtime.waitForHealth(HEALTH_URL, {
+  const verifyHealth = expectedVersion => {
+    const { launchId } = runtime.readLaunchIdentity(root);
+    return runtime.waitForHealth(HEALTH_URL, {
       timeoutMs: HEALTH_TIMEOUT_MS,
       intervalMs: HEALTH_INTERVAL_MS,
+      expectedVersion,
+      launchId,
     });
+  };
 
-  transition('applying');
-  try {
-    await runtime.runCommand(process.execPath, [join(root, 'update-system.mjs'), 'apply'], {
-      cwd: root,
-    });
-  } catch {
-    transition('failed', 'Update failed while applying the new version');
-    return { status: 'failed' };
-  }
-
-  let failedPhase;
-  try {
-    failedPhase = 'stopping';
-    transition(failedPhase);
-    await runtime.runCommand(process.execPath, [join(root, 'scripts/web.mjs'), 'stop'], {
-      cwd: root,
-    });
-    if (job.mode.prod) {
-      failedPhase = 'rebuilding';
-      transition(failedPhase);
-      await runtime.runCommand('npm', ['run', 'build'], { cwd: root });
-    }
-    failedPhase = 'restarting';
-    transition(failedPhase);
-    await startServer();
-    failedPhase = 'verifying';
-    transition(failedPhase);
-    await verifyHealth();
-    transition('succeeded');
-    return { status: 'succeeded' };
-  } catch {
-    const originalError = UPDATE_FAILURES[failedPhase] ?? 'Update restart failed';
+  const recover = async originalError => {
     transition('recovering', originalError);
-
     let recoveryStage = 'cleanup';
     try {
-      if (failedPhase === 'restarting' || failedPhase === 'verifying') {
-        await runtime.runCommand(process.execPath, [join(root, 'scripts/web.mjs'), 'stop'], {
+      if (job.checkpoint !== 'server-stopped' && job.checkpoint !== 'rollback-complete') {
+        await runPhaseCommand(process.execPath, [join(root, 'scripts/web.mjs'), 'stop'], {
           cwd: root,
+          timeoutMs: COMMAND_TIMEOUTS_MS.stop,
         });
       }
       recoveryStage = 'rollback';
-      await runtime.runCommand(process.execPath, [join(root, 'update-system.mjs'), 'rollback'], {
-        cwd: root,
-      });
+      if (job.checkpoint !== 'rollback-complete' && runtime.readVersion(root) !== job.fromVersion) {
+        await runPhaseCommand(process.execPath, [join(root, 'update-system.mjs'), 'rollback'], {
+          cwd: root,
+          timeoutMs: COMMAND_TIMEOUTS_MS.rollback,
+        });
+      }
+      transition('recovering', originalError, 'rollback-complete');
       recoveryStage = 'install';
-      await runtime.runCommand('npm', ['install', '--silent'], { cwd: root });
+      await runPhaseCommand('npm', ['ci', '--no-audit', '--no-fund'], {
+        cwd: root,
+        timeoutMs: COMMAND_TIMEOUTS_MS.install,
+      });
+      transition('recovering', originalError, 'dependencies-restored');
       if (job.mode.prod) {
         recoveryStage = 'rebuild';
-        await runtime.runCommand('npm', ['run', 'build'], { cwd: root });
+        await runPhaseCommand('npm', ['run', 'build'], {
+          cwd: root,
+          timeoutMs: COMMAND_TIMEOUTS_MS.build,
+        });
+        transition('recovering', originalError, 'recovery-build-complete');
       }
       recoveryStage = 'restart';
       await startServer();
+      transition('recovering', originalError, 'recovery-server-started');
       recoveryStage = 'verification';
-      await verifyHealth();
-      transition('rolled-back', originalError);
+      await verifyHealth(job.fromVersion);
+      transition('rolled-back', originalError, 'recovery-server-started');
       return { status: 'rolled-back' };
     } catch {
       const recoveryError = RECOVERY_FAILURES[recoveryStage] ?? 'recovering the previous version';
       transition('failed', `${originalError}; recovery failed while ${recoveryError}`);
       return { status: 'failed' };
     }
+  };
+
+  if (options.recoveryOnly) {
+    return recover(job.error ?? 'Update worker stopped before completion');
   }
+
+  transition('applying', undefined, 'apply-started');
+  try {
+    await runPhaseCommand(process.execPath, [join(root, 'update-system.mjs'), 'apply'], {
+      cwd: root,
+      timeoutMs: COMMAND_TIMEOUTS_MS.apply,
+    });
+  } catch {
+    transition('failed', 'Update failed while applying the new version', 'apply-started');
+    return { status: 'failed' };
+  }
+
+  let failedPhase;
+  try {
+    failedPhase = 'stopping';
+    transition(failedPhase, undefined, 'applied');
+    await runPhaseCommand(process.execPath, [join(root, 'scripts/web.mjs'), 'stop'], {
+      cwd: root,
+      timeoutMs: COMMAND_TIMEOUTS_MS.stop,
+    });
+    if (job.mode.prod) {
+      failedPhase = 'rebuilding';
+      transition(failedPhase, undefined, 'server-stopped');
+      await runPhaseCommand('npm', ['run', 'build'], {
+        cwd: root,
+        timeoutMs: COMMAND_TIMEOUTS_MS.build,
+      });
+    }
+    failedPhase = 'restarting';
+    transition(failedPhase, undefined, 'server-stopped');
+    await startServer();
+    failedPhase = 'verifying';
+    transition(failedPhase, undefined, 'server-restarted');
+    await verifyHealth(job.toVersion ?? job.fromVersion);
+    transition('succeeded');
+    return { status: 'succeeded' };
+  } catch {
+    return recover(UPDATE_FAILURES[failedPhase] ?? 'Update restart failed');
+  }
+}
+
+/**
+ * Launcher preflight for a reboot or killed update supervisor. It only adopts
+ * jobs whose prior owner is provably dead (or whose unclaimed recovery lease
+ * expired), then runs the idempotent recovery path in this launcher process.
+ */
+export async function recoverInterruptedUpdateOnStartup(root, deps = {}) {
+  const runtime = {
+    clock: () => new Date(),
+    pidAlive: pid => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    runJob: runUpdateRestartJob,
+    ...deps,
+  };
+  const directory = join(root, 'data/update/jobs');
+  if (!existsSync(directory)) return { status: 'none' };
+
+  const jobs = readdirSync(directory)
+    .filter(file => file.endsWith('.json'))
+    .map(file => {
+      try {
+        return loadJob(root, file.slice(0, -'.json'.length));
+      } catch {
+        return null;
+      }
+    })
+    .filter(job => job && !TERMINAL_PHASES.has(job.phase))
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+
+  const job = jobs[0];
+  if (!job || job.phase === 'queued') return { status: 'none' };
+  if (job.launchState === 'owned' && job.pid !== undefined && runtime.pidAlive(job.pid)) {
+    return { status: 'active', jobId: job.id };
+  }
+  if (job.launchState === 'claim-pending') {
+    const sidecar = pidPath(root, job.id);
+    if (existsSync(sidecar)) {
+      const sidecarPid = Number(readFileSync(sidecar, 'utf-8').trim());
+      if (Number.isInteger(sidecarPid) && sidecarPid > 0 && runtime.pidAlive(sidecarPid)) {
+        return { status: 'active', jobId: job.id };
+      }
+    }
+    if (runtime.clock().getTime() - Date.parse(job.updatedAt) < CLAIM_PENDING_LEASE_MS) {
+      return { status: 'active', jobId: job.id };
+    }
+  }
+
+  const sidecar = pidPath(root, job.id);
+  if (existsSync(sidecar)) {
+    const sidecarPid = Number(readFileSync(sidecar, 'utf-8').trim());
+    if (Number.isInteger(sidecarPid) && sidecarPid > 0 && runtime.pidAlive(sidecarPid)) {
+      return { status: 'active', jobId: job.id };
+    }
+    rmSync(sidecar, { force: true });
+  }
+  const result = await runtime.runJob(root, job.id, defaultDeps, { recoveryOnly: true });
+  return { status: 'recovered', jobId: job.id, result };
+}
+
+export function hasInterruptedUpdateOnStartup(root) {
+  const directory = join(root, 'data/update/jobs');
+  if (!existsSync(directory)) return false;
+  return readdirSync(directory).some(file => {
+    if (!file.endsWith('.json')) return false;
+    try {
+      const job = loadJob(root, file.slice(0, -'.json'.length));
+      return job.phase !== 'queued' && !TERMINAL_PHASES.has(job.phase);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function parseCliArgs(argv) {
@@ -228,7 +427,11 @@ function parseCliArgs(argv) {
   if (rootIndex < 0 || !argv[rootIndex + 1] || jobIdIndex < 0 || !argv[jobIdIndex + 1]) {
     throw new Error('Missing worker arguments');
   }
-  return { root: argv[rootIndex + 1], jobId: argv[jobIdIndex + 1] };
+  return {
+    root: argv[rootIndex + 1],
+    jobId: argv[jobIdIndex + 1],
+    recoveryOnly: argv.includes('--recover'),
+  };
 }
 
 const isDirectExecution =
@@ -236,8 +439,9 @@ const isDirectExecution =
 
 if (isDirectExecution) {
   try {
-    const { root, jobId } = parseCliArgs(process.argv.slice(2));
-    await runUpdateRestartJob(root, jobId);
+    const { root, jobId, recoveryOnly } = parseCliArgs(process.argv.slice(2));
+    const result = await runUpdateRestartJob(root, jobId, defaultDeps, { recoveryOnly });
+    if (result.status === 'failed') process.exitCode = 1;
   } catch {
     console.error('Update worker failed');
     process.exitCode = 1;

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UpdateJob, UpdateJobPhase } from '../../schemas/update-job';
 import {
   loadUpdateJob,
+  reconcileUpdateJob,
   startUpdateJob,
   type UpdateOrchestratorDeps,
   writeUpdateJob,
@@ -35,6 +36,7 @@ const ALL_PHASES = [
   'restarting',
   'verifying',
   'recovering',
+  'recovery-queued',
   'succeeded',
   'rolled-back',
   'failed',
@@ -128,6 +130,10 @@ describe('update-job durable contract', () => {
     {
       label: 'queued after claim',
       candidate: { ...job('queued'), launchState: 'owned', pid: 4242 },
+    },
+    {
+      label: 'recovery queued before claim',
+      candidate: { ...job('recovery-queued'), launchState: 'claim-pending' },
     },
     ...ACTIVE_WORKER_PHASES.map(phase => ({
       label: `${phase} after claim`,
@@ -400,12 +406,13 @@ describe('update-job durable contract', () => {
     'restarting',
     'verifying',
     'recovering',
+    'recovery-queued',
   ])('returns busy instead of spawning when a %s job exists', phase => {
     const active = {
       ...job(phase as (typeof ALL_PHASES)[number]),
       createdAt: NOW.toISOString(),
       updatedAt: NOW.toISOString(),
-      ...(phase === 'queued'
+      ...(phase === 'queued' || phase === 'recovery-queued'
         ? { launchState: 'claim-pending' as const }
         : { launchState: 'owned' as const, pid: 4242 }),
     };
@@ -493,7 +500,7 @@ describe('update-job durable contract', () => {
     expect(loadUpdateJob(root, active.id)).toEqual(active);
   });
 
-  it('reaps a fresh nonterminal job whose persisted worker pid is no longer alive', () => {
+  it('queues recovery instead of replacing a job whose worker died after mutation began', () => {
     const interrupted = {
       ...job('applying'),
       createdAt: NOW.toISOString(),
@@ -514,13 +521,45 @@ describe('update-job durable contract', () => {
       { ...replacement.deps, pidAlive },
     );
 
-    expect(result.status).toBe('started');
+    expect(result.status).toBe('busy');
     expect(pidAlive).toHaveBeenCalledWith(98989);
     expect(loadUpdateJob(root, interrupted.id)).toMatchObject({
-      phase: 'failed',
+      phase: 'recovery-queued',
+      launchState: 'claim-pending',
       error: 'Update worker stopped before completion',
       updatedAt: NOW.toISOString(),
     });
+    expect(replacement.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [join(root, 'scripts/update-worker.mjs'), '--root', root, '--job-id', JOB_ID, '--recover'],
+      expect.objectContaining({ cwd: root, detached: true }),
+    );
+    expect(existsSync(join(root, 'data/update/jobs', `${SECOND_JOB_ID}.json`))).toBe(false);
+  });
+
+  it('does not steal a recovery sidecar from another live worker', () => {
+    const interrupted = {
+      ...job('stopping'),
+      launchState: 'owned' as const,
+      pid: 98989,
+      checkpoint: 'applied' as const,
+    };
+    writeUpdateJob(root, interrupted);
+    writeFileSync(join(root, 'data/update/jobs', `${JOB_ID}.pid`), '77777\n');
+    const replacement = fakeDeps();
+
+    const result = startUpdateJob(
+      root,
+      {
+        mode: { prod: true, tailscale: false },
+        fromVersion: '0.3.2',
+      },
+      { ...replacement.deps, pidAlive: pid => pid === 77777 },
+    );
+
+    expect(result).toEqual({ status: 'busy', job: interrupted });
+    expect(replacement.spawn).not.toHaveBeenCalled();
+    expect(readFileSync(join(root, 'data/update/jobs', `${JOB_ID}.pid`), 'utf-8')).toBe('77777\n');
   });
 
   it('persists a safe failure when the job log cannot be opened, then permits retry', () => {

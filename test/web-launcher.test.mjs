@@ -519,6 +519,64 @@ describe('cmdStart — port guard', () => {
     expect(error.mock.calls.flat().join('\n')).toMatch(/already in use by PID 1111/);
   });
 
+  it('recovers an interrupted update before starting another server', async () => {
+    const spawnImpl = vi.fn();
+    const recoverUpdate = vi.fn().mockResolvedValue({
+      status: 'recovered',
+      jobId: '11111111-1111-4111-8111-111111111111',
+      result: { status: 'rolled-back' },
+    });
+    const log = vi.fn();
+
+    const code = await cmdStart(
+      { command: 'start', prod: true, tailscale: false, detach: true },
+      {
+        exec: vi.fn().mockReturnValue({ status: 1, stdout: '' }),
+        spawnImpl,
+        error: vi.fn(),
+        log,
+        root: CHECKOUT_ROOT,
+        hasInterruptedUpdate: () => true,
+        recoverUpdate,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(recoverUpdate).toHaveBeenCalledWith(CHECKOUT_ROOT);
+    expect(spawnImpl).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      'Recovered the previous Sur9e version after an interrupted update.',
+    );
+  });
+
+  it('refuses a normal start when interrupted-update recovery fails', async () => {
+    const spawnImpl = vi.fn();
+    const error = vi.fn();
+
+    const code = await cmdStart(
+      { command: 'start', prod: false, tailscale: false, detach: false },
+      {
+        exec: vi.fn().mockReturnValue({ status: 1, stdout: '' }),
+        spawnImpl,
+        error,
+        log: vi.fn(),
+        root: CHECKOUT_ROOT,
+        hasInterruptedUpdate: () => true,
+        recoverUpdate: vi.fn().mockResolvedValue({
+          status: 'recovered',
+          jobId: '11111111-1111-4111-8111-111111111111',
+          result: { status: 'failed' },
+        }),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(spawnImpl).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(
+      'Interrupted update recovery failed — the server was not started.',
+    );
+  });
+
   it('exports the tailnet host to next dev so allowedDevOrigins can unblock proxied assets', () => {
     const sigintBefore = process.listeners('SIGINT');
     const sigtermBefore = process.listeners('SIGTERM');

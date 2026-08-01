@@ -35,12 +35,17 @@ export interface UpdateApplyResponse {
   jobId: string;
 }
 
+export interface ActiveUpdateJobResponse {
+  job: UpdateJob | null;
+}
+
 export interface RollbackResponse {
   ok?: boolean;
   error?: string;
 }
 
 export const VERSION_QUERY_KEY = ['system', 'version'] as const;
+export const ACTIVE_UPDATE_JOB_QUERY_KEY = ['system', 'active-update-job'] as const;
 const UPDATE_JOB_POLL_MS = 1000;
 const UPDATE_JOB_MAX_RETRIES = 3;
 const UPDATE_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -52,6 +57,10 @@ const TERMINAL_UPDATE_JOB_PHASES = new Set<UpdateJob['phase']>([
 
 export function updateJobKey(jobId: string | null | undefined) {
   return ['system', 'update-job', jobId ?? null] as const;
+}
+
+export function activeUpdateJobKey() {
+  return ACTIVE_UPDATE_JOB_QUERY_KEY;
 }
 
 function isValidUpdateJobId(jobId: string | null | undefined): jobId is string {
@@ -90,6 +99,18 @@ export function useUpdateApply() {
               body: JSON.stringify({ toVersion: request.toVersion }),
             }),
       }),
+  });
+}
+
+export function useActiveUpdateJob(enabled = true) {
+  return useQuery<ActiveUpdateJobResponse>({
+    queryKey: activeUpdateJobKey(),
+    queryFn: () => fetchJson<ActiveUpdateJobResponse>('/api/update/status'),
+    enabled,
+    refetchInterval: query => (query.state.data?.job ? false : UPDATE_JOB_POLL_MS),
+    refetchIntervalInBackground: true,
+    retry: retryUpdateJob,
+    retryDelay: attemptIndex => Math.min(UPDATE_JOB_POLL_MS * 2 ** attemptIndex, 4000),
   });
 }
 
