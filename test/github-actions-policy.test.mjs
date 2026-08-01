@@ -485,6 +485,7 @@ describe('CodeRabbit policy', () => {
       enabled: true,
       drafts: false,
       base_branches: ['main'],
+      ignore_title_keywords: ['chore(main): release'],
     });
 
     const pathInstructions = config.reviews.path_instructions;
