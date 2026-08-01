@@ -180,13 +180,14 @@ describe('applications.ts server action', () => {
       ).rejects.toThrow(/not found/i);
     });
 
-    it('calls revalidatePath for /table, /pipeline, and /report/[filename]', async () => {
+    it('revalidates every application surface after a status update', async () => {
       const { revalidatePath } = await import('@/server/revalidate');
       await actions.updateApplicationStatusAction({ num: 1001, status: 'applied' });
-      const calls = (revalidatePath as ReturnType<typeof vi.fn>).mock.calls;
-      const paths = calls.map(c => c[0]);
-      expect(paths).toContain('/offers');
-      expect(paths).toContain('/report/[filename]');
+      expect(revalidatePath).toHaveBeenCalledTimes(4);
+      expect(revalidatePath).toHaveBeenCalledWith('/');
+      expect(revalidatePath).toHaveBeenCalledWith('/offers');
+      expect(revalidatePath).toHaveBeenCalledWith('/pipeline');
+      expect(revalidatePath).toHaveBeenCalledWith('/report/[filename]', 'page');
     });
   });
 
