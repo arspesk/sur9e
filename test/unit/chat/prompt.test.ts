@@ -73,6 +73,8 @@ describe('buildChatSystemPrompt', () => {
     expect(prompt).toContain('create_offer_from_text');
     expect(prompt).toContain('source URL');
     expect(prompt).toContain('ask for the pasted job description');
+    expect(prompt).toContain('real browser/Playwright-backed reader');
+    expect(prompt).toMatch(/never (?:use )?WebFetch/i);
   });
 
   it('checks tracked and active work before offering duplicate evaluation', () => {
