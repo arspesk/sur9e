@@ -509,7 +509,7 @@ describe('managed launch mode', () => {
   });
 });
 
-describe('cmdStart — port guard', () => {
+describe('cmdStart — startup safeguards and ownership verification', () => {
   it('stops an unverified detached launcher and returns a safe failure', async () => {
     const child = fakeChild(9001);
     const spawnImpl = vi.fn().mockReturnValue(child);
@@ -524,6 +524,8 @@ describe('cmdStart — port guard', () => {
         error,
         log: vi.fn(),
         stateDir: tmpStateDir(),
+        root: CHECKOUT_ROOT,
+        hasInterruptedUpdate: () => false,
       },
     );
 
@@ -546,6 +548,8 @@ describe('cmdStart — port guard', () => {
         error,
         log: vi.fn(),
         stateDir: tmpStateDir(),
+        root: CHECKOUT_ROOT,
+        hasInterruptedUpdate: () => false,
       },
     );
 
