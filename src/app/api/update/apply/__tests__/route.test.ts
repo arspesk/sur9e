@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateJob } from '@/lib/schemas/update-job';
 import type { StartUpdateJobResult } from '@/lib/server/update-orchestrator';
+import packageJson from '../../../../../../package.json';
 
 const mocks = vi.hoisted(() => ({
   getWebLaunchMode: vi.fn(),
@@ -29,7 +30,7 @@ function job(overrides: Partial<UpdateJob> = {}): UpdateJob {
     phase: 'queued',
     launchState: 'claim-pending',
     mode: { prod: false, tailscale: false },
-    fromVersion: '0.3.2',
+    fromVersion: packageJson.version,
     createdAt: '2026-07-31T20:00:00.000Z',
     updatedAt: '2026-07-31T20:00:00.000Z',
     ...overrides,
@@ -72,7 +73,7 @@ describe('POST /api/update/apply', () => {
     expect(mocks.startUpdateJob).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        fromVersion: '0.3.2',
+        fromVersion: packageJson.version,
         mode: { prod: false, tailscale: false },
       }),
     );
