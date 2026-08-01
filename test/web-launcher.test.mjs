@@ -1,6 +1,6 @@
 // Unit tests for the web launcher's pure helpers. Everything is
 // dependency-injected — no real lsof, no real tailscale, no real data/.
-import { existsSync, mkdtempSync, writeFileSync as writeFs } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync as writeFs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,11 +11,43 @@ import {
   findTailscaleCli,
   getListener,
   getTailnetUrl,
+  getWebLaunchMode,
   parseWebArgs,
 } from '../scripts/web.mjs';
 
 function tmpStateDir() {
   return mkdtempSync(joinPath(tmpdir(), 'sur9e-web-test-'));
+}
+
+function readState(stateDir) {
+  return JSON.parse(readFileSync(joinPath(stateDir, 'web.json'), 'utf-8'));
+}
+
+function fakeChild(pid = 7001) {
+  const handlers = new Map();
+  return {
+    pid,
+    kill: vi.fn(),
+    on: vi.fn((event, handler) => handlers.set(event, handler)),
+    unref: vi.fn(),
+    emit(event, ...args) {
+      handlers.get(event)?.(...args);
+    },
+  };
+}
+
+function fakeProcess(pid = 7000) {
+  const handlers = new Map();
+  return {
+    pid,
+    env: {},
+    execPath: '/test/node',
+    exit: vi.fn(),
+    on: vi.fn((event, handler) => handlers.set(event, handler)),
+    emit(event, ...args) {
+      handlers.get(event)?.(...args);
+    },
+  };
 }
 
 describe('parseWebArgs', () => {
@@ -178,6 +210,153 @@ describe('enableServe', () => {
     const log = vi.fn();
     expect(enableServe({ exec, exists: () => true, log, error: vi.fn() })).toBe(true);
     expect(log.mock.calls.flat().join('\n')).toContain('https://mac.tail1234.ts.net');
+  });
+});
+
+describe('managed launch mode', () => {
+  const startedAt = '2026-07-31T18:30:00.000Z';
+
+  function startForeground({ prod = false, tailscale = false } = {}) {
+    const stateDir = tmpStateDir();
+    const child = fakeChild();
+    const processImpl = fakeProcess();
+    let lsofCalls = 0;
+    const exec = vi.fn((cmd, args) => {
+      if (cmd === 'lsof') {
+        lsofCalls += 1;
+        return lsofCalls === 1
+          ? { status: 1, stdout: '' }
+          : { status: 0, stdout: 'p7002\ncnode\n' };
+      }
+      if (cmd === 'which') return { status: 0, stdout: '/test/tailscale\n' };
+      if (args?.[0] === 'status') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({ Self: { DNSName: 'test.tailnet.ts.net.' } }),
+        };
+      }
+      return { status: 0, stdout: '' };
+    });
+    const spawnImpl = vi.fn().mockReturnValue(child);
+    void cmdStart(
+      { command: 'start', prod, tailscale, detach: false },
+      {
+        exec,
+        spawnImpl,
+        exists: () => true,
+        log: vi.fn(),
+        error: vi.fn(),
+        stateDir,
+        env: { SUR9E_WEB_SKIP_BUILD: '1' },
+        processImpl,
+        now: () => startedAt,
+      },
+    );
+    return { child, exec, processImpl, spawnImpl, stateDir };
+  }
+
+  it.each([
+    ['dev', false, false],
+    ['prod', true, false],
+    ['prod + tailscale', true, true],
+  ])('persists foreground %s metadata for orchestrator readers', (_label, prod, tailscale) => {
+    const { processImpl, stateDir } = startForeground({ prod, tailscale });
+    expect(readFileSync(joinPath(stateDir, 'web.pid'), 'utf-8')).toBe(String(processImpl.pid));
+    expect(readState(stateDir)).toEqual({ pid: processImpl.pid, prod, tailscale, startedAt });
+
+    const exec = vi.fn().mockReturnValue({
+      status: 0,
+      stdout: 'node /repo/scripts/web.mjs\n',
+    });
+    expect(getWebLaunchMode({ stateDir, exec })).toEqual({ prod, tailscale });
+  });
+
+  it('clears foreground state after signal-driven clean child exit', () => {
+    const { child, processImpl, stateDir } = startForeground();
+    processImpl.emit('SIGTERM');
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+
+    child.emit('exit', 0);
+    expect(existsSync(joinPath(stateDir, 'web.pid'))).toBe(false);
+    expect(existsSync(joinPath(stateDir, 'web.json'))).toBe(false);
+    expect(processImpl.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('does not clear state replaced by a different launcher before its child exits', () => {
+    const { child, processImpl, stateDir } = startForeground({ prod: true });
+    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(
+      joinPath(stateDir, 'web.json'),
+      JSON.stringify({ pid: 8123, prod: false, tailscale: true, startedAt: 'later' }),
+    );
+
+    child.emit('exit', 1);
+    expect(readFileSync(joinPath(stateDir, 'web.pid'), 'utf-8')).toBe('8123');
+    expect(readState(stateDir).pid).toBe(8123);
+    expect(processImpl.exit).toHaveBeenCalledWith(1);
+  });
+
+  it.each([
+    ['stale', { status: 1, stdout: '' }],
+    ['foreign', { status: 0, stdout: '/usr/bin/unrelated-server\n' }],
+  ])('returns the safe dev-only fallback for %s persisted metadata', (_case, psResult) => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(
+      joinPath(stateDir, 'web.json'),
+      JSON.stringify({ pid: 8123, prod: true, tailscale: true, startedAt }),
+    );
+    const exec = vi.fn().mockReturnValue(psResult);
+    expect(getWebLaunchMode({ stateDir, exec })).toEqual({ prod: false, tailscale: false });
+  });
+
+  it('returns the safe dev-only fallback for malformed persisted state', () => {
+    const stateDir = tmpStateDir();
+    writeFs(joinPath(stateDir, 'web.pid'), '8123');
+    writeFs(joinPath(stateDir, 'web.json'), '{not json');
+    const exec = vi.fn();
+    expect(getWebLaunchMode({ stateDir, exec })).toEqual({ prod: false, tailscale: false });
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('keeps detached launch behavior keyed to the detached child PID', async () => {
+    const stateDir = tmpStateDir();
+    const child = fakeChild(9001);
+    const processImpl = fakeProcess(9000);
+    const spawnImpl = vi.fn().mockReturnValue(child);
+    const exec = vi.fn().mockReturnValue({ status: 1, stdout: '' });
+
+    const code = await cmdStart(
+      { command: 'start', prod: false, tailscale: false, detach: true },
+      {
+        exec,
+        spawnImpl,
+        error: vi.fn(),
+        log: vi.fn(),
+        stateDir,
+        env: { TEST_MARKER: 'yes' },
+        processImpl,
+        now: () => startedAt,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(spawnImpl).toHaveBeenCalledWith(
+      '/test/node',
+      [expect.stringMatching(/scripts\/web\.mjs$/)],
+      expect.objectContaining({
+        detached: true,
+        env: { TEST_MARKER: 'yes', SUR9E_WEB_SKIP_BUILD: '1' },
+      }),
+    );
+    expect(readState(stateDir)).toEqual({
+      pid: child.pid,
+      prod: false,
+      tailscale: false,
+      startedAt,
+    });
+    expect(child.unref).toHaveBeenCalledOnce();
+    expect(processImpl.on).not.toHaveBeenCalled();
   });
 });
 
