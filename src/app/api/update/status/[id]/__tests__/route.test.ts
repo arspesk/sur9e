@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateJob } from '@/lib/schemas/update-job';
 
-const mocks = vi.hoisted(() => ({ loadUpdateJob: vi.fn() }));
+const mocks = vi.hoisted(() => ({ reconcileUpdateJob: vi.fn() }));
 
 vi.mock('@/lib/server/update-orchestrator', () => ({
-  loadUpdateJob: mocks.loadUpdateJob,
+  reconcileUpdateJob: mocks.reconcileUpdateJob,
 }));
 
 const JOB_ID = '26cf6d7a-2763-4b9d-b539-930fa8414bd5';
@@ -28,7 +28,7 @@ function context(id: string) {
 }
 
 beforeEach(() => {
-  mocks.loadUpdateJob.mockReset();
+  mocks.reconcileUpdateJob.mockReset();
 });
 
 describe('GET /api/update/status/[id]', () => {
@@ -41,11 +41,11 @@ describe('GET /api/update/status/[id]', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'Invalid update job id' });
-    expect(mocks.loadUpdateJob).not.toHaveBeenCalled();
+    expect(mocks.reconcileUpdateJob).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown job', async () => {
-    mocks.loadUpdateJob.mockReturnValue(null);
+    mocks.reconcileUpdateJob.mockReturnValue(null);
     const { GET } = await import('../route');
     const response = await GET(
       new Request(`http://localhost/api/update/status/${JOB_ID}`),
@@ -57,7 +57,7 @@ describe('GET /api/update/status/[id]', () => {
   });
 
   it('returns a schema-validated safe job document', async () => {
-    mocks.loadUpdateJob.mockReturnValue(job());
+    mocks.reconcileUpdateJob.mockReturnValue(job());
     const { GET } = await import('../route');
     const response = await GET(
       new Request(`http://localhost/api/update/status/${JOB_ID}`),
@@ -69,7 +69,7 @@ describe('GET /api/update/status/[id]', () => {
   });
 
   it('does not expose invalid persisted fields or loader error details', async () => {
-    mocks.loadUpdateJob.mockReturnValue({
+    mocks.reconcileUpdateJob.mockReturnValue({
       ...job(),
       output: '/private/repo\nsecret command output',
     });

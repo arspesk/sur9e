@@ -1,8 +1,19 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { runUpdateRestartJob } from '../scripts/update-worker.mjs';
+import {
+  recoverInterruptedUpdateOnStartup,
+  runUpdateRestartJob,
+  waitForSur9eHealth,
+} from '../scripts/update-worker.mjs';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const NOW = new Date('2026-07-31T20:00:00.000Z');
@@ -45,6 +56,8 @@ function harness(root, overrides = {}) {
       runCommand,
       waitForHealth,
       claimPid: vi.fn(),
+      readLaunchIdentity: vi.fn(() => ({ launchId: 'launch-123' })),
+      readVersion: vi.fn(() => '0.4.0'),
       persistJob: (_root, job) => states.push(structuredClone(job)),
       ...overrides,
     },
@@ -71,9 +84,11 @@ describe('runUpdateRestartJob', () => {
       [process.execPath, [join(root, 'scripts/web.mjs'), 'stop']],
       [process.execPath, [join(root, 'scripts/web.mjs'), '--detach']],
     ]);
-    expect(waitForHealth).toHaveBeenCalledWith('http://127.0.0.1:3000', {
+    expect(waitForHealth).toHaveBeenCalledWith('http://127.0.0.1:3000/api/version', {
       timeoutMs: 120_000,
       intervalMs: 1_000,
+      expectedVersion: '0.4.0',
+      launchId: 'launch-123',
     });
   });
 
@@ -149,6 +164,7 @@ describe('runUpdateRestartJob', () => {
       clock: () => NOW,
       runCommand,
       waitForHealth,
+      readLaunchIdentity: () => ({ launchId: 'launch-123' }),
     });
 
     expect(result).toEqual({ status: 'failed' });
@@ -207,7 +223,7 @@ describe('runUpdateRestartJob', () => {
     ]);
     expect(runCommand.mock.calls.map(([command, args]) => [command, args])).toContainEqual([
       'npm',
-      ['install', '--silent'],
+      ['ci', '--no-audit', '--no-fund'],
     ]);
     const finalStart = runCommand.mock.calls
       .filter(([, args]) => args[0] === join(root, 'scripts/web.mjs') && args[1] !== 'stop')
@@ -219,9 +235,11 @@ describe('runUpdateRestartJob', () => {
       '--detach',
     ]);
     if (mode.prod) expect(finalStart[2].env.SUR9E_WEB_SKIP_BUILD).toBe('1');
-    expect(waitForHealth).toHaveBeenLastCalledWith('http://127.0.0.1:3000', {
+    expect(waitForHealth).toHaveBeenLastCalledWith('http://127.0.0.1:3000/api/version', {
       timeoutMs: 120_000,
       intervalMs: 1_000,
+      expectedVersion: '0.3.2',
+      launchId: 'launch-123',
     });
   });
 
@@ -292,7 +310,7 @@ describe('runUpdateRestartJob', () => {
     {
       recoveryStage: 'install',
       mode: { prod: false, tailscale: false },
-      failCommand: 'install --silent',
+      failCommand: 'ci --no-audit --no-fund',
     },
     {
       recoveryStage: 'rebuild',
@@ -315,7 +333,7 @@ describe('runUpdateRestartJob', () => {
       if (label === 'run build') buildCount += 1;
       const recoveryFailure =
         (failCommand === 'rollback' && args[1] === 'rollback') ||
-        (failCommand === 'install --silent' && label === 'install --silent') ||
+        (failCommand === 'ci --no-audit --no-fund' && label === 'ci --no-audit --no-fund') ||
         (failCommand === 'second build' && label === 'run build' && buildCount === 1) ||
         (failCommand === 'web start' &&
           args[0] === join(root, 'scripts/web.mjs') &&
@@ -344,6 +362,7 @@ describe('runUpdateRestartJob', () => {
       clock: () => NOW,
       runCommand,
       waitForHealth,
+      readLaunchIdentity: () => ({ launchId: 'launch-123' }),
     });
 
     expect(queuedJob(root)).toMatchObject({
@@ -356,5 +375,141 @@ describe('runUpdateRestartJob', () => {
     expect(
       readdirSync(join(root, 'data/update/jobs')).filter(file => file.endsWith('.tmp')),
     ).toEqual([]);
+  });
+
+  it.each([
+    { checkpoint: 'apply-started', expectsRollback: true },
+    { checkpoint: 'applied', expectsRollback: true },
+    { checkpoint: 'server-stopped', expectsRollback: true },
+    { checkpoint: 'server-restarted', expectsRollback: true },
+    { checkpoint: 'rollback-complete', expectsRollback: false },
+  ])(
+    'recovers an interrupted update from $checkpoint without applying again',
+    async ({ checkpoint, expectsRollback }) => {
+      const root = makeRoot();
+      const interrupted = queuedJob(root);
+      writeFileSync(
+        join(root, 'data/update/jobs', `${JOB_ID}.json`),
+        `${JSON.stringify({
+          ...interrupted,
+          phase: 'recovery-queued',
+          launchState: 'claim-pending',
+          checkpoint,
+          error: 'Update worker stopped before completion',
+        })}\n`,
+      );
+      const { runCommand, deps } = harness(root);
+
+      const result = await runUpdateRestartJob(root, JOB_ID, deps, { recoveryOnly: true });
+
+      expect(result).toEqual({ status: 'rolled-back' });
+      const calls = runCommand.mock.calls.map(([, args]) => args);
+      expect(calls).not.toContainEqual([join(root, 'update-system.mjs'), 'apply']);
+      expect(calls).toContainEqual(['ci', '--no-audit', '--no-fund']);
+      expect(calls).toContainEqual([join(root, 'scripts/web.mjs'), '--detach']);
+      const rollbackCalls = calls.filter(
+        args => args[0] === join(root, 'update-system.mjs') && args[1] === 'rollback',
+      );
+      expect(rollbackCalls).toHaveLength(expectsRollback ? 1 : 0);
+    },
+  );
+});
+
+describe('waitForSur9eHealth', () => {
+  it('accepts only the expected Sur9e version and launch identity', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not json', { status: 200 }))
+      .mockResolvedValueOnce(
+        Response.json({ version: '0.4.0', launchId: 'foreign-launch' }, { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ version: '0.4.0', launchId: 'launch-123' }, { status: 200 }),
+      );
+
+    await expect(
+      waitForSur9eHealth('http://127.0.0.1:3000/api/version', {
+        timeoutMs: 100,
+        intervalMs: 1,
+        expectedVersion: '0.4.0',
+        launchId: 'launch-123',
+        fetchImpl,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('times out when another service answers successfully', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ version: '9.9.9', launchId: 'other' }));
+
+    await expect(
+      waitForSur9eHealth('http://127.0.0.1:3000/api/version', {
+        timeoutMs: 5,
+        intervalMs: 1,
+        expectedVersion: '0.4.0',
+        launchId: 'launch-123',
+        fetchImpl,
+      }),
+    ).rejects.toThrow('Health verification timed out');
+  });
+});
+
+describe('recoverInterruptedUpdateOnStartup', () => {
+  it('adopts a dead owned worker and runs recovery only', async () => {
+    const root = makeRoot();
+    const interrupted = {
+      ...queuedJob(root),
+      phase: 'stopping',
+      launchState: 'owned',
+      pid: 98989,
+      checkpoint: 'applied',
+    };
+    writeFileSync(
+      join(root, 'data/update/jobs', `${JOB_ID}.json`),
+      `${JSON.stringify(interrupted)}\n`,
+    );
+    writeFileSync(join(root, 'data/update/jobs', `${JOB_ID}.pid`), '98989\n');
+    const runJob = vi.fn().mockResolvedValue({ status: 'rolled-back' });
+
+    await expect(
+      recoverInterruptedUpdateOnStartup(root, {
+        pidAlive: () => false,
+        runJob,
+      }),
+    ).resolves.toEqual({
+      status: 'recovered',
+      jobId: JOB_ID,
+      result: { status: 'rolled-back' },
+    });
+
+    expect(runJob).toHaveBeenCalledWith(root, JOB_ID, expect.any(Object), {
+      recoveryOnly: true,
+    });
+    expect(existsSync(join(root, 'data/update/jobs', `${JOB_ID}.pid`))).toBe(false);
+  });
+
+  it('does not adopt a live worker or a fresh claim-pending recovery', async () => {
+    const root = makeRoot();
+    const active = {
+      ...queuedJob(root),
+      phase: 'recovery-queued',
+      launchState: 'claim-pending',
+      error: 'Update worker stopped before completion',
+      updatedAt: NOW.toISOString(),
+    };
+    writeFileSync(join(root, 'data/update/jobs', `${JOB_ID}.json`), `${JSON.stringify(active)}\n`);
+    const runJob = vi.fn();
+
+    await expect(
+      recoverInterruptedUpdateOnStartup(root, {
+        clock: () => new Date(NOW.getTime() + 1_000),
+        pidAlive: () => false,
+        runJob,
+      }),
+    ).resolves.toEqual({ status: 'active', jobId: JOB_ID });
+    expect(runJob).not.toHaveBeenCalled();
   });
 });

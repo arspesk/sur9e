@@ -8,6 +8,7 @@ export const UPDATE_JOB_PHASES = [
   'restarting',
   'verifying',
   'recovering',
+  'recovery-queued',
   'succeeded',
   'rolled-back',
   'failed',
@@ -28,6 +29,17 @@ const ACTIVE_WORKER_PHASES = new Set<UpdateJobPhase>([
   'recovering',
 ]);
 
+export const UpdateJobCheckpoint = z.enum([
+  'apply-started',
+  'applied',
+  'server-stopped',
+  'server-restarted',
+  'rollback-complete',
+  'dependencies-restored',
+  'recovery-build-complete',
+  'recovery-server-started',
+]);
+
 export const UpdateJob = z
   .object({
     id: z.string().uuid(),
@@ -45,6 +57,7 @@ export const UpdateJob = z
     error: z.string().optional(),
     pid: z.number().int().positive().optional(),
     launchState: UpdateJobLaunchState.optional(),
+    checkpoint: UpdateJobCheckpoint.optional(),
   })
   .strict()
   .superRefine((job, context) => {

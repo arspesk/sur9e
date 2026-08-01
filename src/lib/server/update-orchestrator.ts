@@ -94,6 +94,10 @@ function updateJobPath(root: string, id: string): string {
   return join(updateJobsDir(root), `${id}.json`);
 }
 
+function updateJobPidPath(root: string, id: string): string {
+  return join(updateJobsDir(root), `${id}.pid`);
+}
+
 function updateStartLockDir(root: string): string {
   return join(root, 'data/update/start.lock');
 }
@@ -222,6 +226,26 @@ export function loadUpdateJob(root: string, id: string): UpdateJob | null {
   return UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
 }
 
+export function loadLatestActiveUpdateJob(root: string): UpdateJob | null {
+  const directory = updateJobsDir(root);
+  if (!existsSync(directory)) return null;
+
+  let latest: UpdateJob | null = null;
+  for (const file of readdirSync(directory)) {
+    if (!file.endsWith('.json')) continue;
+    const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
+    if (!job || TERMINAL_PHASES.has(job.phase)) continue;
+    if (
+      !latest ||
+      Date.parse(job.updatedAt) > Date.parse(latest.updatedAt) ||
+      (Date.parse(job.updatedAt) === Date.parse(latest.updatedAt) && job.id > latest.id)
+    ) {
+      latest = job;
+    }
+  }
+  return latest;
+}
+
 export function writeUpdateJob(root: string, job: UpdateJob): void {
   const parsed = UpdateJobSchema.parse(job);
   atomicReplace(updateJobPath(root, parsed.id), `${JSON.stringify(parsed, null, 2)}\n`);
@@ -270,8 +294,7 @@ function findActiveUpdateJob(
     }
     if (job.pid !== undefined) {
       if (!pidAlive(job.pid)) {
-        failUpdateJob(root, job, now, WORKER_STOPPED_ERROR);
-        continue;
+        return job;
       }
       return job;
     }
@@ -310,7 +333,16 @@ function startUpdateJobUnderLock(
   id: string,
 ): StartUpdateJobResult {
   const activeJob = findActiveUpdateJob(root, now, deps.pidAlive ?? isPidAlive);
-  if (activeJob) return { status: 'busy', job: activeJob };
+  if (activeJob) {
+    if (
+      activeJob.launchState === 'owned' &&
+      activeJob.pid !== undefined &&
+      !(deps.pidAlive ?? isPidAlive)(activeJob.pid)
+    ) {
+      return { status: 'busy', job: startRecoveryWorkerUnderLock(root, activeJob, deps, now) };
+    }
+    return { status: 'busy', job: activeJob };
+  }
 
   const timestamp = now.toISOString();
   const job = UpdateJobSchema.parse({
@@ -351,7 +383,10 @@ function startUpdateJobUnderLock(
       const [code, signal] = args;
       if (code === 0 && (signal === null || signal === undefined)) return;
       try {
-        failPersistedUpdateJob(root, job.id, deps, WORKER_EXITED_ERROR);
+        const current = loadUpdateJob(root, job.id);
+        if (current?.launchState !== 'owned') {
+          failPersistedUpdateJob(root, job.id, deps, WORKER_EXITED_ERROR);
+        }
       } catch {
         // Event handlers cannot return persistence failures to the caller.
       }
@@ -374,5 +409,95 @@ function startUpdateJobUnderLock(
     };
   } finally {
     if (logFileDescriptor !== undefined) closeSync(logFileDescriptor);
+  }
+}
+
+function startRecoveryWorkerUnderLock(
+  root: string,
+  interrupted: UpdateJob,
+  deps: UpdateOrchestratorDeps,
+  now: Date,
+): UpdateJob {
+  const sidecar = updateJobPidPath(root, interrupted.id);
+  if (existsSync(sidecar)) {
+    const claimedPid = Number(readFileSync(sidecar, 'utf-8').trim());
+    if (
+      Number.isInteger(claimedPid) &&
+      claimedPid > 0 &&
+      claimedPid !== interrupted.pid &&
+      (deps.pidAlive ?? isPidAlive)(claimedPid)
+    ) {
+      return interrupted;
+    }
+    rmSync(sidecar, { force: true });
+  }
+
+  const recoveryJob = UpdateJobSchema.parse({
+    ...interrupted,
+    phase: 'recovery-queued',
+    launchState: 'claim-pending',
+    pid: undefined,
+    error: WORKER_STOPPED_ERROR,
+    updatedAt: now.toISOString(),
+  });
+  writeUpdateJob(root, recoveryJob);
+
+  let logFileDescriptor: number | undefined;
+  try {
+    logFileDescriptor = openSync(join(updateJobsDir(root), `${interrupted.id}.log`), 'a');
+    const worker = deps.spawn(
+      process.execPath,
+      [
+        join(root, 'scripts/update-worker.mjs'),
+        '--root',
+        root,
+        '--job-id',
+        interrupted.id,
+        '--recover',
+      ],
+      {
+        cwd: root,
+        detached: true,
+        stdio: ['ignore', logFileDescriptor, logFileDescriptor],
+      },
+    );
+    worker.once('error', () => {
+      try {
+        failPersistedUpdateJob(root, interrupted.id, deps, START_FAILED_ERROR);
+      } catch {
+        // Event handlers cannot return persistence failures to the caller.
+      }
+    });
+    worker.unref();
+    return (deps.reloadJob ?? loadUpdateJob)(root, interrupted.id) ?? recoveryJob;
+  } catch {
+    return failPersistedUpdateJob(root, interrupted.id, deps, START_FAILED_ERROR) ?? recoveryJob;
+  } finally {
+    if (logFileDescriptor !== undefined) closeSync(logFileDescriptor);
+  }
+}
+
+export function reconcileUpdateJob(
+  root: string,
+  id: string,
+  deps: UpdateOrchestratorDeps = defaultDeps,
+): UpdateJob | null {
+  const now = deps.clock();
+  const releaseStartLock = acquireStartLock(root, `recover-${id}`, now, deps);
+  if (!releaseStartLock) return loadUpdateJob(root, id);
+  try {
+    const job = loadUpdateJob(root, id);
+    if (
+      !job ||
+      TERMINAL_PHASES.has(job.phase) ||
+      job.launchState !== 'owned' ||
+      job.pid === undefined ||
+      (deps.pidAlive ?? isPidAlive)(job.pid)
+    ) {
+      return job;
+    }
+    return startRecoveryWorkerUnderLock(root, job, deps, now);
+  } finally {
+    releaseStartLock();
   }
 }

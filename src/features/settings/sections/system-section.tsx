@@ -7,6 +7,7 @@ import { Button, HelperText, Input, Label } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
 import {
   type UpdateCheckResponse,
+  useActiveUpdateJob,
   useRollback,
   useUpdateApply,
   useUpdateCheck,
@@ -31,6 +32,7 @@ const PHASE_LABEL: Record<UpdateJobPhase, string> = {
   restarting: 'Restarting',
   verifying: 'Verifying restart',
   recovering: 'Recovering previous version',
+  'recovery-queued': 'Preparing recovery',
   succeeded: 'Update complete',
   'rolled-back': 'Recovered automatically',
   failed: 'Update failed',
@@ -125,12 +127,14 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
   const [isChecking, setIsChecking] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [jobId, setJobId] = useState<string | null>(readActiveJobId);
+  const [discoveryAttached, setDiscoveryAttached] = useState(false);
   const [resultNotice, setResultNotice] = useState<ResultNotice | null>(null);
 
   const versionQuery = useVersion();
   const installedVersion = versionQuery.isPending ? '…' : (versionQuery.data?.version ?? '?');
   const updateCheck = useUpdateCheck();
   const updateApply = useUpdateApply();
+  const activeUpdateJob = useActiveUpdateJob(!jobId && !discoveryAttached);
   const updateJob = useUpdateJob(jobId);
   const rollbackMutation = useRollback();
   const job = updateJob.data;
@@ -142,6 +146,17 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
     updateCheck.isPending ||
     updateApply.isPending ||
     rollbackMutation.isPending;
+
+  useEffect(() => {
+    const discovered = activeUpdateJob.data?.job;
+    if (jobId || discoveryAttached || !discovered) return;
+    if (!window.sessionStorage.getItem(RETURN_HREF_KEY)) {
+      window.sessionStorage.setItem(RETURN_HREF_KEY, window.location.href);
+    }
+    window.sessionStorage.setItem(ACTIVE_JOB_KEY, discovered.id);
+    setDiscoveryAttached(true);
+    setJobId(discovered.id);
+  }, [activeUpdateJob.data?.job, discoveryAttached, jobId]);
 
   useEffect(() => {
     const notice = readResultNotice();
