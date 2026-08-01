@@ -8,7 +8,7 @@ const FOLLOWUP_MODAL_BY_JOB_KIND: Record<StatusFollowup['jobKind'], Exclude<Moda
 
 export function openStatusFollowup(followup: StatusFollowup | null): void {
   if (!followup) return;
-  useModalStore.getState().open(FOLLOWUP_MODAL_BY_JOB_KIND[followup.jobKind], {
+  useModalStore.getState().defer(FOLLOWUP_MODAL_BY_JOB_KIND[followup.jobKind], {
     num: followup.num,
     statusFollowup: true,
   });

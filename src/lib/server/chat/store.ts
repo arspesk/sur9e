@@ -302,10 +302,12 @@ export function setMessageVersionGroup(root: string, messageId: string, group: s
  * it keeps working even when the live turn is already gone (terminal/expired
  * resolves still persist, since confirms outlive their turn's SSE stream).
  *
- * Idempotent: a token already carrying a confirm-resolved is left as-is, so a
- * double-resolve (a real outcome followed by a stale 'expired') never clobbers
- * the first. A corrupt/missing events blob is skipped, never rewritten. Returns
- * true when a message already had, or now has, the resolution recorded.
+ * Idempotent: a token already carrying a confirm-resolved keeps its terminal
+ * outcome/execution, so a stale second resolve can never clobber the first.
+ * Later presentation details may be merged onto that same event (for example,
+ * a warning discovered while placing a follow-up prompt). A corrupt/missing
+ * events blob is skipped, never rewritten. Returns true when a message already
+ * had, or now has, the resolution recorded.
  */
 export function appendConfirmResolution(
   root: string,
@@ -330,10 +332,26 @@ export function appendConfirmResolution(
     // token), not an incidental substring match elsewhere in the blob.
     const owns = events.some(event => isValidTokenEvent(event, 'confirm', token));
     if (!owns) continue;
-    const alreadyResolved = events.some(event =>
+    const resolvedIndex = events.findIndex(event =>
       isValidTokenEvent(event, 'confirm-resolved', token),
     );
-    if (alreadyResolved) return true;
+    if (resolvedIndex >= 0) {
+      if (!presentation?.message && !presentation?.links) return true;
+      const existingResolution = ChatTurnEvent.safeParse(events[resolvedIndex]);
+      if (!existingResolution.success) return false;
+      const updatedResolution = ChatTurnEvent.safeParse({
+        ...existingResolution.data,
+        ...(presentation.message ? { message: presentation.message } : {}),
+        ...(presentation.links ? { links: presentation.links } : {}),
+      });
+      if (!updatedResolution.success) return false;
+      events[resolvedIndex] = updatedResolution.data;
+      db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
+        JSON.stringify(events),
+        row.id,
+      );
+      return true;
+    }
     // Seq after the current max so foldEvents' seq-sort keeps the resolution
     // last (it flips the confirm item in place regardless, but order is tidy).
     const resolution = ChatTurnEvent.safeParse({
