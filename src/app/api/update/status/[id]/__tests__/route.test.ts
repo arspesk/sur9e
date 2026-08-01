@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateJob } from '@/lib/schemas/update-job';
 
-const mocks = vi.hoisted(() => ({ reconcileUpdateJob: vi.fn() }));
+const mocks = vi.hoisted(() => ({ loadUpdateJob: vi.fn(), reconcileUpdateJob: vi.fn() }));
 
 vi.mock('@/lib/server/update-orchestrator', () => ({
+  loadUpdateJob: mocks.loadUpdateJob,
   reconcileUpdateJob: mocks.reconcileUpdateJob,
 }));
 
@@ -28,6 +29,7 @@ function context(id: string) {
 }
 
 beforeEach(() => {
+  mocks.loadUpdateJob.mockReset();
   mocks.reconcileUpdateJob.mockReset();
 });
 
@@ -41,11 +43,11 @@ describe('GET /api/update/status/[id]', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'Invalid update job id' });
-    expect(mocks.reconcileUpdateJob).not.toHaveBeenCalled();
+    expect(mocks.loadUpdateJob).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown job', async () => {
-    mocks.reconcileUpdateJob.mockReturnValue(null);
+    mocks.loadUpdateJob.mockReturnValue(null);
     const { GET } = await import('../route');
     const response = await GET(
       new Request(`http://localhost/api/update/status/${JOB_ID}`),
@@ -57,7 +59,7 @@ describe('GET /api/update/status/[id]', () => {
   });
 
   it('returns a schema-validated safe job document', async () => {
-    mocks.reconcileUpdateJob.mockReturnValue(job());
+    mocks.loadUpdateJob.mockReturnValue(job());
     const { GET } = await import('../route');
     const response = await GET(
       new Request(`http://localhost/api/update/status/${JOB_ID}`),
@@ -69,7 +71,7 @@ describe('GET /api/update/status/[id]', () => {
   });
 
   it('does not expose invalid persisted fields or loader error details', async () => {
-    mocks.reconcileUpdateJob.mockReturnValue({
+    mocks.loadUpdateJob.mockReturnValue({
       ...job(),
       output: '/private/repo\nsecret command output',
     });
@@ -83,5 +85,63 @@ describe('GET /api/update/status/[id]', () => {
     const body = await response.json();
     expect(body).toEqual({ error: 'Failed to load update job' });
     expect(JSON.stringify(body)).not.toContain('/private/repo');
+  });
+
+  it('returns a generic 500 when loading persisted state throws', async () => {
+    mocks.loadUpdateJob.mockImplementation(() => {
+      throw new Error('private storage detail');
+    });
+    const { GET } = await import('../route');
+
+    const response = await GET(
+      new Request(`http://localhost/api/update/status/${JOB_ID}`),
+      context(JOB_ID),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to load update job' });
+  });
+});
+
+describe('POST /api/update/status/[id]', () => {
+  it('rejects cross-origin reconciliation', async () => {
+    const { POST } = await import('../route');
+    const response = await POST(
+      new Request(`http://localhost/api/update/status/${JOB_ID}`, {
+        method: 'POST',
+        headers: { host: 'localhost', origin: 'https://evil.example' },
+      }),
+      context(JOB_ID),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.reconcileUpdateJob).not.toHaveBeenCalled();
+  });
+
+  it('returns the reconciled safe job document', async () => {
+    mocks.reconcileUpdateJob.mockReturnValue(job());
+    const { POST } = await import('../route');
+    const response = await POST(
+      new Request(`http://localhost/api/update/status/${JOB_ID}`, { method: 'POST' }),
+      context(JOB_ID),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(job());
+  });
+
+  it('returns a generic 500 when reconciliation throws', async () => {
+    mocks.reconcileUpdateJob.mockImplementation(() => {
+      throw new Error('private recovery detail');
+    });
+    const { POST } = await import('../route');
+
+    const response = await POST(
+      new Request(`http://localhost/api/update/status/${JOB_ID}`, { method: 'POST' }),
+      context(JOB_ID),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to load update job' });
   });
 });

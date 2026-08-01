@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from '@playwright/test';
 
-const ROOT = process.cwd();
+const ROOT = process.env.SUR9E_ROOT ?? process.cwd();
 const REPORTS_DIR = join(ROOT, 'artifacts', 'reports');
 const TRACKER_FILE = join(ROOT, 'data', 'applications.md');
 
@@ -25,9 +25,24 @@ function trackedReportFixtures(): string[] {
     // even though it exists on disk. Pick the first report still linked by an
     // application row; otherwise skip the data-dependent specs cleanly.
     return md.filter(file => tracker.includes(`(artifacts/reports/${file})`));
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
   }
+}
+
+function withoutFencedCode(markdown: string): string {
+  let insideFence = false;
+  return markdown
+    .split('\n')
+    .filter(line => {
+      if (/^\s*```/.test(line)) {
+        insideFence = !insideFence;
+        return false;
+      }
+      return !insideFence;
+    })
+    .join('\n');
 }
 
 const TRACKED_REPORTS = trackedReportFixtures();
@@ -40,9 +55,10 @@ export const HEADING_REPORT_FIXTURE: string | null =
   TRACKED_REPORTS.find(file => {
     try {
       const markdown = readFileSync(join(REPORTS_DIR, file), 'utf-8');
-      return (markdown.match(/^##\s+/gm) ?? []).length >= 2;
-    } catch {
-      return false;
+      return (withoutFencedCode(markdown).match(/^##\s+/gm) ?? []).length >= 2;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
     }
   }) ?? null;
 

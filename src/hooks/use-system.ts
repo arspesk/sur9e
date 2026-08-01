@@ -2,7 +2,7 @@
 
 // hooks/use-system.ts — TanStack Query wrappers around the system/update
 // endpoints (GET /api/version, GET /api/update/check, POST /api/update/apply,
-// GET /api/update/status/:id, POST /api/update/rollback). Backs the
+// POST /api/update/status/:id, POST /api/update/rollback). Backs the
 // Settings → About section, which previously hand-rolled these with
 // useEffect + raw fetch (a legacy carryover flagged in the
 // production-readiness audit).
@@ -47,6 +47,7 @@ export interface RollbackResponse {
 export const VERSION_QUERY_KEY = ['system', 'version'] as const;
 export const ACTIVE_UPDATE_JOB_QUERY_KEY = ['system', 'active-update-job'] as const;
 const UPDATE_JOB_POLL_MS = 1000;
+const ACTIVE_UPDATE_JOB_POLL_MS = 15_000;
 const UPDATE_JOB_MAX_RETRIES = 3;
 const UPDATE_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_UPDATE_JOB_PHASES = new Set<UpdateJob['phase']>([
@@ -107,8 +108,8 @@ export function useActiveUpdateJob(enabled = true) {
     queryKey: activeUpdateJobKey(),
     queryFn: () => fetchJson<ActiveUpdateJobResponse>('/api/update/status'),
     enabled,
-    refetchInterval: query => (query.state.data?.job ? false : UPDATE_JOB_POLL_MS),
-    refetchIntervalInBackground: true,
+    refetchInterval: query => (query.state.data?.job ? false : ACTIVE_UPDATE_JOB_POLL_MS),
+    refetchIntervalInBackground: false,
     retry: retryUpdateJob,
     retryDelay: attemptIndex => Math.min(UPDATE_JOB_POLL_MS * 2 ** attemptIndex, 4000),
   });
@@ -117,7 +118,10 @@ export function useActiveUpdateJob(enabled = true) {
 export function useUpdateJob(jobId: string | null | undefined) {
   return useQuery<UpdateJob>({
     queryKey: updateJobKey(jobId),
-    queryFn: () => fetchJson<UpdateJob>(`/api/update/status/${jobId}`),
+    queryFn: () =>
+      fetchJson<UpdateJob>(`/api/update/status/${jobId}`, {
+        method: 'POST',
+      }),
     enabled: isValidUpdateJobId(jobId),
     refetchInterval: query =>
       query.state.data && TERMINAL_UPDATE_JOB_PHASES.has(query.state.data.phase)

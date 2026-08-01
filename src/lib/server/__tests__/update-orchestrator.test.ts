@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UpdateJob, UpdateJobPhase } from '../../schemas/update-job';
 import {
+  loadLatestActiveUpdateJob,
   loadUpdateJob,
   reconcileUpdateJob,
   startUpdateJob,
@@ -184,6 +185,36 @@ describe('update-job durable contract', () => {
     writeFileSync(path, '{not-json', { encoding: 'utf-8', flag: 'w' });
 
     expect(() => loadUpdateJob(root, JOB_ID)).toThrow();
+  });
+
+  it('skips damaged records while discovering the latest active job', () => {
+    const directory = join(root, 'data/update/jobs');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, `${JOB_ID}.json`), '{not-json', 'utf-8');
+    const active = {
+      ...job('queued', SECOND_JOB_ID),
+      launchState: 'claim-pending' as const,
+      updatedAt: NOW.toISOString(),
+    };
+    writeUpdateJob(root, active);
+
+    expect(loadLatestActiveUpdateJob(root)).toEqual(active);
+  });
+
+  it('skips damaged records when starting a new update', () => {
+    const directory = join(root, 'data/update/jobs');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, `${JOB_ID}.json`), '{not-json', 'utf-8');
+    const worker = fakeDeps(SECOND_JOB_ID);
+
+    expect(
+      startUpdateJob(
+        root,
+        { mode: { prod: false, tailscale: false }, fromVersion: '0.3.2' },
+        worker.deps,
+      ).status,
+    ).toBe('started');
+    expect(worker.spawn).toHaveBeenCalledTimes(1);
   });
 
   it('atomically persists jobs under data/update/jobs', () => {
@@ -517,6 +548,26 @@ describe('update-job durable contract', () => {
       [join(root, 'scripts/update-worker.mjs'), '--root', root, '--job-id', JOB_ID, '--recover'],
       expect.objectContaining({ cwd: root, detached: true }),
     );
+  });
+
+  it('fails an unclaimed recovery worker that exits abnormally', () => {
+    const interrupted = {
+      ...job('recovery-queued'),
+      launchState: 'claim-pending' as const,
+      checkpoint: 'applied' as const,
+      error: 'Update worker stopped before completion',
+    };
+    writeUpdateJob(root, interrupted);
+    const worker = fakeDeps(SECOND_JOB_ID, [NOW, LATER]);
+
+    reconcileUpdateJob(root, JOB_ID, worker.deps);
+    worker.emitExit(2);
+
+    expect(loadUpdateJob(root, JOB_ID)).toMatchObject({
+      phase: 'failed',
+      error: 'Update worker exited before completion',
+      updatedAt: LATER.toISOString(),
+    });
   });
 
   it('does not steal a fresh claim-pending job during status polling', () => {

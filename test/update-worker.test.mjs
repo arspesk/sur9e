@@ -18,6 +18,13 @@ import {
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
 const NOW = new Date('2026-07-31T20:00:00.000Z');
+const RECOVERY_STAGE_TEXT = {
+  rollback: 'rolling back the checkout',
+  install: 'installing previous dependencies',
+  rebuild: 'rebuilding the previous version',
+  restart: 'restarting the previous version',
+  verification: 'verifying the previous version',
+};
 
 function makeRoot(mode = { prod: false, tailscale: false }) {
   const root = mkdtempSync(join(tmpdir(), 'sur9e-update-worker-'));
@@ -324,34 +331,39 @@ describe('runUpdateRestartJob', () => {
       mode: { prod: false, tailscale: false },
       failCommand: 'health',
     },
-  ])('marks the job failed when recovery $recoveryStage fails', async ({ mode, failCommand }) => {
-    const root = makeRoot(mode);
-    const { states, runCommand, waitForHealth, deps } = harness(root);
-    let buildCount = 0;
-    runCommand.mockImplementation(async (_command, args) => {
-      if (args[1] === 'stop') throw new Error('original private failure');
-      const label = args.join(' ');
-      if (label === 'run build') buildCount += 1;
-      const recoveryFailure =
-        (failCommand === 'rollback' && args[1] === 'rollback') ||
-        (failCommand === 'ci --no-audit --no-fund' && label === 'ci --no-audit --no-fund') ||
-        (failCommand === 'second build' && label === 'run build' && buildCount === 1) ||
-        (failCommand === 'web start' &&
-          args[0] === join(root, 'scripts/web.mjs') &&
-          args[1] !== 'stop');
-      if (recoveryFailure) throw new Error('recovery secret with command details');
-    });
-    if (failCommand === 'health') waitForHealth.mockRejectedValueOnce(new Error('health secret'));
+  ])(
+    'marks the job failed when recovery $recoveryStage fails',
+    async ({ recoveryStage, mode, failCommand }) => {
+      const root = makeRoot(mode);
+      const { states, runCommand, waitForHealth, deps } = harness(root);
+      let buildCount = 0;
+      let startCount = 0;
+      runCommand.mockImplementation(async (_command, args) => {
+        const label = args.join(' ');
+        if (label === 'run build') buildCount += 1;
+        if (args[0] === join(root, 'scripts/web.mjs') && args[1] !== 'stop') startCount += 1;
+        const recoveryFailure =
+          (failCommand === 'rollback' && args[1] === 'rollback') ||
+          (failCommand === 'ci --no-audit --no-fund' && label === 'ci --no-audit --no-fund') ||
+          (failCommand === 'second build' && label === 'run build' && buildCount === 2) ||
+          (failCommand === 'web start' && startCount === 2);
+        if (recoveryFailure) throw new Error('recovery secret with command details');
+      });
+      waitForHealth.mockRejectedValueOnce(new Error('original private health failure'));
+      if (failCommand === 'health') {
+        waitForHealth.mockRejectedValueOnce(new Error('recovery secret health failure'));
+      }
 
-    const result = await runUpdateRestartJob(root, JOB_ID, deps);
+      const result = await runUpdateRestartJob(root, JOB_ID, deps);
 
-    expect(result).toEqual({ status: 'failed' });
-    expect(states.map(job => job.phase)).toEqual(['applying', 'stopping', 'recovering', 'failed']);
-    expect(states.at(-1).error).toMatch(
-      /^Update restart failed while stopping; recovery failed while /,
-    );
-    expect(states.at(-1).error).not.toMatch(/secret|private|token=/);
-  });
+      expect(result).toEqual({ status: 'failed' });
+      expect(states.at(-1).phase).toBe('failed');
+      expect(states.at(-1).error).toBe(
+        `Update restart failed while verifying; recovery failed while ${RECOVERY_STAGE_TEXT[recoveryStage]}`,
+      );
+      expect(states.at(-1).error).not.toMatch(/secret|private|token=/);
+    },
+  );
 
   it('atomically persists validated terminal state and the claimed PID with no temp residue', async () => {
     const root = makeRoot();
