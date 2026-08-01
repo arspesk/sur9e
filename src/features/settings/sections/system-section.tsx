@@ -395,17 +395,16 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
 
         <div className="system-update-panel__actions">
           {jobRunning ? (
-            <Button variant="primary" size="lg" disabled>
+            <Button variant="primary" disabled>
               {phaseLabel}
             </Button>
           ) : canUpdate ? (
-            <Button variant="primary" size="lg" onClick={applyUpdate} disabled={actionsPending}>
+            <Button variant="primary" onClick={applyUpdate} disabled={actionsPending}>
               {isApplying ? 'Starting update…' : 'Update now'}
             </Button>
           ) : null}
           <Button
             variant="secondary"
-            size="lg"
             id="checkUpdates"
             onClick={checkUpdates}
             disabled={actionsPending}
@@ -426,7 +425,6 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
         </div>
         <Button
           variant="secondary"
-          size="lg"
           onClick={() => setEditingSource(value => !value)}
           disabled={actionsPending}
           aria-expanded={editingSource}
@@ -477,7 +475,6 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
         </div>
         <Button
           variant="secondary"
-          size="lg"
           id="rollback"
           title="Roll back to the previous installed version (asks to confirm)"
           onClick={rollback}

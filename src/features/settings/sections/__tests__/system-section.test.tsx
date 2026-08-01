@@ -179,6 +179,16 @@ describe('SystemSection update status', () => {
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
   });
 
+  it('uses the shared medium Settings button size for update actions', () => {
+    renderSection();
+
+    for (const name of ['Check for updates', 'Edit update source', 'Roll back']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveClass('btn-md');
+      expect(button).not.toHaveClass('btn-lg');
+    }
+  });
+
   it('shows checking and up-to-date states with one clear action', async () => {
     let resolveCheck: ((value: unknown) => void) | undefined;
     const pendingCheck = new Promise(resolve => {
