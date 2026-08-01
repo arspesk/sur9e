@@ -9,8 +9,5 @@ export function GET() {
   const versionPath = join(ROOT, 'VERSION');
   const raw = readFileOrNull(versionPath);
   if (raw == null) return jsonError('Version file not found', 404);
-  return Response.json({
-    version: raw.trim(),
-    launchId: process.env.SUR9E_WEB_LAUNCH_ID ?? null,
-  });
+  return Response.json({ version: raw.trim() });
 }

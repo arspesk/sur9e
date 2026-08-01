@@ -60,7 +60,6 @@ export type CancelJobActionRequest = z.infer<typeof CancelJobActionRequest>;
 export const CreateOfferFromTextActionRequest = z
   .object({
     text: z.string().trim().min(1).max(32_000),
-    url: HttpUrl.optional(),
     company: z.string().trim().min(1).max(160).optional(),
     role: z.string().trim().min(1).max(240).optional(),
     startKind: TextOfferStartKind.optional(),

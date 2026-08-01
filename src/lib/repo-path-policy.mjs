@@ -33,8 +33,6 @@ export const SYSTEM_PATHS = Object.freeze([
   'src/lib/repo-path-policy.mjs',
   'src/lib/check-user-data-boundary.mjs',
   'scripts/sync-release-version.mjs',
-  'scripts/update-worker.mjs',
-  'scripts/web.mjs',
   'update-system.mjs',
   'test-all.mjs',
 ]);

@@ -9,7 +9,7 @@
 // All of the legacy "polish" / scroll-spy / overflow logic runs in a
 // useEffect after the host's innerHTML is filled.
 
-import { Ellipsis, Undo2 } from 'lucide-react';
+import { MoreHorizontal, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef } from 'react';
@@ -172,7 +172,7 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
           data-pill-overflow-trigger
           data-num={num ?? ''}
           onClick={onOverflowClick}
-          icon={<Ellipsis className="menu-dots-icon" aria-hidden="true" />}
+          icon={<MoreHorizontal aria-hidden="true" strokeWidth={2} size={16} />}
         />
       </Topbar>
 

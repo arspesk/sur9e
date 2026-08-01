@@ -45,28 +45,6 @@ describe('resolveOfferSource', () => {
     });
   });
 
-  it('reads an imported URL source from its saved JD floor without calling the network', async () => {
-    root = mkdtempSync(join(tmpdir(), 'offer-source-'));
-    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
-    writeFileSync(join(root, 'inputs/jds/acme.md'), 'Fetched JD floor\n', 'utf-8');
-    const fetcher = vi.fn();
-    const result = await resolveOfferSource(
-      root,
-      {
-        sourceKind: 'url',
-        url: 'https://example.com/jobs/1',
-        jdPath: 'inputs/jds/acme.md',
-      },
-      { fetcher },
-    );
-    expect(fetcher).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      kind: 'url',
-      label: 'https://example.com/jobs/1',
-      jd: { status: 'ok', text: 'Fetched JD floor\n' },
-    });
-  });
-
   it('rejects a saved source path outside inputs/jds', async () => {
     root = mkdtempSync(join(tmpdir(), 'offer-source-'));
     await expect(
@@ -75,18 +53,5 @@ describe('resolveOfferSource', () => {
         jdPath: '../secrets.txt',
       }),
     ).rejects.toThrow('invalid saved JD path');
-  });
-
-  it('rejects an imported URL source without a saved JD instead of fetching live', async () => {
-    const fetcher = vi.fn();
-
-    await expect(
-      resolveOfferSource(
-        '/tmp/unused',
-        { sourceKind: 'url', url: 'https://example.com/jobs/changed' },
-        { fetcher },
-      ),
-    ).rejects.toThrow('invalid saved JD path');
-    expect(fetcher).not.toHaveBeenCalled();
   });
 });

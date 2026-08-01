@@ -53,7 +53,6 @@ export function EvaluateModal() {
   const onConfirm = context?.onConfirm as (() => void) | undefined;
   // Batch "Change status → Evaluated" pick: skip the jobs, just PATCH.
   const onStatusOnly = context?.onStatusOnly as (() => void) | undefined;
-  const statusTriggered = patchToEvaluated || onStatusOnly != null;
   const isBatch = Number.isInteger(count) && (count as number) > 1;
 
   // Legacy `evaluate-modal.js` line 70-75: accept either confirm(num)
@@ -179,7 +178,7 @@ export function EvaluateModal() {
         </div>
         <footer className="evaluate-modal__foot">
           <Button variant="secondary" className="evaluate-modal__cancel" onClick={close}>
-            {statusTriggered ? 'Not now' : 'Cancel'}
+            Cancel
           </Button>
           {onStatusOnly ? (
             <Button

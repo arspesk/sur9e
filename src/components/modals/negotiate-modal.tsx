@@ -24,7 +24,6 @@ import { useGeneratorRun } from './use-generator-run';
 export function NegotiateModal() {
   const { num, isBatch, count, close, handleSubmit } = useGeneratorRun('negotiate');
   const returnFocus = useModalStore(s => s.context?.returnFocus as HTMLElement | undefined);
-  const statusFollowup = useModalStore(s => s.context?.statusFollowup === true);
 
   let title =
     num != null ? `Build a negotiation strategy for #${num}?` : 'Build a negotiation strategy?';
@@ -52,7 +51,7 @@ export function NegotiateModal() {
         </div>
         <footer className="evaluate-modal__foot">
           <Button variant="secondary" className="evaluate-modal__cancel" onClick={close}>
-            {statusFollowup ? 'Not now' : 'Cancel'}
+            Cancel
           </Button>
           <Button variant="primary" className="evaluate-modal__submit" onClick={handleSubmit}>
             Build strategy

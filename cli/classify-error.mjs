@@ -68,11 +68,7 @@ const PROVIDER_SIGNATURES = {
     auth: ['providerautherror', 'opencode auth login'],
     model_not_found: ['providermodelnotfounderror', 'model not found'],
     rate_limit: ['rate limited'],
-    // Observed from the OpenCode gateway logs when the configured provider
-    // could not serve a request. Both are transient provider availability
-    // failures, so they should take the same one-shot fallback path as an
-    // explicit overload.
-    overloaded: ['provider is overloaded', 'internal server error', 'no provider available'],
+    overloaded: ['provider is overloaded'],
     context_overflow: ['contextoverflowerror', 'context_length_exceeded'],
   },
 };

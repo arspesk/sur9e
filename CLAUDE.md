@@ -134,6 +134,14 @@ weekly npm and GitHub Actions PRs; never auto-merge them. See
 
 ## Development and release lifecycle
 
+Treat each pull request as the unit of history because this repository squash-merges.
+Split independent features and fixes into separate, logically scoped PRs; keep one
+behavior's implementation, tests, and documentation together. Avoid both catch-all
+PRs that hide multiple changes behind one title and noisy micro-PRs that separate
+tightly coupled work. Publish each completed, independently reviewable PR as soon as
+it is ready instead of stockpiling finished PRs for a bulk push. A dependent PR may
+wait only until its base change is merged.
+
 1. **Branch from current `main`.** Fetch first, then use a short-lived branch or
    isolated worktree. Never commit or push implementation work directly to
    `main`, and never overwrite unrelated user changes.

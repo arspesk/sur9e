@@ -11,8 +11,7 @@
 'use client';
 
 import { Command } from 'cmdk';
-import { useMemo, useRef } from 'react';
-import { useActiveOptionScroll } from '@/hooks/use-active-option-scroll';
+import { useMemo } from 'react';
 import type { SlashItem } from './slash-registry';
 
 interface CmdkSlashMenuProps {
@@ -31,8 +30,6 @@ interface CmdkSlashMenuProps {
 }
 
 export function CmdkSlashMenu({ query: _query, activeIndex, onSelect, items }: CmdkSlashMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  useActiveOptionScroll(menuRef, activeIndex);
   // Active item id, derived from the clamped active index. cmdk uses this
   // to render the visual highlight; arrow-key navigation is driven entirely
   // by the TipTap Suggestion plugin (cmdk's own filter/loop is disabled
@@ -64,7 +61,6 @@ export function CmdkSlashMenu({ query: _query, activeIndex, onSelect, items }: C
 
   return (
     <Command
-      ref={menuRef}
       className="be-cmdk"
       shouldFilter={false}
       loop
@@ -78,12 +74,7 @@ export function CmdkSlashMenu({ query: _query, activeIndex, onSelect, items }: C
         {grouped.map(([group, gItems]) => (
           <Command.Group key={group} heading={group}>
             {gItems.map(item => (
-              <Command.Item
-                key={item.id}
-                value={item.id}
-                data-active={item.id === activeId || undefined}
-                onSelect={() => onSelect(item)}
-              >
+              <Command.Item key={item.id} value={item.id} onSelect={() => onSelect(item)}>
                 {item.icon && (
                   <span
                     className="be-cmdk__icon"

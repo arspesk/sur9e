@@ -32,38 +32,16 @@ export type ModalName =
   | 'delete'
   | null;
 
-interface DeferredModal {
-  modal: Exclude<ModalName, null>;
-  context: Record<string, unknown> | null;
-}
-
 interface ModalState {
   modal: ModalName;
   context: Record<string, unknown> | null;
-  deferred: DeferredModal[];
   open: (modal: Exclude<ModalName, null>, context?: Record<string, unknown> | null) => void;
-  defer: (modal: Exclude<ModalName, null>, context?: Record<string, unknown> | null) => void;
   close: () => void;
 }
 
 export const useModalStore = create<ModalState>(set => ({
   modal: null,
   context: null,
-  deferred: [],
-  // Manual opens retain the existing replace-in-place behavior. Automatic
-  // prompts use defer() below so an in-flight response cannot clobber one.
   open: (modal, context = null) => set({ modal, context: context ?? null }),
-  defer: (modal, context = null) =>
-    set(state => {
-      const request = { modal, context: context ?? null };
-      if (state.modal === null && state.deferred.length === 0) return request;
-      return { deferred: [...state.deferred, request] };
-    }),
-  close: () =>
-    set(state => {
-      const [next, ...deferred] = state.deferred;
-      return next
-        ? { modal: next.modal, context: next.context, deferred }
-        : { modal: null, context: null };
-    }),
+  close: () => set({ modal: null, context: null }),
 }));

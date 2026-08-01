@@ -270,28 +270,6 @@ describe('chat action routes', () => {
       expect(spawnJobMock).toHaveBeenCalledTimes(1);
     });
 
-    it('imports a fetched URL JD and starts evaluation without a screening job', async () => {
-      const res = await createTextOfferRoute.POST(
-        postJson('http://localhost/api/chat/actions/create-offer-from-text', {
-          text: 'Build reliable systems.',
-          url: 'https://example.com/jobs/1',
-          company: 'Acme',
-          role: 'Platform Engineer',
-          startKind: 'evaluate',
-          terminalApproved: true,
-        }),
-      );
-      const body = await res.json();
-
-      expect(res.status).toBe(200);
-      expect(body.job).toMatchObject({ type: 'evaluate', params: { num: body.offer.num } });
-      const report = readFileSync(join(root, body.offer.reportPath), 'utf-8');
-      expect(report).toContain('source_kind: url');
-      expect(report).toContain('url: https://example.com/jobs/1');
-      await flushImmediate();
-      expect(spawnJobMock).toHaveBeenCalledTimes(1);
-    });
-
     it('starts screening first and queues evaluation as a separate successor job', async () => {
       const res = await createTextOfferRoute.POST(
         postJson('http://localhost/api/chat/actions/create-offer-from-text', {

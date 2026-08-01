@@ -253,42 +253,6 @@ describe('mcp-app-server — action tools', () => {
     });
   });
 
-  it('create_offer_from_text forwards a source URL for direct evaluation without screening', async () => {
-    app = await startMockApp({
-      'POST /api/chat/actions/create-offer-from-text': {
-        status: 200,
-        body: { needsConfirm: true, token: 'tok-url' },
-      },
-    });
-    client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
-    await client.initialize();
-
-    const tools = await client.request(2, 'tools/list');
-    const tool = tools.result.tools.find(
-      (candidate: { name: string }) => candidate.name === 'create_offer_from_text',
-    );
-    expect(tool.inputSchema.properties.url).toBeDefined();
-
-    await client.request(3, 'tools/call', {
-      name: 'create_offer_from_text',
-      arguments: {
-        text: 'Build the platform.',
-        url: 'https://example.com/jobs/1',
-        company: 'Acme',
-        role: 'Engineer',
-        start_kind: 'evaluate',
-      },
-    });
-
-    expect(app.requests[0].body).toEqual({
-      text: 'Build the platform.',
-      url: 'https://example.com/jobs/1',
-      company: 'Acme',
-      role: 'Engineer',
-      startKind: 'evaluate',
-    });
-  });
-
   it('create_offer_from_text forwards a multi-mode workflow and not legacy start_kind', async () => {
     app = await startMockApp({
       'POST /api/chat/actions/create-offer-from-text': {
