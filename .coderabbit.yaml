@@ -12,6 +12,8 @@ reviews:
     drafts: false
     base_branches:
       - main
+    ignore_title_keywords:
+      - "chore(main): release"
   path_instructions:
     - path: "CLAUDE.md"
       instructions: "This operating manual must remain byte-identical to AGENTS.md. Require both files to change together and flag conflicting instructions."
@@ -37,6 +39,47 @@ reviews:
       instructions: "Check fork safety, least-privilege permissions, full-SHA action pinning, secret exposure, shell or template injection, and release integrity."
     - path: "test/e2e/**"
       instructions: "Browser tests must not mutate a developer's real personalization, tracker, reports, or generated artifacts."
+
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  labeling:
+    auto_apply_labels: true
+    labeling_instructions:
+      - label: type:bug
+        instructions: "Apply exactly one type: a reproducible defect where observed behavior differs from expected behavior."
+      - label: type:feature
+        instructions: "Apply exactly one type: a proposal for a new capability or user-visible improvement."
+      - label: type:question
+        instructions: "Apply exactly one type: a request for usage, setup, or contributor guidance."
+      - label: type:task
+        instructions: "Apply exactly one type: a scoped maintenance or contributor task rather than a bug, feature, or question."
+      - label: area:web
+        instructions: "Apply exactly one primary area when the local web UI, accessibility, or browser behavior is primarily affected."
+      - label: area:agent
+        instructions: "Apply exactly one primary area when agent modes, prompts, hooks, or AI integrations are primarily affected."
+      - label: area:jobs
+        instructions: "Apply exactly one primary area when job discovery, screening, evaluation, or application workflow is primarily affected."
+      - label: area:data
+        instructions: "Apply exactly one primary area when local data contracts, persistence, reports, or privacy boundaries are primarily affected."
+      - label: area:tooling
+        instructions: "Apply exactly one primary area when build tooling, CI, scripts, dependencies, or developer setup is primarily affected."
+      - label: area:docs
+        instructions: "Apply exactly one primary area when documentation, contributor guidance, or examples are primarily affected."
+      - label: priority:p0
+        instructions: "Apply exactly one priority for data loss, a security risk, or a broadly blocked core workflow."
+      - label: priority:p1
+        instructions: "Apply exactly one priority when a major workflow is materially impaired without a reasonable workaround."
+      - label: priority:p2
+        instructions: "Apply exactly one priority for valuable normal work that can follow the usual planning cadence."
+      - label: priority:p3
+        instructions: "Apply exactly one priority for low-urgency polish, a niche improvement, or work deferred by higher priorities."
+      - label: status:needs-info
+        instructions: "Apply status:needs-info only when material missing details block triage. You must not apply status:accepted, must not apply status:declined, must not apply any resolution: label, must not make acceptance decisions, must not make closure decisions, and must not make comments that purport to accept, decline, resolve, or close an issue; those are maintainer-only decisions."
+  planning:
+    enabled: false
+    auto_planning:
+      enabled: false
 
 chat:
   auto_reply: false

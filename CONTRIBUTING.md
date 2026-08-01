@@ -12,6 +12,8 @@ are the most valuable thing you can send.
 - Check existing [GitHub Issues](https://github.com/arspesk/sur9e/issues)
   before opening a new one or starting a large change. For anything bigger
   than a bugfix, open an issue first so we can agree on the approach.
+- Follow the human-owned [issue triage policy](docs/triage.md) when reporting,
+  labeling, or reviewing an issue.
 
 ## Dev setup
 
