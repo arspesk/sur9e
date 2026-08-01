@@ -6,13 +6,12 @@
 // pills row (archetype, seniority, work_mode), meta = Location · Comp · date.
 // Ported from legacy pipeline.html renderCard(); drag + click handlers unchanged.
 
-import { EllipsisVertical } from 'lucide-react';
 import { useRef } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { scoreLevel } from '@/components/domain/score-chip';
 import { EnumPill } from '@/components/enum-pill';
 import { InlineTextEdit } from '@/components/inline-text-edit';
-import { IconButton } from '@/components/primitives';
+import { OverflowMenuButton } from '@/components/primitives';
 import { fmtDate } from '@/features/report/report-types';
 import type { ApplicationRow } from '@/features/table/table-types';
 import { useProfileQuery } from '@/hooks/use-profile';
@@ -130,7 +129,7 @@ export function BoardCard({
           </div>
           <div className="card-role">{row.role}</div>
         </div>
-        <IconButton
+        <OverflowMenuButton
           className="board-card-kebab"
           label="Card actions"
           title="Card actions"
@@ -138,7 +137,6 @@ export function BoardCard({
           aria-expanded={statusPopoverOpen}
           data-num={row.num}
           onClick={e => onActionsClick(e, row.num)}
-          icon={<EllipsisVertical className="menu-dots-icon" aria-hidden="true" />}
         />
       </div>
       <div className="card-chips">

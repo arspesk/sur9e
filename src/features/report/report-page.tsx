@@ -9,11 +9,11 @@
 // All of the legacy "polish" / scroll-spy / overflow logic runs in a
 // useEffect after the host's innerHTML is filled.
 
-import { Ellipsis, Undo2 } from 'lucide-react';
+import { Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef } from 'react';
-import { IconButton } from '@/components/primitives';
+import { IconButton, OverflowMenuButton } from '@/components/primitives';
 import { Topbar } from '@/components/shell/topbar';
 import { useSetPageContext } from '@/hooks/use-page-context';
 import { useReport } from '@/hooks/use-report';
@@ -163,8 +163,9 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
           onClick={handleBack}
           icon={<Undo2 aria-hidden="true" strokeWidth={2} size={16} />}
         />
-        <IconButton
+        <OverflowMenuButton
           ref={kebabTriggerRef}
+          orientation="horizontal"
           label="More actions"
           title="More actions"
           aria-haspopup="menu"
@@ -172,7 +173,6 @@ export function ReportPage({ filename, initialEntry }: ReportPageProps) {
           data-pill-overflow-trigger
           data-num={num ?? ''}
           onClick={onOverflowClick}
-          icon={<Ellipsis className="menu-dots-icon" aria-hidden="true" />}
         />
       </Topbar>
 

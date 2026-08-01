@@ -4184,11 +4184,11 @@ select.form-input {
 .icon-btn svg {
   /* 16x16 stroke matches drawer chevrons + report-header kebab so every
      ghost-icon trigger renders at identical scale. */
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.7;
+  stroke-width: var(--icon-stroke-default);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -4211,16 +4211,12 @@ select.form-input {
   color: var(--st-danger);
 }
 
-/* Canonical Lucide menu glyphs. Kebab triggers use EllipsisVertical while
-   meatball triggers use Ellipsis; both stay optically consistent inside the
-   existing button hit areas. Match .icon-btn svg's specificity so the
-   requested 2px stroke wins over the generic 1.7px icon treatment. */
+/* OverflowMenuButton owns the Lucide orientation and menu-specific stroke;
+   IconButton and the shared icon tokens own every other visual measurement. */
 .icon-btn svg.menu-dots-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  flex: 0 0 var(--icon-size-control);
   display: block;
-  stroke-width: 2;
+  stroke-width: var(--icon-stroke-menu);
 }
 
 /* Card — generic surface container. Padding variants opt-in. */
