@@ -15,19 +15,20 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { jobEstimateLabel } from '../../job-types';
 import type { ApplicationRow } from '../../schemas/applications';
+import { ApplicationStatus } from '../../schemas/applications';
 import type { TextOfferStartKind } from '../../schemas/chat-actions';
 import type { JobType } from '../../schemas/jobs';
 import type { WorkflowRecord } from '../../schemas/workflows';
-import { updateStatus } from '../applications';
 import { type JobConflictPayload, type JobRecord, type JobSetupRequiredPayload } from '../jobs';
 import { type CancelJobResult, cancelJob } from '../jobs/lifecycle';
 import { resolveModeRuntime } from '../providers/registry';
 import { applyReportBodyEdit, parseFrontmatter, saveReport } from '../reports';
+import { updateStatusWithFollowup } from '../status-transition-followup';
 import { createOrReuseTextOffer, type TextOfferResult } from '../text-offers';
 import { cancelWorkflow, createWorkflow, type WorkflowPlan, workflowChildJobs } from '../workflows';
 import { startChatJob } from './job-start';
-import { appendConfirmResolution } from './store';
-import { emitTurnEvent } from './turn-runner';
+import { appendConfirmAfter, appendConfirmResolution } from './store';
+import { emitTurnEvent, getTurn } from './turn-runner';
 
 const TTL_MS = 15 * 60 * 1000;
 
@@ -189,6 +190,8 @@ export interface ResolveConfirmResult {
   execution?: ConfirmExecution;
   /** Present only on approval: what the execution produced. */
   result?: ConfirmExecutionResult;
+  /** A successfully placed, separately gated preparation job prompt. */
+  followupConfirm?: { token: string };
 }
 
 function executionFor(
@@ -247,6 +250,7 @@ export async function resolveConfirm(
 
   const outcome: ConfirmOutcome = approve ? 'approved' : 'cancelled';
   let result: ConfirmExecutionResult | undefined;
+  let statusFollowup: ReturnType<typeof updateStatusWithFollowup>['followup'] = null;
   if (approve) {
     try {
       if (rec.kind === 'start-job') {
@@ -314,7 +318,10 @@ export async function resolveConfirm(
         result = { ok: true, report: { num: p.num } };
       } else {
         const p = rec.payload as SetStatusPayload;
-        result = { ok: true, updated: updateStatus(root, p.num, p.status) };
+        const status = ApplicationStatus.parse(p.status);
+        const transition = updateStatusWithFollowup(root, p.num, status);
+        statusFollowup = transition.followup;
+        result = { ok: true, updated: transition.updated };
       }
     } catch (err) {
       result = { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -346,8 +353,75 @@ export async function resolveConfirm(
   // turn's 'done' (the common case) never touches the persisted message.
   // Stamp the resolution onto that message too so a reload shows the resolved
   // card instead of re-armed buttons for an action that already ran.
-  persistResolution(root, token, outcome, execution, presentation);
-  return { outcome, ...(execution ? { execution } : {}), result };
+  const persistedResolutionPlaced = persistResolution(
+    root,
+    token,
+    outcome,
+    execution,
+    presentation,
+  );
+
+  let followupConfirm: { token: string } | undefined;
+  if (approve && rec.kind === 'set-status' && result?.ok && statusFollowup) {
+    const childToken = randomUUID();
+    const { summary, meta } = describeStartJob(root, statusFollowup.jobKind, {
+      num: statusFollowup.num,
+    });
+    let childPlaced = false;
+    if (persistedResolutionPlaced) {
+      try {
+        childPlaced = appendConfirmAfter(root, token, {
+          token: childToken,
+          summary,
+          meta,
+        });
+      } catch {
+        // Fall through to the live turn placement below.
+      }
+    }
+    if (!childPlaced && getTurn(rec.turnId)?.status === 'running') {
+      try {
+        childPlaced =
+          emitTurnEvent(rec.turnId, {
+            type: 'confirm',
+            token: childToken,
+            summary,
+            meta,
+            kind: 'start-job',
+          }) !== null;
+      } catch {
+        // no live turn to place the follow-up on
+      }
+    }
+    if (childPlaced) {
+      confirms.set(childToken, {
+        token: childToken,
+        turnId: rec.turnId,
+        kind: 'start-job',
+        payload: { kind: statusFollowup.jobKind, params: { num: statusFollowup.num } },
+        summary,
+        meta,
+        createdAt: Date.now(),
+      });
+      followupConfirm = { token: childToken };
+    } else {
+      const message = 'Status updated, but the preparation prompt could not be shown.';
+      result = {
+        ...result,
+        message,
+      };
+      // The parent resolution was persisted before child placement so the
+      // child could be appended after it. Merge the late warning back onto
+      // that durable event; otherwise reload would lose this failure detail.
+      persistResolution(root, token, outcome, execution, { message });
+    }
+  }
+  return {
+    outcome,
+    ...(execution ? { execution } : {}),
+    result,
+    ...(followupConfirm ? { followupConfirm } : {}),
+  };
 }
 
 /** Best-effort persistence of a confirm's terminal state onto its owning
@@ -359,11 +433,12 @@ function persistResolution(
   outcome: ConfirmOutcome,
   execution?: ConfirmExecution,
   presentation?: ConfirmResultPresentation,
-): void {
+): boolean {
   try {
-    appendConfirmResolution(root, token, outcome, execution, presentation);
+    return appendConfirmResolution(root, token, outcome, execution, presentation);
   } catch {
     // never let a persistence hiccup break resolution
+    return false;
   }
 }
 

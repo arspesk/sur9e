@@ -250,15 +250,23 @@ export function findByNum(rootPath: string, num: number): ApplicationDetail | nu
     const body = typeof parsedFrontmatter?.body === 'string' ? parsedFrontmatter.body : r.markdown;
     const appended = extractAppendedSections(body);
     const has = (title: string) => appended.some(s => s.title === title);
+    const hasCompletedModeSection = (title: string, command: string) => {
+      const section = appended.find(candidate => candidate.title === title);
+      if (!section) return false;
+      // Evaluation reports intentionally include one-paragraph placeholders
+      // that direct the user to the owning mode. The heading alone therefore
+      // does not prove that mode ran; completed mode output replaces the stub.
+      return !section.body.toLowerCase().includes(`/${command.toLowerCase()}`);
+    };
     return ApplicationDetail.parse({
       ...entry,
       report: r,
       cv_pdf_path,
       cover_letter_path,
       has_company_research: has('Company Research'),
-      has_interview_process: has('Interview Process'),
+      has_interview_process: hasCompletedModeSection('Interview Process', 'interview-prep'),
       has_outreach: has('Outreach'),
-      has_negotiation: has('Negotiation Strategy'),
+      has_negotiation: hasCompletedModeSection('Negotiation Strategy', 'negotiate'),
     });
   }
   return ApplicationDetail.parse({

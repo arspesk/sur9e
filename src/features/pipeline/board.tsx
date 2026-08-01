@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useToastStore } from '@/components/toast/toast-store';
 import type { ApplicationRow } from '@/features/table/table-types';
+import { openStatusFollowup } from '@/lib/open-status-followup';
 import { interceptStatusPick } from '@/lib/status-transitions';
 import { updateApplicationStatusAction } from '@/server/actions/applications';
 import { useModalStore } from '@/stores/modal-store';
@@ -154,7 +155,8 @@ export function Board({
       const patchStatus = async (status: ColumnKey) => {
         setOptimisticStatus(m => new Map(m).set(num, status));
         try {
-          await updateApplicationStatusAction({ num, status });
+          const result = await updateApplicationStatusAction({ num, status });
+          openStatusFollowup(result.followup);
           // Refetch — drops our optimistic entry on next render. Invalidate
           // both 'applications' (table/board) and 'report' (open report
           // page) so neither surface keeps a stale status.

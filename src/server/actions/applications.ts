@@ -11,13 +11,15 @@ import { z } from 'zod';
 import { ROOT } from '@/lib/root';
 import { ApplicationStatus } from '@/lib/schemas/applications';
 import {
-  type ApplicationRow,
   batchDeleteApplications,
   batchUpdateStatus,
   deleteApplication,
-  updateStatus,
 } from '@/lib/server/applications';
 import { reportPathForNum, updateReportFrontmatterField } from '@/lib/server/reports';
+import {
+  type StatusTransitionResult,
+  updateStatusWithFollowup,
+} from '@/lib/server/status-transition-followup';
 import { revalidatePath } from '@/server/revalidate';
 
 const numSchema = z.number().int().positive();
@@ -57,15 +59,12 @@ function revalidateApplicationSurfaces() {
 
 export async function updateApplicationStatusAction(
   input: UpdateStatusInput,
-): Promise<ApplicationRow> {
+): Promise<StatusTransitionResult> {
   const num = numSchema.parse(input.num);
   const status = statusSchema.parse(input.status);
-  const updated = updateStatus(ROOT, num, status);
-  if (!updated) {
-    throw new Error(`num not found: ${num}`);
-  }
+  const result = updateStatusWithFollowup(ROOT, num, status);
   revalidateApplicationSurfaces();
-  return updated;
+  return result;
 }
 
 export async function deleteApplicationAction(input: {

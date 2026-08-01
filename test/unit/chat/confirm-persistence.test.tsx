@@ -37,9 +37,13 @@ function renderCard(ui: ReactElement) {
 }
 
 const emitTurnEventMock = vi.fn();
+const getTurnMock = vi.fn();
 const spawnJobMock = vi.fn();
 
-vi.mock('@/lib/server/chat/turn-runner', () => ({ emitTurnEvent: emitTurnEventMock }));
+vi.mock('@/lib/server/chat/turn-runner', () => ({
+  emitTurnEvent: emitTurnEventMock,
+  getTurn: getTurnMock,
+}));
 vi.mock('@/lib/server/jobs/runner', () => ({ spawnJob: spawnJobMock }));
 
 const APPLICATIONS_MD = [
@@ -83,18 +87,22 @@ function reloadEvents(raw: unknown[] | null): ChatTurnEvent[] {
 
 type ConfirmsModule = typeof import('@/lib/server/chat/confirms');
 type StoreModule = typeof import('@/lib/server/chat/store');
+type DbModule = typeof import('@/lib/server/chat/db');
 
 describe('confirm resolution persists to the owning message', () => {
   let root: string;
   let confirms: ConfirmsModule;
   let store: StoreModule;
+  let db: DbModule;
 
   beforeEach(async () => {
     root = seedRoot();
     vi.resetModules();
     confirms = await import('@/lib/server/chat/confirms');
     store = await import('@/lib/server/chat/store');
+    db = await import('@/lib/server/chat/db');
     emitTurnEventMock.mockReset();
+    getTurnMock.mockReset();
     spawnJobMock.mockReset();
   });
 
@@ -236,5 +244,316 @@ describe('confirm resolution persists to the owning message', () => {
     expect(res.outcome).toBe('approved');
     // No assistant message existed, so listMessages is empty and nothing threw.
     expect(store.listMessages(root, conversation.id)).toHaveLength(0);
+  });
+
+  it('persists a follow-up placement warning on the resolved parent for reload', async () => {
+    const conversation = store.createConversation(root);
+    const inMemory = (globalThis as unknown as { __sur9eChatConfirms: Map<string, unknown> })
+      .__sur9eChatConfirms;
+    const before = inMemory.size;
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-status-placement-failure',
+      kind: 'set-status',
+      payload: { num: 1001, status: 'interview' },
+      summary: 'Set offer #1001 status to "interview"',
+      meta: 'tracker write · no AI spend',
+    });
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Change status?',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token,
+          summary: 'Set offer #1001 status to "interview"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+      ],
+    });
+    db.openChatDb(root).exec(`
+      CREATE TRIGGER fail_child_confirm_placement
+      BEFORE UPDATE OF events_json ON messages
+      WHEN NEW.events_json LIKE '%"kind":"start-job"%'
+      BEGIN
+        SELECT RAISE(FAIL, 'child placement failed');
+      END;
+    `);
+
+    const result = await confirms.resolveConfirm(root, token, true);
+
+    expect(result).toMatchObject({
+      outcome: 'approved',
+      execution: 'succeeded',
+      result: {
+        ok: true,
+        message: 'Status updated, but the preparation prompt could not be shown.',
+      },
+    });
+    expect(result.followupConfirm).toBeUndefined();
+    expect(inMemory.size).toBe(before);
+
+    const [message] = store.listMessages(root, conversation.id);
+    const reloaded = reloadEvents(message.events);
+    const confirm = foldEvents(reloaded).find(
+      item => item.kind === 'confirm' && item.token === token,
+    );
+    expect(confirm).toMatchObject({
+      kind: 'confirm',
+      outcome: 'approved',
+      message: 'Status updated, but the preparation prompt could not be shown.',
+    });
+    expect(
+      reloaded.filter(event => event.type === 'confirm' && event.token !== token),
+    ).toHaveLength(0);
+  });
+
+  it('appends a start-job confirm after the resolved parent with monotonic sequence and reload order', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'parent-confirm-token';
+    const childToken = 'child-confirm-token';
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status change?',
+      events: [
+        {
+          seq: 4,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set offer #1001 status to "interview"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+        { seq: 8, type: 'stage', label: 'Status ready' },
+      ],
+    });
+
+    expect(store.appendConfirmResolution(root, parentToken, 'approved', 'succeeded')).toBe(true);
+    expect(
+      store.appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary: 'Start interview preparation for offer #1001',
+        meta: 'claude · claude-sonnet-4-6 · ~7–15 min',
+      }),
+    ).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    const events = reloadEvents(message.events);
+    expect(events.map(event => event.seq)).toEqual([4, 8, 9, 10]);
+    expect(events.at(-1)).toEqual({
+      seq: 10,
+      type: 'confirm',
+      token: childToken,
+      summary: 'Start interview preparation for offer #1001',
+      meta: 'claude · claude-sonnet-4-6 · ~7–15 min',
+      kind: 'start-job',
+    });
+    expect(foldEvents(events).filter(item => item.kind === 'confirm')).toEqual([
+      expect.objectContaining({
+        kind: 'confirm',
+        token: parentToken,
+        outcome: 'approved',
+        action: 'set-status',
+      }),
+      expect.objectContaining({
+        kind: 'confirm',
+        token: childToken,
+        outcome: 'pending',
+        action: 'start-job',
+      }),
+    ]);
+  });
+
+  it('ignores invalid sibling sequences when appending reload-valid resolution and child events', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'mixed-sequence-parent';
+    const childToken = 'mixed-sequence-child';
+    const fractionalSibling = { seq: 99.5, type: 'stage', label: 'fractional sequence' };
+    const negativeSibling = { seq: -7, type: 'stage', label: 'negative sequence' };
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status change?',
+      events: [
+        {
+          seq: 2,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set offer #1001 status to "interview"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+        fractionalSibling,
+        negativeSibling,
+        { seq: 6, type: 'stage', label: 'valid sequence' },
+      ],
+    });
+
+    expect(store.appendConfirmResolution(root, parentToken, 'approved', 'succeeded')).toBe(true);
+    expect(
+      store.appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary: 'Start interview prep for offer #1001',
+        meta: 'claude · claude-sonnet-4-6 · ~5–10 min',
+      }),
+    ).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    expect(message.events).toEqual(expect.arrayContaining([fractionalSibling, negativeSibling]));
+    const events = reloadEvents(message.events);
+    expect(events.map(event => event.seq)).toEqual([2, 6, 7, 8]);
+    expect(foldEvents(events).filter(item => item.kind === 'confirm')).toEqual([
+      expect.objectContaining({ token: parentToken, outcome: 'approved' }),
+      expect.objectContaining({ token: childToken, outcome: 'pending', action: 'start-job' }),
+    ]);
+  });
+
+  it('does not let a malformed matching resolution satisfy idempotency', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'malformed-resolution-parent';
+    const childToken = 'malformed-resolution-child';
+    const malformedResolution = {
+      seq: 2,
+      type: 'confirm-resolved',
+      token: parentToken,
+      outcome: 'approved',
+      execution: 'not-a-valid-execution',
+    };
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status change?',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set offer #1001 status to "offer"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+        malformedResolution,
+      ],
+    });
+
+    expect(store.appendConfirmResolution(root, parentToken, 'approved', 'succeeded')).toBe(true);
+    expect(
+      store.appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary: 'Start negotiation strategy for offer #1001',
+        meta: 'claude · claude-sonnet-4-6 · ~5–10 min',
+      }),
+    ).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    expect(message.events).toContainEqual(malformedResolution);
+    const events = reloadEvents(message.events);
+    expect(events).toEqual([
+      expect.objectContaining({ seq: 1, type: 'confirm', token: parentToken }),
+      expect.objectContaining({
+        seq: 2,
+        type: 'confirm-resolved',
+        token: parentToken,
+        outcome: 'approved',
+        execution: 'succeeded',
+      }),
+      expect.objectContaining({ seq: 3, type: 'confirm', token: childToken }),
+    ]);
+    expect(foldEvents(events).filter(item => item.kind === 'confirm')).toEqual([
+      expect.objectContaining({ token: parentToken, outcome: 'approved' }),
+      expect.objectContaining({ token: childToken, outcome: 'pending', action: 'start-job' }),
+    ]);
+  });
+
+  it('is idempotent when the exact child token is already appended', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'parent-idempotent';
+    const child = {
+      token: 'child-idempotent',
+      summary: 'Start negotiation prep for offer #1001',
+      meta: 'claude · claude-sonnet-4-6 · ~7–15 min',
+    };
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status changed.',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set status',
+          meta: 'tracker write',
+          kind: 'set-status',
+        },
+      ],
+    });
+
+    expect(store.appendConfirmAfter(root, parentToken, child)).toBe(true);
+    expect(store.appendConfirmAfter(root, parentToken, child)).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    expect(
+      (message.events ?? []).filter(
+        event => hasType(event, 'confirm') && event.token === child.token,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('does not rewrite a missing, incidental, or corrupt candidate owner', () => {
+    const conversation = store.createConversation(root);
+    const incidental = store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Incidental token only.',
+      events: [{ seq: 1, type: 'text-delta', text: 'mentions unsafe-parent-token incidentally' }],
+    });
+    const corrupt = store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Corrupt events.',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token: 'corrupt-parent-token',
+          summary: 'Set status',
+          meta: 'tracker write',
+          kind: 'set-status',
+        },
+      ],
+    });
+    const invalidOwner = store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Schema-invalid events.',
+      events: [{ type: 'confirm', token: 'invalid-owner-token' }],
+    });
+    db.openChatDb(root)
+      .prepare('UPDATE messages SET events_json = ? WHERE id = ?')
+      .run('{"token":"corrupt-parent-token"', corrupt.id);
+
+    const child = { token: 'never-appended', summary: 'Start prep', meta: 'AI spend' };
+    expect(store.appendConfirmAfter(root, 'missing-parent-token', child)).toBe(false);
+    expect(store.appendConfirmAfter(root, 'unsafe-parent-token', child)).toBe(false);
+    expect(store.appendConfirmAfter(root, 'corrupt-parent-token', child)).toBe(false);
+    expect(store.appendConfirmAfter(root, 'invalid-owner-token', child)).toBe(false);
+
+    const rows = db
+      .openChatDb(root)
+      .prepare('SELECT id, events_json FROM messages ORDER BY position')
+      .all() as Array<{ id: string; events_json: string }>;
+    expect(rows.find(row => row.id === incidental.id)?.events_json).toBe(
+      JSON.stringify(incidental.events),
+    );
+    expect(rows.find(row => row.id === corrupt.id)?.events_json).toBe(
+      '{"token":"corrupt-parent-token"',
+    );
+    expect(rows.find(row => row.id === invalidOwner.id)?.events_json).toBe(
+      JSON.stringify(invalidOwner.events),
+    );
   });
 });
