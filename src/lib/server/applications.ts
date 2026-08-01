@@ -388,16 +388,19 @@ function cleanupOfferArtifacts(
     }
   };
 
-  // Resolve a pasted-text source before removing the linked report that owns
-  // the metadata. Only a contained inputs/jds path is eligible; URL offers and
-  // malformed/legacy metadata leave no extra source artifact to remove.
+  // Resolve a saved JD source before removing the linked report that owns the
+  // metadata. Only a contained inputs/jds path is eligible; malformed and
+  // legacy metadata leave no extra source artifact to remove.
   let savedJdPath: string | null = null;
   if (removedReport) {
     try {
       const raw = readFileOrNull(join(rootPath, removedReport));
       if (raw) {
         const { frontmatter } = parseFrontmatter(raw);
-        if (frontmatter.source_kind === 'text' && frontmatter.jd_path) {
+        if (
+          (frontmatter.source_kind === 'text' || frontmatter.source_kind === 'url') &&
+          frontmatter.jd_path
+        ) {
           const allowed = resolve(rootPath, 'inputs/jds');
           const full = resolve(rootPath, frontmatter.jd_path);
           const rel = relative(allowed, full);

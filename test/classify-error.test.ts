@@ -57,6 +57,8 @@ describe('classifyProviderError', () => {
     ['ProviderModelNotFoundError', 'model_not_found'],
     ['Rate Limited — too many requests', 'rate_limit'],
     ['Provider is overloaded', 'overloaded'],
+    ['AI_APICallError: Internal server error', 'overloaded'],
+    ['AI_APICallError: No provider available', 'overloaded'],
     ['usage limit reached. It will reset in 2 hours', 'quota'],
     ['ProviderAuthError: run opencode auth login', 'auth'],
     ['ContextOverflowError', 'context_overflow'],

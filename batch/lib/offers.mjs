@@ -36,7 +36,9 @@ export function findOfferRow(rootPath, num) {
     try {
       const { frontmatter } = parseReportFile(readFileSync(full, "utf-8"));
       if (typeof frontmatter.url === "string" && frontmatter.url) url = frontmatter.url;
-      if (frontmatter.source_kind === "text") sourceKind = "text";
+      if (frontmatter.source_kind === "text" || frontmatter.source_kind === "url") {
+        sourceKind = frontmatter.source_kind;
+      }
       if (typeof frontmatter.jd_path === "string") jdPath = frontmatter.jd_path;
       if (typeof frontmatter.jd_hash === "string") jdHash = frontmatter.jd_hash;
     } catch {
@@ -48,7 +50,7 @@ export function findOfferRow(rootPath, num) {
       role: parts[4],
       reportPath,
       url,
-      ...(sourceKind === "text" ? { sourceKind, jdPath, jdHash } : {}),
+      ...(sourceKind ? { sourceKind, jdPath, jdHash } : {}),
     };
   }
   return null;

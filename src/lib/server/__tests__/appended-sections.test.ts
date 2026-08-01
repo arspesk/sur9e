@@ -52,6 +52,32 @@ test('extractAppendedSections — detects Interview Process section', () => {
   expect(result[0].body.includes('Phone screen')).toBeTruthy();
 });
 
+test('extractAppendedSections — detects Negotiation Strategy section', () => {
+  const md = `${REPORT_ONLY_MD}
+
+## Negotiation Strategy
+
+Anchor at the top of the approved range.
+`;
+  const result = extractAppendedSections(md);
+  expect(result.length).toBe(1);
+  expect(result[0].title).toBe('Negotiation Strategy');
+  expect(result[0].body.includes('approved range')).toBeTruthy();
+});
+
+test('extractAppendedSections — preserves Outreach sections', () => {
+  const md = `${REPORT_ONLY_MD}
+
+## Outreach
+
+Message the hiring manager with the role-specific proof point.
+`;
+  const result = extractAppendedSections(md);
+  expect(result).toHaveLength(1);
+  expect(result[0].title).toBe('Outreach');
+  expect(result[0].body).toContain('hiring manager');
+});
+
 test('extractAppendedSections — detects both sections', () => {
   const md = `${REPORT_ONLY_MD}
 

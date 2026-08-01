@@ -12,22 +12,25 @@ function savedJdPath(rootPath, rawPath) {
 }
 
 /**
- * Resolve the job description for either a legacy URL-backed offer or a
- * first-class pasted-text offer. URL sources keep the existing live fetch
- * path; text sources are read only from the contained inputs/jds directory.
+ * Resolve the job description for a legacy URL offer, an imported URL offer,
+ * or a first-class pasted-text offer. Imported URL and text sources are read
+ * only from the contained inputs/jds directory; legacy URLs are fetched live.
  */
 export async function resolveOfferSource(
   rootPath,
   offer,
   { fetcher = fetchJobDescription } = {},
 ) {
-  if (offer?.sourceKind === "text") {
+  if (offer?.sourceKind === "text" || offer?.sourceKind === "url") {
     const full = savedJdPath(rootPath, offer.jdPath);
     if (!full) throw new Error("invalid saved JD path");
     if (!existsSync(full)) throw new Error(`saved JD not found: ${offer.jdPath}`);
     return {
-      kind: "text",
-      label: "Saved pasted job description",
+      kind: offer.sourceKind,
+      label:
+        offer.sourceKind === "url" && offer.url
+          ? offer.url
+          : "Saved pasted job description",
       jd: { status: "ok", text: readFileSync(full, "utf-8") },
     };
   }

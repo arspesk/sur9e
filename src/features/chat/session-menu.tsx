@@ -1,6 +1,14 @@
 'use client';
 
-import { Archive, ArchiveRestore, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  EllipsisVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/behavior/popover';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
@@ -51,7 +59,7 @@ function SessionRowKebab({ label, items }: { label: string; items: KebabItem[] }
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
       >
-        ⋮
+        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
       </button>
       {open && (
         <KebabActionsMenu

@@ -35,6 +35,13 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
 }));
+vi.mock('@/lib/server/status-transition-followup', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/server/status-transition-followup')>();
+  return {
+    ...actual,
+    updateStatusWithFollowup: vi.fn(actual.updateStatusWithFollowup),
+  };
+});
 
 const APPLICATIONS_MD = [
   '# Applications Tracker',
@@ -75,17 +82,20 @@ describe('applications.ts server action', () => {
   });
 
   describe('updateApplicationStatusAction', () => {
-    it('updates the status column for an existing num and returns the new row', async () => {
+    it('uses the status-followup service and returns its updated row and directive', async () => {
+      const { updateStatusWithFollowup } = await import('@/lib/server/status-transition-followup');
       const result = await actions.updateApplicationStatusAction({
         num: 1001,
-        status: 'applied',
+        status: 'interview',
       });
-      expect(result.num).toBe(1001);
-      expect(result.status).toBe('Applied');
+      expect(updateStatusWithFollowup).toHaveBeenCalledWith(root, 1001, 'interview');
+      expect(result.updated.num).toBe(1001);
+      expect(result.updated.status).toBe('Interview');
+      expect(result.followup).toEqual({ num: 1001, jobKind: 'interview-prep' });
       // round-trip: the markdown file actually changed (updateStatus
       // rewrites cols[6] as ` ${newStatus} ` — single space each side).
       const md = readFileSync(join(root, 'data/applications.md'), 'utf-8');
-      expect(md).toMatch(/\|\s*Applied\s*\|/);
+      expect(md).toMatch(/\|\s*Interview\s*\|/);
       expect(md).not.toMatch(/\|\s*Screened\s*\|/);
     });
 
@@ -97,7 +107,8 @@ describe('applications.ts server action', () => {
         num: 1002,
         status: 'skip' as never,
       });
-      expect(result.status).toBe('Discarded');
+      expect(result.updated.status).toBe('Discarded');
+      expect(result.followup).toBeNull();
     });
 
     it('accepts each canonical status from the schema', async () => {
@@ -122,9 +133,9 @@ describe('applications.ts server action', () => {
       ];
       for (const status of canonical) {
         const result = await actions.updateApplicationStatusAction({ num: 1001, status });
-        expect(result.num).toBe(1001);
+        expect(result.updated.num).toBe(1001);
         // displayStatus title-cases — first char must be uppercase
-        expect(result.status[0]).toBe(result.status[0].toUpperCase());
+        expect(result.updated.status[0]).toBe(result.updated.status[0].toUpperCase());
       }
     });
 
@@ -155,19 +166,42 @@ describe('applications.ts server action', () => {
       ).rejects.toThrow();
     });
 
+    it('validates before calling the status-followup service', async () => {
+      const { updateStatusWithFollowup } = await import('@/lib/server/status-transition-followup');
+      await expect(
+        actions.updateApplicationStatusAction({ num: 0, status: 'applied' }),
+      ).rejects.toThrow();
+      expect(updateStatusWithFollowup).not.toHaveBeenCalled();
+    });
+
     it('throws when num does not exist in applications.md', async () => {
       await expect(
         actions.updateApplicationStatusAction({ num: 99999, status: 'applied' }),
       ).rejects.toThrow(/not found/i);
     });
 
-    it('calls revalidatePath for /table, /pipeline, and /report/[filename]', async () => {
+    it('revalidates every application surface after a status update', async () => {
       const { revalidatePath } = await import('@/server/revalidate');
       await actions.updateApplicationStatusAction({ num: 1001, status: 'applied' });
-      const calls = (revalidatePath as ReturnType<typeof vi.fn>).mock.calls;
-      const paths = calls.map(c => c[0]);
-      expect(paths).toContain('/offers');
-      expect(paths).toContain('/report/[filename]');
+      expect(revalidatePath).toHaveBeenCalledTimes(4);
+      expect(revalidatePath).toHaveBeenCalledWith('/');
+      expect(revalidatePath).toHaveBeenCalledWith('/offers');
+      expect(revalidatePath).toHaveBeenCalledWith('/pipeline');
+      expect(revalidatePath).toHaveBeenCalledWith('/report/[filename]', 'page');
+    });
+  });
+
+  describe('batchUpdateApplicationStatusAction', () => {
+    it('keeps the batch result limited to counts and errors', async () => {
+      const result = await actions.batchUpdateApplicationStatusAction({
+        nums: [1001, 99999],
+        status: 'offer',
+      });
+      expect(result).toEqual({
+        ok: 1,
+        failed: 1,
+        errors: [{ num: 99999, error: 'num not found: 99999' }],
+      });
     });
   });
 

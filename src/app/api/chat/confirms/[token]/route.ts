@@ -38,5 +38,15 @@ export async function POST(request: Request, { params }: Params) {
   ) {
     revalidatePath('/offers');
   }
+  if (
+    resolved.outcome === 'approved' &&
+    resolved.result?.ok === true &&
+    'updated' in resolved.result
+  ) {
+    revalidatePath('/');
+    revalidatePath('/offers');
+    revalidatePath('/pipeline');
+    revalidatePath('/report/[filename]', 'page');
+  }
   return Response.json(resolved);
 }

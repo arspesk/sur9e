@@ -72,6 +72,16 @@ describe('workflow planner', () => {
     expect(plan.steps[1]?.dependsOn).toEqual([plan.steps[0]?.id]);
   });
 
+  it('does not silently add screening to an explicit evaluate-only URL request', () => {
+    expect(() =>
+      planWorkflow({
+        targets: [{ url: 'https://example.com/jobs/1' }],
+        modes: ['evaluate'],
+        evaluatedOfferNums: new Set(),
+      }),
+    ).toThrow(/import the job description.*tracked offer number/i);
+  });
+
   it('maps process-queue to a queue screen system step', () => {
     const plan = planWorkflow({
       targets: [],

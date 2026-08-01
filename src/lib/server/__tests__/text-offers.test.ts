@@ -80,6 +80,23 @@ describe('text offers', () => {
     expect(tracker).toContain('| Acme | Senior Engineer | N/A | Screened |');
   });
 
+  it('preserves a source URL while importing its fetched JD without screening', async () => {
+    const root = seedRoot();
+    roots.push(root);
+    const created = await createOrReuseTextOffer(root, {
+      company: 'Acme',
+      role: 'Senior Engineer',
+      url: 'https://example.com/jobs/1',
+      text: 'Own the platform and mentor engineers.',
+    });
+
+    const report = readFileSync(join(root, created.offer.reportPath!), 'utf-8');
+    expect(report).toContain('source_kind: url');
+    expect(report).toContain('url: https://example.com/jobs/1');
+    expect(report).toContain(`jd_path: ${created.jdPath}`);
+    expect(report).toContain(`jd_hash: ${created.jdHash}`);
+  });
+
   it('reuses the exact normalized JD instead of creating a duplicate offer', async () => {
     const root = seedRoot();
     roots.push(root);
@@ -150,6 +167,20 @@ describe('text offers', () => {
     const created = await createOrReuseTextOffer(root, {
       company: 'Acme',
       role: 'Engineer',
+      text: 'Build something useful.',
+    });
+    expect(existsSync(join(root, created.jdPath))).toBe(true);
+    expect(deleteApplication(root, created.offer.num).deleted).toBe(true);
+    expect(existsSync(join(root, created.jdPath))).toBe(false);
+  });
+
+  it('deleting an imported URL offer also removes its saved JD floor', async () => {
+    const root = seedRoot();
+    roots.push(root);
+    const created = await createOrReuseTextOffer(root, {
+      company: 'Acme',
+      role: 'Engineer',
+      url: 'https://example.com/jobs/1',
       text: 'Build something useful.',
     });
     expect(existsSync(join(root, created.jdPath))).toBe(true);

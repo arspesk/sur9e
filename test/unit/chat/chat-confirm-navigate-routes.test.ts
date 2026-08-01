@@ -52,6 +52,7 @@ async function flushImmediate(): Promise<void> {
 type NavigateRoute = typeof import('@/app/api/chat/actions/navigate/route');
 type ConfirmsRoute = typeof import('@/app/api/chat/confirms/[token]/route');
 type StartJobRoute = typeof import('@/app/api/chat/actions/start-job/route');
+type SetStatusRoute = typeof import('@/app/api/chat/actions/set-status/route');
 type CreateTextOfferRoute = typeof import('@/app/api/chat/actions/create-offer-from-text/route');
 
 describe('navigate + confirm resolution routes', () => {
@@ -59,6 +60,7 @@ describe('navigate + confirm resolution routes', () => {
   let navigateRoute: NavigateRoute;
   let confirmsRoute: ConfirmsRoute;
   let startJobRoute: StartJobRoute;
+  let setStatusRoute: SetStatusRoute;
   let createTextOfferRoute: CreateTextOfferRoute;
 
   beforeEach(async () => {
@@ -68,6 +70,7 @@ describe('navigate + confirm resolution routes', () => {
     navigateRoute = await import('@/app/api/chat/actions/navigate/route');
     confirmsRoute = await import('@/app/api/chat/confirms/[token]/route');
     startJobRoute = await import('@/app/api/chat/actions/start-job/route');
+    setStatusRoute = await import('@/app/api/chat/actions/set-status/route');
     createTextOfferRoute = await import('@/app/api/chat/actions/create-offer-from-text/route');
     emitTurnEventMock.mockReset();
     spawnJobMock.mockReset();
@@ -187,6 +190,33 @@ describe('navigate + confirm resolution routes', () => {
         textOffer: { offer: { company: 'Acme', role: 'Platform Engineer' } },
       });
       expect(revalidatePathMock).toHaveBeenCalledWith('/offers');
+    });
+
+    it('revalidates every status surface after an approved status update', async () => {
+      const create = await setStatusRoute.POST(
+        postJson(
+          'http://localhost/api/chat/actions/set-status',
+          { num: 1001, status: 'responded' },
+          { 'x-sur9e-turn': 'turn-status' },
+        ),
+      );
+      const token = (await create.json()).token as string;
+
+      const res = await confirmsRoute.POST(
+        postJson(`http://localhost/api/chat/confirms/${token}`, { approve: true }),
+        { params: Promise.resolve({ token }) },
+      );
+
+      expect((await res.json()).result).toMatchObject({
+        ok: true,
+        updated: { num: 1001, status: 'Responded' },
+      });
+      expect(revalidatePathMock.mock.calls).toEqual([
+        ['/'],
+        ['/offers'],
+        ['/pipeline'],
+        ['/report/[filename]', 'page'],
+      ]);
     });
 
     it('an unknown token resolves to expired', async () => {
