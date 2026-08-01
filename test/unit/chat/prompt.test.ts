@@ -50,6 +50,7 @@ describe('buildChatSystemPrompt', () => {
 
   it('treats a pasted-text Screened/N/A offer as unscreened and screenable by number', () => {
     expect(prompt).toContain('source_kind: text');
+    expect(prompt).toContain('source_kind: url');
     expect(prompt).toContain('score: N/A');
     expect(prompt).toContain('screen with params.num');
     expect(prompt).toContain('does not require a URL');
@@ -64,6 +65,22 @@ describe('buildChatSystemPrompt', () => {
       'Use screen-evaluate only when the user explicitly asks for both screening and evaluation',
     );
     expect(prompt).not.toContain('Create + screen + evaluate (recommended)');
+  });
+
+  it('supports evaluating a URL without silently screening it first', () => {
+    expect(prompt).toContain('evaluate a URL without screening');
+    expect(prompt).toContain('call get_tracker first');
+    expect(prompt).toContain('create_offer_from_text');
+    expect(prompt).toContain('source URL');
+    expect(prompt).toContain('ask for the pasted job description');
+  });
+
+  it('checks tracked and active work before offering duplicate evaluation', () => {
+    expect(prompt).toContain('Before offering or starting any offer-scoped mode');
+    expect(prompt).toContain('match by tracker number, company and role, or source URL');
+    expect(prompt).toContain('call get_report');
+    expect(prompt).toContain('list_jobs and list_workflows');
+    expect(prompt).toContain('Do not offer evaluation again');
   });
 
   it('requires durable Markdown links when mentioning internal app pages', () => {

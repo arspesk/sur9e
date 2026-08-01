@@ -105,6 +105,11 @@ function planTarget(
 ): PlannedWorkflowStep[] {
   const expanded = expandModes(requestedModes);
   const isUrl = 'url' in target;
+  if (isUrl && expanded.includes('evaluate') && !expanded.includes('screen')) {
+    throw new Error(
+      'To evaluate a URL without screening, import the job description first and use its tracked offer number',
+    );
+  }
   if (isUrl && !expanded.includes('screen')) expanded.unshift('screen');
 
   const needsEvaluation =

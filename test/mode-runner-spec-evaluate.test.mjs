@@ -208,6 +208,44 @@ created
     expect(frontmatter.jd_path).toBe('inputs/jds/acme.md');
     expect(frontmatter.url).toBeUndefined();
   });
+
+  it('loads an imported URL JD floor locally and preserves its source metadata on write', async () => {
+    mkdirSync(join(root, 'inputs/jds'), { recursive: true });
+    writeFileSync(join(root, 'inputs/jds/acme.md'), 'IMPORTED URL JD\n', 'utf-8');
+    writeFileSync(
+      join(root, 'artifacts/reports/007-acme-2026-06-01.md'),
+      `---
+num: 7
+company: Acme
+role: SE
+url: https://acme.com/jobs/1
+source_kind: url
+jd_path: inputs/jds/acme.md
+jd_hash: ${'c'.repeat(64)}
+score: N/A
+---
+
+## TL;DR
+
+imported
+`,
+      'utf-8',
+    );
+    const inputs = await evaluateSpec.loadInputs(ctx);
+    expect(fetchJobDescription).not.toHaveBeenCalled();
+    expect(inputs.jd.text).toContain('IMPORTED URL JD');
+    expect(evaluateSpec.buildPrompt(ctx, inputs)).toContain('pre-fetched FLOOR');
+
+    const payload = evaluateSpec.parse(`<<<SUR9E_OUTPUT>>>\n${MODEL_REPORT}\n<<<SUR9E_END>>>`);
+    await evaluateSpec.write(ctx, inputs, payload);
+    const { frontmatter } = parseReportFile(
+      readFileSync(join(root, 'artifacts/reports/007-acme-2026-06-01.md'), 'utf-8'),
+    );
+    expect(frontmatter.source_kind).toBe('url');
+    expect(frontmatter.jd_path).toBe('inputs/jds/acme.md');
+    expect(frontmatter.jd_hash).toBe('c'.repeat(64));
+    expect(frontmatter.url).toBe('https://acme.com/jobs/1');
+  });
 });
 
 describe('evaluate write() — graft preserved sections', () => {

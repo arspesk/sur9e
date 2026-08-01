@@ -18,6 +18,8 @@ const MAX_TEXT_LENGTH = 32_000;
 
 export interface CreateTextOfferInput {
   text: string;
+  /** Source URL when `text` was fetched for a direct, no-screen import. */
+  url?: string;
   company?: string;
   role?: string;
   reservedNum?: number;
@@ -73,7 +75,9 @@ function existingByHash(rootPath: string, hash: string): ApplicationRow | null {
       const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (!match) continue;
       const fm = yaml.load(match[1]) as Record<string, unknown> | null;
-      if (fm?.source_kind === 'text' && fm.jd_hash === hash) return row;
+      if ((fm?.source_kind === 'text' || fm?.source_kind === 'url') && fm.jd_hash === hash) {
+        return row;
+      }
     } catch {
       // One damaged report must not prevent dedup against the remaining rows.
     }
@@ -159,6 +163,8 @@ export async function createOrReuseTextOffer(
       const slug = companySlug(company) || 'unknown';
       const jdPath = `inputs/jds/${jdHash}.md`;
       const reportPath = `artifacts/reports/${String(num).padStart(3, '0')}-${slug}-${today}.md`;
+      const sourceKind = input.url ? 'url' : 'text';
+      const sourceLabel = input.url ? 'an imported job description' : 'a pasted job description';
 
       mkdirSync(join(rootPath, 'inputs/jds'), { recursive: true });
       mkdirSync(join(rootPath, 'artifacts/reports'), { recursive: true });
@@ -171,13 +177,14 @@ export async function createOrReuseTextOffer(
           company,
           role,
           date: today,
+          ...(input.url ? { url: input.url } : {}),
           status: 'Screened',
           state: 'screened',
           score: 'N/A',
-          source_kind: 'text',
+          source_kind: sourceKind,
           jd_path: jdPath,
           jd_hash: jdHash,
-          tldr: 'Created from a pasted job description. Run screening or another offer mode when ready.',
+          tldr: `Created from ${sourceLabel}. Run screening or another offer mode when ready.`,
         },
         body: [
           '<div data-callout data-variant="info" data-emoji="💡">',
@@ -188,7 +195,7 @@ export async function createOrReuseTextOffer(
           '',
           '## TL;DR',
           '',
-          'Created from a pasted job description. No screening score has been assigned yet.',
+          `Created from ${sourceLabel}. No screening score has been assigned yet.`,
           '',
         ].join('\n'),
       });
@@ -203,7 +210,9 @@ export async function createOrReuseTextOffer(
         'Screened',
         '❌',
         `[${num}](${reportPath})`,
-        'Created from pasted job description',
+        input.url
+          ? 'Imported job description from source URL'
+          : 'Created from pasted job description',
         '',
       ].join('\t');
       writeFileSync(
