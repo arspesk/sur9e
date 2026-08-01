@@ -6,40 +6,57 @@ const root = process.cwd();
 const pipelineCss = readFileSync(join(root, 'src/app/styles/pipeline-inline.css'), 'utf8');
 const boardCard = readFileSync(join(root, 'src/features/pipeline/board-card.tsx'), 'utf8');
 
-function ruleBlocks(source: string, selector: string): string {
+function declarationsFor(source: string, selector: string): Map<string, string> {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const matches = [
     ...source.matchAll(new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')),
   ];
 
-  expect(matches.length, `Expected a CSS rule for ${selector}`).toBeGreaterThan(0);
-  return matches.map(match => match[1]).join('\n');
+  expect(matches, `Expected exactly one CSS rule for ${selector}`).toHaveLength(1);
+
+  const blockWithoutComments = matches[0][1].replace(/\/\*[\s\S]*?\*\//g, '');
+  return new Map(
+    [...blockWithoutComments.matchAll(/(?:^|;)\s*([\w-]+)\s*:\s*([^;]+?)\s*(?=;|$)/g)].map(
+      match => [match[1], match[2].trim()],
+    ),
+  );
+}
+
+function cardIdLineSubtree(source: string): { markup: string; end: number } {
+  const opening = '<div className="card-id-line">';
+  const start = source.indexOf(opening);
+  expect(start, 'Expected .card-id-line JSX').toBeGreaterThan(-1);
+
+  const end = source.indexOf('</div>', start) + '</div>'.length;
+  expect(end, 'Expected .card-id-line closing tag').toBeGreaterThan(start + opening.length);
+  return { markup: source.slice(start, end), end };
 }
 
 describe('pipeline card style contract', () => {
   it('keeps the score beside a shrinkable company name and clear of the overflow menu', () => {
-    const cardIdLine = ruleBlocks(pipelineCss, '.card-id-line');
-    const cardCompany = ruleBlocks(pipelineCss, '.card-company');
-    const scoreNum = ruleBlocks(pipelineCss, '.card .score-num');
+    const cardIdLine = declarationsFor(pipelineCss, '.card-id-line');
+    const cardCompany = declarationsFor(pipelineCss, '.card-company');
+    const scoreNum = declarationsFor(pipelineCss, '.card .score-num');
 
-    expect(cardIdLine).toContain('justify-content: flex-start');
-    expect(cardIdLine).not.toContain('justify-content: space-between');
-    expect(cardIdLine).toContain('align-items: baseline');
-    expect(cardIdLine).toContain('gap: 8px');
-    expect(cardIdLine).toContain('padding-right: 30px');
-    expect(cardCompany).toContain('flex: 0 1 auto');
-    expect(cardCompany).toContain('min-width: 0');
-    expect(scoreNum).toContain('flex: 0 0 auto');
+    expect(cardIdLine.get('justify-content')).toBe('flex-start');
+    expect(cardIdLine.get('align-items')).toBe('baseline');
+    expect(cardIdLine.get('gap')).toBe('8px');
+    expect(cardIdLine.get('padding-inline-end')).toBe('44px');
+    expect(cardIdLine.has('padding-right')).toBe(false);
+    expect(cardCompany.get('flex')).toBe('0 1 auto');
+    expect(cardCompany.get('min-width')).toBe('0');
+    expect(scoreNum.get('flex')).toBe('0 0 auto');
   });
 
-  it('renders company, score, then the card actions menu in that order', () => {
-    const cardMarkup = boardCard.slice(boardCard.indexOf('<div className="card-top">'));
-    const companyIndex = cardMarkup.indexOf('className="card-company"');
-    const scoreIndex = cardMarkup.indexOf('className={`score-num');
-    const kebabIndex = cardMarkup.indexOf('className="board-card-kebab"');
+  it('keeps company and score as ordered siblings inside the identity-line subtree', () => {
+    const { markup, end } = cardIdLineSubtree(boardCard);
+    const childClasses = [...markup.matchAll(/<span className=(?:"([^"]+)"|\{`([^`]+)`\})/g)].map(
+      match => match[1] ?? match[2],
+    );
+    const kebabIndex = boardCard.indexOf('className="board-card-kebab"', end);
 
-    expect(companyIndex).toBeGreaterThan(-1);
-    expect(scoreIndex).toBeGreaterThan(companyIndex);
-    expect(kebabIndex).toBeGreaterThan(scoreIndex);
+    expect(childClasses).toEqual(['card-company', 'score-num ${scoreLevel(score)}']);
+    expect(markup).not.toContain('board-card-kebab');
+    expect(kebabIndex).toBeGreaterThan(end);
   });
 });

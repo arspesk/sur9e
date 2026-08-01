@@ -401,8 +401,8 @@
   top: 6px;
   right: 6px;
   /* Always visible — every view, every state, hover or not. The card-id line
-     reserves room for it (padding-right above) so it never collides with the
-     score. Previously hover-gated, which hid it from touch users at rest. */
+     reserves its full responsive target width below so it never collides with
+     the score. Previously hover-gated, which hid it from touch users at rest. */
   opacity: 1;
 }
 /* Dark mode override removed — .card now uses var(--surface) which
@@ -436,11 +436,9 @@
   justify-content: flex-start;
   align-items: baseline;
   gap: 8px;
-  /* Reserve room for the absolute kebab (top:6/right:6, ~26px glyph) on every
-     width so the company and score never render under the ⋯ — on touch the
-     kebab is always visible, on desktop it appears on hover. Consistent across
-     all views. */
-  padding-right: 30px;
+  /* Reserve the full 44px touch target at the logical end. The desktop 32px
+     button fits the same slot without a responsive layout fork. */
+  padding-inline-end: 44px;
 }
 .card-company {
   flex: 0 1 auto;
