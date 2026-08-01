@@ -5,7 +5,6 @@
 - An AI coding CLI — at least one of [Claude Code](https://claude.com/claude-code) (the most polished path), [Codex](https://github.com/openai/codex), or [OpenCode](https://opencode.ai) — installed and authenticated
 - Node.js 20+ (for the web UI and CLI scripts)
 - Python 3.10+ (for the batch job scanner) — on macOS the installer auto-installs this via [Homebrew](https://brew.sh) if it's missing
-- POSIX `ps` plus `lsof` (used by the managed web launcher to verify process ownership); macOS includes both, while minimal Linux installs may need `procps` and `lsof`
 
 ## Quick Start (4 steps)
 

@@ -5,7 +5,6 @@ import { useToastStore } from '@/components/toast/toast-store';
 import { normalizeApplications } from '@/features/table/applications-normalize';
 import type { ApplicationsResponse, RawApplicationEntry } from '@/features/table/table-types';
 import { fetchJson } from '@/lib/api/fetch-json';
-import { openStatusFollowup } from '@/lib/open-status-followup';
 import type { ApplicationStatus } from '@/lib/schemas/applications';
 import {
   deleteApplicationAction,
@@ -69,8 +68,7 @@ export function useUpdateApplicationStatus() {
         .getState()
         .push('danger', err instanceof Error ? err.message : `#${num} status update failed`);
     },
-    onSuccess: (data, { num }) => {
-      openStatusFollowup(data.followup);
+    onSuccess: (_data, { num }) => {
       // Invalidate every cache holding this row so all three surfaces
       // (table list, drawer detail, full report hero pill) re-render with
       // the new status without a manual page reload.

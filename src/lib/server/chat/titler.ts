@@ -13,7 +13,6 @@ import type { Provider } from '../providers/types';
 import { setAutoTitle } from './store';
 
 const TITLE_TIMEOUT_MS = 60_000;
-const TITLE_MAX_CHARS = 80;
 // Explicit maxBuffer — the strings-maxBuffer lesson (commit 6d1283d1).
 const TITLE_MAX_BUFFER = 10 * 1024 * 1024;
 const SNIPPET_CHARS = 500;
@@ -59,15 +58,13 @@ export function _setTitleExecImpl(impl: ExecImpl | null): void {
   execImpl = impl ?? realExec;
 }
 
-/** First user message → ≤80-char title with explicit dots when truncated. */
+/** First user message → ≤40-char title, truncated at a word boundary. */
 export function fallbackTitleFrom(userMessage: string): string {
   const clean = userMessage.replace(/\s+/g, ' ').trim();
-  if (clean.length <= TITLE_MAX_CHARS) return clean || 'New chat';
-  const contentBudget = TITLE_MAX_CHARS - 3;
-  const cut = clean.slice(0, contentBudget);
+  if (clean.length <= 40) return clean || 'New chat';
+  const cut = clean.slice(0, 40);
   const lastSpace = cut.lastIndexOf(' ');
-  const truncated = (lastSpace > contentBudget / 2 ? cut.slice(0, lastSpace) : cut).trim();
-  return `${truncated}...`;
+  return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
 /** Applied synchronously at first send — 'New chat' never lingers. */
@@ -80,7 +77,7 @@ export function applyFallbackTitle(
 }
 
 function sanitizeTitle(raw: string): string | null {
-  // Scan every line for the FIRST that cleans to a plausible title (3–80
+  // Scan every line for the FIRST that cleans to a plausible title (3–60
   // chars), rather than only inspecting the first non-empty line. With
   // outputFormat 'text' + CODEX_QUIET_MODE the three CLIs already put their
   // banner/telemetry on stderr and emit a clean title on stdout, so line 1 is
@@ -93,7 +90,7 @@ function sanitizeTitle(raw: string): string | null {
       .trim()
       .replace(/^["'`\s]+|["'`.\s]+$/g, '')
       .replace(/\s+/g, ' ');
-    if (title.length >= 3 && title.length <= TITLE_MAX_CHARS) return title;
+    if (title.length >= 3 && title.length <= 60) return title;
   }
   return null;
 }

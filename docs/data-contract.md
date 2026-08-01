@@ -103,8 +103,6 @@ executable policy is the exact allowlist.
 | `update-system.mjs`                | Update, rollback, and update-check logic                                   |
 | `test-all.mjs`                     | Local and CI quick gate                                                    |
 | `scripts/sync-release-version.mjs` | Release version synchronizer                                               |
-| `scripts/update-worker.mjs`        | Detached update, restart, verification, and recovery worker                |
-| `scripts/web.mjs`                  | Managed local, production, and Tailscale web launcher                      |
 | `batch/batch-prompt.md`            | Batch worker prompt                                                        |
 | `batch/batch-runner.sh`            | Batch orchestrator                                                         |
 | `.claude/skills/sur9e/*`           | Project-owned sur9e skill                                                  |

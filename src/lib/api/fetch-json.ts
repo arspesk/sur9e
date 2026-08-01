@@ -1,20 +1,11 @@
 /**
  * fetchJson — JSON fetch with structured error extraction.
  *
- * Throws FetchJsonError(status, msg) where msg is `body.error` if the
- * response is JSON with that field, otherwise the raw body text, otherwise
- * the status line. Callers can use the status without parsing the message.
+ * Throws Error(msg) where msg is `body.error` if the response is JSON
+ * with that field, otherwise the raw body text, otherwise the status
+ * line. The four legacy /api routes use `{ "error": "..." }` envelopes,
+ * so this preserves their messages instead of surfacing a bare 500.
  */
-export class FetchJsonError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'FetchJsonError';
-    this.status = status;
-  }
-}
-
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -25,7 +16,7 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
     } catch {
       // body wasn't JSON — fall back to raw text
     }
-    throw new FetchJsonError(response.status, msg || `${response.status} ${response.statusText}`);
+    throw new Error(msg || `${response.status} ${response.statusText}`);
   }
   return response.json() as Promise<T>;
 }

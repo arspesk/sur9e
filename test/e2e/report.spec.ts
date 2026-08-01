@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  HEADING_REPORT_FIXTURE,
-  REPORT_FIXTURE,
-  skipIfNoHeadingReport,
-  skipIfNoReport,
-} from './_fixtures';
+import { REPORT_FIXTURE, skipIfNoReport } from './_fixtures';
 
 // Report fixture is resolved dynamically from artifacts/reports/ (user data),
 // so these specs assert STRUCTURE — not the user's specific company/score —
@@ -38,9 +33,9 @@ test('/report/[filename] mounts the editable body (be-prose) below the hero', as
 });
 
 test('/report/[filename] renders TOC indicator lines (desktop ≥1025px)', async ({ page }) => {
-  skipIfNoHeadingReport();
+  skipIfNoReport();
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto(`/report/${HEADING_REPORT_FIXTURE}`);
+  await page.goto(`/report/${REPORT_FIXTURE}`);
   await expect(page.locator('[data-testid="report-body"]')).toBeVisible({ timeout: 10_000 });
   // The rail is populated from the editor's live headings, so wait for the
   // TipTap body to mount before counting (avoids a race under parallel load).
@@ -56,45 +51,4 @@ test('/report/[filename] renders TOC indicator lines (desktop ≥1025px)', async
 test('/report/[filename] surfaces an error message for a missing offer', async ({ page }) => {
   await page.goto('/report/999-does-not-exist-2026-05-15.md');
   await expect(page.locator('[data-testid="report-error"]')).toBeVisible({ timeout: 10_000 });
-});
-
-test('/report/[filename] keeps slash-menu keyboard selection visible while scrolling', async ({
-  page,
-}) => {
-  skipIfNoReport();
-  // Opening the suggestion menu requires a temporary slash in the editor.
-  // Block the debounced/unmount PATCH so a browser test never edits the
-  // user's real report fixture.
-  await page.route('**/api/reports/*/body', async route => {
-    if (route.request().method() === 'PATCH') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    } else {
-      await route.continue();
-    }
-  });
-  await page.goto(`/report/${REPORT_FIXTURE}`);
-  const editor = page.locator('[data-testid="report-body"] [contenteditable="true"]').first();
-  await expect(editor).toBeVisible({ timeout: 10_000 });
-  await editor.focus();
-  await page.keyboard.press('Control+End');
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('/');
-
-  const menu = page.locator('.be-cmdk');
-  await expect(menu).toBeVisible();
-  const initialScroll = await menu.evaluate(element => element.scrollTop);
-  for (let index = 0; index < 20; index++) await page.keyboard.press('ArrowDown');
-
-  const selected = menu.locator('[aria-selected="true"]');
-  await expect(selected).toBeVisible();
-  const finalScroll = await menu.evaluate(element => element.scrollTop);
-  const menuBox = await menu.boundingBox();
-  const selectedBox = await selected.boundingBox();
-  expect(finalScroll).toBeGreaterThan(initialScroll);
-  expect(menuBox).not.toBeNull();
-  expect(selectedBox).not.toBeNull();
-  expect(selectedBox!.y).toBeGreaterThanOrEqual(menuBox!.y - 1);
-  expect(selectedBox!.y + selectedBox!.height).toBeLessThanOrEqual(
-    menuBox!.y + menuBox!.height + 1,
-  );
 });

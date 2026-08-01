@@ -97,14 +97,6 @@
   --space-9: 96px;
   --space-10: 128px;
 
-  /* ─── Update controls ─── */
-  --update-badge-padding-block: 4px;
-  --update-badge-padding-inline: 9px;
-  --update-panel-min-height: 188px;
-  --update-panel-mobile-min-height: 246px;
-  --update-actions-min-height: 44px;
-  --update-emphasis-border-width: 3px;
-
   /* ─── Layout (unchanged) ─── */
   --rail-w: 64px;
   --rail-w-full: 220px;

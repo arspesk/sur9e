@@ -2,7 +2,7 @@
 
 /* features/table/table-row-actions.tsx
  *
- * Per-row kebab in the offers table. Renders the vertical-dots trigger and opens
+ * Per-row kebab in the offers table. Renders the ⋯ trigger button and opens
  * the shared full row menu (links · apply/follow-up · AI generation · delete)
  * via <RowActionsMenu> in ./row-actions-menu.tsx.
  *
@@ -10,7 +10,6 @@
  * locked-row affordances move in with the job-runner wiring.
  */
 
-import { EllipsisVertical } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { IconButton } from '@/components/primitives';
 import { RowActionsMenu } from './row-actions-menu';
@@ -46,7 +45,11 @@ export function TableRowActions({ row, lockedNums: _lockedNums }: TableRowAction
           e.stopPropagation();
           setMenuOpen(v => !v);
         }}
-        icon={<EllipsisVertical className="menu-dots-icon" aria-hidden="true" />}
+        icon={
+          <span aria-hidden="true" className="icon-ellipsis">
+            ⋯
+          </span>
+        }
       />
       <RowActionsMenu open={menuOpen} anchorRef={kebabRef} row={row} onClose={closeMenu} />
     </>

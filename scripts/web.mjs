@@ -19,14 +19,9 @@
 // `tailscale serve` (tailnet-internal) — never funnel.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  hasInterruptedUpdateOnStartup,
-  recoverInterruptedUpdateOnStartup,
-} from './update-worker.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Exported so the runtime commands (and any caller) can resolve the
@@ -131,66 +126,8 @@ function readMeta(stateDir) {
   }
 }
 
-function writeMeta(stateDir, meta) {
-  mkdirSync(stateDir, { recursive: true });
-  writeFileSync(pidFile(stateDir), String(meta.pid));
-  writeFileSync(metaFile(stateDir), JSON.stringify(meta, null, 2));
-}
-
-function clearState(stateDir, expected) {
-  if (expected !== undefined) {
-    const pid = readPid(stateDir);
-    const meta = readMeta(stateDir);
-    if (
-      pid !== expected.pid ||
-      meta?.pid !== expected.pid ||
-      meta?.root !== expected.root ||
-      meta?.processStart !== expected.processStart ||
-      meta?.launchId !== expected.launchId
-    ) {
-      return false;
-    }
-  }
+function clearState(stateDir) {
   for (const f of [pidFile(stateDir), metaFile(stateDir)]) rmSync(f, { force: true });
-  return true;
-}
-
-function readManagedMeta(stateDir) {
-  const pid = readPid(stateDir);
-  const meta = readMeta(stateDir);
-  if (
-    !pid ||
-    !meta ||
-    meta.pid !== pid ||
-    typeof meta.prod !== 'boolean' ||
-    typeof meta.tailscale !== 'boolean' ||
-    typeof meta.startedAt !== 'string' ||
-    !Number.isFinite(Date.parse(meta.startedAt)) ||
-    typeof meta.root !== 'string' ||
-    typeof meta.processStart !== 'string' ||
-    !meta.processStart ||
-    typeof meta.launchId !== 'string' ||
-    !meta.launchId
-  ) {
-    return null;
-  }
-  return meta;
-}
-
-function inspectLiveProcess(pid, { exec = defaultExec } = {}) {
-  const info = psPidInfo(pid, { exec });
-  if (!info) return null;
-  const start = exec('ps', ['-p', String(pid), '-o', 'lstart=']);
-  const cwd = exec('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn']);
-  const cwdPath = /^n(.+)$/m.exec(cwd.stdout ?? '')?.[1];
-  if (start.status !== 0 || !start.stdout?.trim() || cwd.status !== 0 || !cwdPath) return null;
-  return {
-    pid,
-    ppid: info.ppid,
-    command: info.command,
-    cwd: resolve(cwdPath),
-    start: start.stdout.trim(),
-  };
 }
 
 /** Command line of a live process, or null when the PID is dead.
@@ -200,31 +137,9 @@ function psCommand(pid, { exec }) {
   return res.status === 0 ? res.stdout.trim() : null;
 }
 
-function isManagedLauncher(meta, { root, inspectProcess }) {
-  if (resolve(meta.root) !== resolve(root)) return false;
-  const identity = inspectProcess(meta.pid);
-  return Boolean(
-    identity &&
-      identity.pid === meta.pid &&
-      identity.start === meta.processStart &&
-      resolve(identity.cwd) === resolve(root) &&
-      identity.command.includes('scripts/web.mjs'),
-  );
-}
-
-/** Persisted launch mode for server-side orchestrators. Stale, foreign, or
- * malformed state falls back to the local dev mode with no tailnet exposure. */
-export function getWebLaunchMode({
-  stateDir = DEFAULT_STATE_DIR,
-  exec = defaultExec,
-  root = ROOT,
-  inspectProcess = pid => inspectLiveProcess(pid, { exec }),
-} = {}) {
-  const meta = readManagedMeta(stateDir);
-  if (!meta || !isManagedLauncher(meta, { root, inspectProcess })) {
-    return { prod: false, tailscale: false };
-  }
-  return { prod: meta.prod, tailscale: meta.tailscale };
+/** True when `pid` is a live process whose command line is this launcher. */
+function isOurLauncher(pid, { exec }) {
+  return psCommand(pid, { exec })?.includes('scripts/web.mjs') ?? false;
 }
 
 // ── Tailscale serve (tailnet-internal HTTPS; NEVER funnel) ──
@@ -282,33 +197,13 @@ export async function cmdStart(opts, deps = {}) {
     error = console.error,
     stateDir = DEFAULT_STATE_DIR,
     env = process.env,
-    processImpl = process,
-    now = () => new Date().toISOString(),
-    root = ROOT,
-    launchId: launchIdFactory = randomUUID,
-    inspectProcess = pid => inspectLiveProcess(pid, { exec }),
-    recoverUpdate = recoverInterruptedUpdateOnStartup,
-    hasInterruptedUpdate = hasInterruptedUpdateOnStartup,
   } = deps;
-  const launchId = env.SUR9E_WEB_LAUNCH_ID || launchIdFactory();
 
   const listener = getListener({ exec });
   if (listener) {
     error(`:${PORT} is already in use by PID ${listener.pid} (${listener.command}).`);
     error('Not starting a second server. `npm run web:status` to inspect it.');
     return 1;
-  }
-
-  if (hasInterruptedUpdate(root)) {
-    const recovery = await recoverUpdate(root);
-    if (recovery.status === 'recovered') {
-      if (recovery.result.status === 'failed') {
-        error('Interrupted update recovery failed — the server was not started.');
-        return 1;
-      }
-      log('Recovered the previous Sur9e version after an interrupted update.');
-      return 0;
-    }
   }
 
   // Prod always rebuilds; a failed build aborts with nothing left running.
@@ -326,55 +221,11 @@ export async function cmdStart(opts, deps = {}) {
     }
   }
 
-  if (opts.detach) {
-    return detachSelf(opts, {
-      log,
-      error,
-      stateDir,
-      exec,
-      exists,
-      spawnImpl,
-      env,
-      processImpl,
-      now,
-      root,
-      launchId,
-      inspectProcess,
-    });
-  }
-  return runForeground(opts, {
-    exec,
-    spawnImpl,
-    exists,
-    log,
-    error,
-    stateDir,
-    env,
-    processImpl,
-    now,
-    root,
-    launchId,
-    inspectProcess,
-  });
+  if (opts.detach) return detachSelf(opts, { log, error, stateDir, exec, exists });
+  return runForeground(opts, { exec, spawnImpl, exists, log, error, stateDir });
 }
 
-function detachSelf(
-  opts,
-  {
-    log,
-    error,
-    stateDir,
-    exec,
-    exists,
-    spawnImpl,
-    env,
-    processImpl,
-    now,
-    root,
-    launchId,
-    inspectProcess,
-  },
-) {
+function detachSelf(opts, { log, error: _error, stateDir, exec, exists }) {
   mkdirSync(stateDir, { recursive: true });
   const fd = openSync(logFile(stateDir), 'a');
   const args = [fileURLToPath(import.meta.url)];
@@ -383,28 +234,26 @@ function detachSelf(
   // explicit --dev so a `--dev --tailscale` start stays dev after re-spawn.
   else if (opts.tailscale) args.push('--dev');
   if (opts.tailscale) args.push('--tailscale');
-  const child = spawnImpl(processImpl.execPath, args, {
+  const child = spawn(process.execPath, args, {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', fd, fd],
-    env: { ...env, SUR9E_WEB_SKIP_BUILD: '1', SUR9E_WEB_LAUNCH_ID: launchId },
+    env: { ...process.env, SUR9E_WEB_SKIP_BUILD: '1' },
   });
-  const identity = inspectProcess(child.pid);
-  if (!identity) {
-    error('Could not verify detached web launcher ownership — stopping it.');
-    child.kill('SIGTERM');
-    child.unref();
-    return 1;
-  }
-  writeMeta(stateDir, {
-    pid: child.pid,
-    prod: opts.prod,
-    tailscale: opts.tailscale,
-    startedAt: now(),
-    root: resolve(root),
-    processStart: identity.start,
-    launchId,
-  });
+  writeFileSync(pidFile(stateDir), String(child.pid));
+  writeFileSync(
+    metaFile(stateDir),
+    JSON.stringify(
+      {
+        pid: child.pid,
+        prod: opts.prod,
+        tailscale: opts.tailscale,
+        startedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
   child.unref();
   log(
     `Started detached (PID ${child.pid}, mode: ${opts.prod ? 'prod' : 'dev'}${opts.tailscale ? ' + tailscale' : ''}).`,
@@ -419,23 +268,7 @@ function detachSelf(
   return 0;
 }
 
-function runForeground(
-  opts,
-  {
-    exec,
-    spawnImpl,
-    exists,
-    log,
-    error,
-    stateDir,
-    env: inheritedEnv,
-    processImpl,
-    now,
-    root,
-    launchId,
-    inspectProcess,
-  },
-) {
+function runForeground(opts, { exec, spawnImpl, exists, log, error }) {
   // Spawn the local next binary DIRECTLY — an npx intermediary does not
   // reliably forward SIGTERM to its child, so `stop` would orphan the
   // actual server while the port stays bound.
@@ -447,29 +280,12 @@ function runForeground(
   // the tailnet hostname so next.config.ts can list it in
   // allowedDevOrigins. Prod builds don't have the restriction but the
   // env var is harmless there.
-  const env = { ...inheritedEnv };
-  env.SUR9E_WEB_LAUNCH_ID = launchId;
+  const env = { ...process.env };
   if (opts.tailscale) {
     const url = getTailnetUrl({ exec, exists });
     if (url) env.SUR9E_TAILNET_HOST = new URL(url).hostname;
   }
-  const ownerPid = processImpl.pid;
-  const identity = inspectProcess(ownerPid);
-  if (!identity) {
-    error('Could not verify foreground web launcher ownership — nothing started.');
-    return 1;
-  }
   const child = spawnImpl(NEXT_BIN, args, { cwd: ROOT, stdio: 'inherit', env });
-  const launchMeta = {
-    pid: ownerPid,
-    prod: opts.prod,
-    tailscale: opts.tailscale,
-    startedAt: now(),
-    root: resolve(root),
-    processStart: identity.start,
-    launchId,
-  };
-  writeMeta(stateDir, launchMeta);
 
   let serveEnabled = false;
   if (opts.tailscale) {
@@ -488,12 +304,11 @@ function runForeground(
     if (serveEnabled) resetServe({ exec, exists, error });
     child.kill('SIGTERM');
   };
-  processImpl.on('SIGINT', shutdown);
-  processImpl.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
   child.on('exit', code => {
     if (serveEnabled) resetServe({ exec, exists, error });
-    clearState(stateDir, launchMeta);
-    processImpl.exit(code ?? 0);
+    process.exit(code ?? 0);
   });
   return new Promise(() => {}); // lifetime owned by the child's exit handler
 }
@@ -513,8 +328,6 @@ export function cmdStatus(deps = {}) {
     exists = existsSync,
     log = console.log,
     stateDir = DEFAULT_STATE_DIR,
-    root = ROOT,
-    inspectProcess = processPid => inspectLiveProcess(processPid, { exec }),
   } = deps;
   const listener = getListener({ exec });
   if (!listener) {
@@ -522,17 +335,17 @@ export function cmdStatus(deps = {}) {
     return 1;
   }
   log(`Listening on :${PORT} — PID ${listener.pid} (${listener.command})`);
-  const meta = readManagedMeta(stateDir);
-  const managed = meta ? isManagedLauncher(meta, { root, inspectProcess }) : false;
-  if (managed) {
+  const pid = readPid(stateDir);
+  const meta = readMeta(stateDir);
+  if (pid && isOurLauncher(pid, { exec })) {
     log(
-      `Managed by the sur9e launcher (wrapper PID ${meta.pid}, mode: ${meta.prod ? 'prod' : 'dev'}${meta.tailscale ? ' + tailscale' : ''}, started ${meta.startedAt}).`,
+      `Managed by the sur9e launcher (wrapper PID ${pid}, mode: ${meta?.prod ? 'prod' : 'dev'}${meta?.tailscale ? ' + tailscale' : ''}, started ${meta?.startedAt ?? 'unknown'}).`,
     );
   } else {
     log('Not managed by the sur9e launcher (started elsewhere).');
   }
   log(`Local: http://localhost:${PORT}`);
-  if (managed && meta.tailscale) {
+  if (meta?.tailscale) {
     const url = getTailnetUrl({ exec, exists });
     if (url) log(`Tailnet: ${url}`);
   }
@@ -546,32 +359,6 @@ function safeKill(kill, pid, signal) {
   } catch {
     /* process already gone between poll and kill — fine */
   }
-}
-
-function signalManagedLauncher(meta, signal, { inspectProcess, kill, root }) {
-  if (!isManagedLauncher(meta, { inspectProcess, root })) return false;
-  safeKill(kill, meta.pid, signal);
-  return true;
-}
-
-function ownedDescendantSnapshot(pid, meta, { inspectProcess, root }) {
-  const target = inspectProcess(pid);
-  if (!target || !isManagedLauncher(meta, { inspectProcess, root })) return null;
-  let current = target;
-  for (let depth = 0; current && depth < 16; depth += 1) {
-    if (current.pid === meta.pid) return { pid: target.pid, start: target.start };
-    if (!Number.isInteger(current.ppid) || current.ppid <= 1) return null;
-    current = inspectProcess(current.ppid);
-  }
-  return null;
-}
-
-function signalOwnedDescendant(snapshot, meta, signal, deps) {
-  const current = deps.inspectProcess(snapshot.pid);
-  if (!current || current.start !== snapshot.start) return false;
-  if (!ownedDescendantSnapshot(snapshot.pid, meta, deps)) return false;
-  safeKill(deps.kill, snapshot.pid, signal);
-  return true;
 }
 
 /** Poll until :3000 is free or `ms` elapses. Returns true once it clears. */
@@ -591,6 +378,31 @@ function psPidInfo(pid, { exec }) {
   return m ? { ppid: Number(m[1]), command: m[2] } : null;
 }
 
+/** True when the :3000 listener belongs to THIS checkout — an untracked
+ *  foreground `npm run web` (no state file), vs a genuinely foreign app we must
+ *  never touch. next renames its listener to "next-server (vX)", so the holder's
+ *  own command rarely names the repo; walk the parent chain, where `node
+ *  scripts/web.mjs` and this checkout's `next dev` both carry identifying strings. */
+function isOwnDevServer(pid, { exec, root }) {
+  for (let cur = pid, i = 0; cur > 1 && i < 8; i++) {
+    const info = psPidInfo(cur, { exec });
+    if (!info) break;
+    if (info.command.includes('scripts/web.mjs') || (root && info.command.includes(root))) {
+      return true;
+    }
+    cur = info.ppid;
+  }
+  return false;
+}
+
+/** Process-group id of a pid, or null — lets us kill the whole foreground
+ *  tree (launcher + next + build workers) in one shot. */
+function processGroup(pid, { exec }) {
+  const res = exec('ps', ['-p', String(pid), '-o', 'pgid=']);
+  const n = res.status === 0 ? Number(res.stdout.trim()) : Number.NaN;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export async function cmdStop(deps = {}) {
   const {
     exec = defaultExec,
@@ -605,46 +417,31 @@ export async function cmdStop(deps = {}) {
     termWaitMs = 8_000,
     killWaitMs = 5_000,
     pollMs = 250,
-    inspectProcess = processPid => inspectLiveProcess(processPid, { exec }),
   } = deps;
   const pid = readPid(stateDir);
-  const meta = readManagedMeta(stateDir);
+  const meta = readMeta(stateDir);
   // Three distinct PID-file cases: live launcher (kill), dead process
   // (stale state — just clean up), live foreign process (refuse loudly).
-  const identity = pid ? inspectProcess(pid) : null;
-  const managed = pid && meta ? isManagedLauncher(meta, { root, inspectProcess }) : false;
+  const cmdline = pid ? psCommand(pid, { exec }) : null;
 
   let portFree = true; // is :3000 free (or was never ours) when we return?
   let keepState = false; // preserve web.pid so a retry can still target the PID
 
-  if (pid && managed) {
+  if (pid && cmdline?.includes('scripts/web.mjs')) {
     // SIGCONT first: a suspended (Ctrl-Z'd, state "T") tree never acts on
     // SIGTERM until it's resumed — that is how a stopped dev server keeps
     // :3000 bound while shrugging off `web:stop`. Resume, then ask it to exit.
-    const continued = signalManagedLauncher(meta, 'SIGCONT', { inspectProcess, kill, root });
-    const terminated =
-      continued && signalManagedLauncher(meta, 'SIGTERM', { inspectProcess, kill, root });
-    if (!continued || !terminated) {
-      error(`PID ${pid} changed ownership before shutdown — refusing to signal it.`);
-      portFree = false;
-      keepState = true;
-    } else {
-      portFree = await waitForPortClear({ exec, pollMs }, termWaitMs);
-    }
-    if (continued && terminated && !portFree) {
+    safeKill(kill, pid, 'SIGCONT');
+    safeKill(kill, pid, 'SIGTERM');
+    portFree = await waitForPortClear({ exec, pollMs }, termWaitMs);
+    if (!portFree) {
       // Graceful stop didn't free the port. Escalate to SIGKILL — and kill
       // whatever still holds :3000 directly, since the `next` child can outlive
       // a SIGKILL'd wrapper (SIGKILL is never forwarded).
       error(`PID ${pid} didn't release :${PORT} on SIGTERM — escalating to SIGKILL.`);
       const held = getListener({ exec });
-      const heldSnapshot =
-        held && held.pid !== pid
-          ? ownedDescendantSnapshot(held.pid, meta, { inspectProcess, root })
-          : null;
-      if (heldSnapshot) {
-        signalOwnedDescendant(heldSnapshot, meta, 'SIGKILL', { inspectProcess, kill, root });
-      }
-      signalManagedLauncher(meta, 'SIGKILL', { inspectProcess, kill, root });
+      safeKill(kill, pid, 'SIGKILL');
+      if (held && held.pid !== pid) safeKill(kill, held.pid, 'SIGKILL');
       portFree = await waitForPortClear({ exec, pollMs }, killWaitMs);
     }
     if (portFree) {
@@ -659,28 +456,36 @@ export async function cmdStop(deps = {}) {
       );
       keepState = true;
     }
-  } else if (pid && identity === null && psCommand(pid, { exec }) === null) {
+  } else if (pid && cmdline === null) {
     log(`Stale state: PID ${pid} is no longer running — cleaning up.`);
   } else if (pid) {
-    error(`PID ${pid} failed managed ownership verification — not killing it.`);
-    portFree = false;
-    keepState = true;
+    error(`PID ${pid} from the state file is not a sur9e launcher — not killing it.`);
   } else {
-    // Without persisted identity there is no safe way to distinguish a prior
-    // launcher child from PID reuse or a process owned by another checkout.
+    // No state file. A foreground `npm run web` doesn't track state, so a
+    // Ctrl-Z'd dev server lands here. Kill it only if it's identifiably OURS
+    // (command line references this checkout); never touch a foreign app.
     const listener = getListener({ exec });
     if (!listener) {
       log('No server running.');
+    } else if (isOwnDevServer(listener.pid, { exec, root })) {
+      log(`:${PORT} is an untracked sur9e dev server (PID ${listener.pid}) — stopping it.`);
+      safeKill(kill, listener.pid, 'SIGCONT'); // resume if Ctrl-Z'd
+      const pgid = processGroup(listener.pid, { exec });
+      if (pgid) safeKill(kill, -pgid, 'SIGKILL'); // whole foreground tree
+      safeKill(kill, listener.pid, 'SIGKILL'); // fallback: the listener itself
+      portFree = await waitForPortClear({ exec, pollMs }, killWaitMs);
+      if (portFree) log(`Stopped (PID ${listener.pid}).`);
+      else error(`Could not free :${PORT} — run: kill -9 ${listener.pid}`);
     } else {
       portFree = false;
       error(
-        `:${PORT} is PID ${listener.pid} (${listener.command}), but there is no verified sur9e launch metadata — not killing it.\n` +
+        `:${PORT} is PID ${listener.pid} (${listener.command}) — not a sur9e server; not killing it.\n` +
           `  If you're sure it's yours, run: kill -9 ${listener.pid}`,
       );
     }
   }
 
-  if (managed && meta.tailscale) resetServe({ exec, exists, error });
+  if (meta?.tailscale) resetServe({ exec, exists, error });
   if (!keepState) clearState(stateDir);
   return portFree ? 0 : 1;
 }
@@ -690,9 +495,6 @@ export async function cmdStop(deps = {}) {
 // Same direct-execution guard pattern as batch/screen.mjs.
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  // Ownership metadata is rooted to this checkout. Normalize direct launches
-  // from subdirectories before inspecting the wrapper process cwd.
-  process.chdir(ROOT);
   let opts;
   try {
     opts = parseWebArgs(process.argv.slice(2));

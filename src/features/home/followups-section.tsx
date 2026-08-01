@@ -10,7 +10,7 @@
 // each section.
 
 import { useMutation } from '@tanstack/react-query';
-import { BadgeCheck, EllipsisVertical, Send } from 'lucide-react';
+import { BadgeCheck, Send } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -48,7 +48,7 @@ function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
       >
-        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
+        ⋮
       </button>
       {open && (
         <KebabActionsMenu

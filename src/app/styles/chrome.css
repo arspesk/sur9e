@@ -4211,16 +4211,10 @@ select.form-input {
   color: var(--st-danger);
 }
 
-/* Canonical Lucide menu glyphs. Kebab triggers use EllipsisVertical while
-   meatball triggers use Ellipsis; both stay optically consistent inside the
-   existing button hit areas. This rule intentionally follows .icon-btn svg
-   so the requested 2px stroke wins over the generic 1.7px icon treatment. */
-svg.menu-dots-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  display: block;
-  stroke-width: 2;
+/* Ellipsis (⋯) glyph inside icon buttons — e.g. row-actions, board-card kebab. */
+.icon-ellipsis {
+  font-size: 18px;
+  line-height: 1;
 }
 
 /* Card — generic surface container. Padding variants opt-in. */

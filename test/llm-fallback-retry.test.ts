@@ -9,12 +9,9 @@ type Attempt = { code: number; stdout?: string; stderr?: string };
 
 function makeFakes(attempts: Attempt[]) {
   const spawnedModels: string[] = [];
-  const spawnedProviders: string[] = [];
   const execImpl = (_cmd: string, args: string[]) => {
     const mi = args.indexOf('--model');
-    const pi = args.indexOf('--platform');
     spawnedModels.push(mi >= 0 ? args[mi + 1] : '(none)');
-    spawnedProviders.push(pi >= 0 ? args[pi + 1] : '(none)');
     return {
       pid: 0,
       status: 0,
@@ -39,7 +36,7 @@ function makeFakes(attempts: Attempt[]) {
     });
     return child;
   };
-  return { execImpl, spawnImpl, spawnedModels, spawnedProviders };
+  return { execImpl, spawnImpl, spawnedModels };
 }
 
 const logsDir = mkdtempSync(join(tmpdir(), 'llm-fallback-'));
@@ -155,109 +152,4 @@ describe('runModeLLM fallback retry', () => {
     expect(parsed.to).toEqual({ provider: 'codex', model: 'gpt-5-codex' });
     expect(parsed.reason).toBe('overloaded');
   });
-
-  it.each([
-    {
-      signature: 'overloaded_error',
-      primary: { provider: 'claude', model: 'claude-sonnet-4-6' },
-      fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
-      stderr: '{"type":"error","error":{"type":"overloaded_error"}}',
-    },
-    {
-      signature: 'capacity',
-      primary: { provider: 'codex', model: 'gpt-5.4-mini' },
-      fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
-      stderr: 'Selected model is at capacity. Please try a different model.',
-    },
-    {
-      signature: 'internal server error',
-      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
-      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
-      stderr: 'AI_APICallError: Internal server error',
-    },
-    {
-      signature: 'no provider available',
-      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
-      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
-      stderr: 'AI_APICallError: No provider available',
-    },
-  ])(
-    '$primary.provider → $fallback.provider fallback succeeds after $signature failure',
-    async ({ primary, fallback, stderr }) => {
-      const f = makeFakes([
-        { code: 1, stderr },
-        { code: 0, stdout: 'fallback output' },
-      ]);
-      const r = await runModeLLM(process.cwd(), 'screen', 'prompt', {
-        logsDir,
-        runtime: {
-          ...primary,
-          fallback,
-        },
-        execImpl: f.execImpl,
-        spawnImpl: f.spawnImpl,
-      });
-
-      expect(r.ok).toBe(true);
-      expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
-      expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
-      expect(r.stdout).toContain('fallback output');
-      expect(r.usedFallback).toEqual({
-        from: primary,
-        to: fallback,
-        reason: 'overloaded',
-      });
-    },
-  );
-
-  it.each([
-    {
-      signature: 'overloaded_error',
-      primary: { provider: 'claude', model: 'claude-sonnet-4-6' },
-      fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
-      primaryError: 'overloaded_error',
-    },
-    {
-      signature: 'capacity',
-      primary: { provider: 'codex', model: 'gpt-5.4-mini' },
-      fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
-      primaryError: 'at capacity',
-    },
-    {
-      signature: 'internal server error',
-      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
-      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
-      primaryError: 'Internal server error',
-    },
-    {
-      signature: 'no provider available',
-      primary: { provider: 'opencode', model: 'opencode/deepseek-v4-flash-free' },
-      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
-      primaryError: 'No provider available',
-    },
-  ])(
-    '$primary.provider → $fallback.provider exhausts after $signature primary failure',
-    async ({ primary, fallback, primaryError }) => {
-      const f = makeFakes([
-        { code: 1, stderr: primaryError },
-        { code: 1, stderr: 'fallback process failed' },
-      ]);
-      const r = await runModeLLM(process.cwd(), 'screen', 'prompt', {
-        logsDir,
-        runtime: {
-          ...primary,
-          fallback,
-        },
-        execImpl: f.execImpl,
-        spawnImpl: f.spawnImpl,
-      });
-
-      expect(r.ok).toBe(false);
-      expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
-      expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
-      expect(r.error).toBe('primary: exit 1 (overloaded); fallback: exit 1');
-      expect(r.stderr).toBe('fallback process failed');
-      expect(r.usedFallback).toBeUndefined();
-    },
-  );
 });

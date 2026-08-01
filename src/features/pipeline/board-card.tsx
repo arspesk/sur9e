@@ -6,7 +6,6 @@
 // pills row (archetype, seniority, work_mode), meta = Location · Comp · date.
 // Ported from legacy pipeline.html renderCard(); drag + click handlers unchanged.
 
-import { EllipsisVertical } from 'lucide-react';
 import { useRef } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { scoreLevel } from '@/components/domain/score-chip';
@@ -138,7 +137,11 @@ export function BoardCard({
           aria-expanded={statusPopoverOpen}
           data-num={row.num}
           onClick={e => onActionsClick(e, row.num)}
-          icon={<EllipsisVertical className="menu-dots-icon" aria-hidden="true" />}
+          icon={
+            <span aria-hidden="true" className="icon-ellipsis">
+              ⋯
+            </span>
+          }
         />
       </div>
       <div className="card-chips">

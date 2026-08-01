@@ -10,7 +10,7 @@
 // all mirror `.chat-session-menu*` (see app/styles/chat-threads.css) so the
 // two thread surfaces can never drift apart visually.
 
-import { Archive, ArchiveRestore, EllipsisVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
@@ -52,7 +52,7 @@ function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
       >
-        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
+        ⋮
       </button>
       {open && (
         <KebabActionsMenu

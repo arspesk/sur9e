@@ -35,20 +35,12 @@ describe('fallbackTitleFrom', () => {
   it('short messages pass through', () => {
     expect(fallbackTitleFrom('Compare my offers')).toBe('Compare my offers');
   });
-  it('messages within the wider title budget are preserved', () => {
+  it('long messages truncate at a word boundary within 40 chars', () => {
     const t = fallbackTitleFrom(
       'Please compare the Attio offer against the Linear offer in detail',
     );
-    expect(t.length).toBeGreaterThan(40);
-    expect(t.length).toBeLessThanOrEqual(80);
-    expect(t).toBe('Please compare the Attio offer against the Linear offer in detail');
-  });
-  it('hard-truncated URLs end in three dots instead of looking complete', () => {
-    const t = fallbackTitleFrom(
-      'https://job-boards.greenhouse.io/customerio/jobs/1234567890abcdefghijklmnopqrstuvwxyz',
-    );
-    expect(t.length).toBe(80);
-    expect(t).toMatch(/\.\.\.$/);
+    expect(t.length).toBeLessThanOrEqual(40);
+    expect(t).toBe('Please compare the Attio offer against');
   });
   it('whitespace-only input degrades to New chat', () => {
     expect(fallbackTitleFrom('   ')).toBe('New chat');
