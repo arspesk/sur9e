@@ -430,19 +430,21 @@
   flex: 1;
   min-width: 0;
 }
-/* Company name + score share the top line; score baseline-aligned right. */
+/* Company name + score share the top line; score stays beside the company. */
 .card-id-line {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: baseline;
   gap: 8px;
   /* Reserve room for the absolute kebab (top:6/right:6, ~26px glyph) on every
-     width so the right-aligned score never renders under the ⋯ — on touch the
+     width so the company and score never render under the ⋯ — on touch the
      kebab is always visible, on desktop it appears on hover. Consistent across
      all views. */
   padding-right: 30px;
 }
 .card-company {
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 16px;
@@ -533,6 +535,7 @@
   border-top-left-radius: var(--radius);
 }
 .card .score-num {
+  flex: 0 0 auto;
   font-family: var(--font-display);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
