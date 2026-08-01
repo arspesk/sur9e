@@ -4,6 +4,7 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { useToastStore } from '@/components/toast/toast-store';
+import { FetchJsonError } from '@/lib/api/fetch-json';
 import type { UpdateJob } from '@/lib/schemas/update-job';
 import type { SettingsFormValues } from '../../types';
 import { SystemSection } from '../system-section';
@@ -388,6 +389,24 @@ describe('SystemSection applying and returning', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('button', { name: 'Restarting' })).toBeDisabled();
+  });
+
+  it('releases missing retained progress so controls stop polling and become usable', async () => {
+    window.sessionStorage.setItem(ACTIVE_JOB_KEY, JOB_ID);
+    window.sessionStorage.setItem(RETURN_HREF_KEY, 'http://localhost:3000/settings');
+    mocks.job = {
+      data: undefined,
+      isError: true,
+      error: new FetchJsonError(404, 'Update job not found'),
+    };
+
+    renderSection();
+
+    await waitFor(() => expect(window.sessionStorage.getItem(ACTIVE_JOB_KEY)).toBeNull());
+    expect(window.sessionStorage.getItem(RETURN_HREF_KEY)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
+    expect(screen.queryByText('Starting update…')).toBeNull();
+    expect(mocks.activeEnabled.at(-1)).toBe(false);
   });
 
   it.each([

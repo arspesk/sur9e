@@ -362,7 +362,7 @@ function detachSelf(
   opts,
   {
     log,
-    error: _error,
+    error,
     stateDir,
     exec,
     exists,
@@ -390,7 +390,12 @@ function detachSelf(
     env: { ...env, SUR9E_WEB_SKIP_BUILD: '1', SUR9E_WEB_LAUNCH_ID: launchId },
   });
   const identity = inspectProcess(child.pid);
-  if (!identity) throw new Error('Could not identify detached web launcher process');
+  if (!identity) {
+    error('Could not verify detached web launcher ownership — stopping it.');
+    child.kill('SIGTERM');
+    child.unref();
+    return 1;
+  }
   writeMeta(stateDir, {
     pid: child.pid,
     prod: opts.prod,
@@ -448,10 +453,13 @@ function runForeground(
     const url = getTailnetUrl({ exec, exists });
     if (url) env.SUR9E_TAILNET_HOST = new URL(url).hostname;
   }
-  const child = spawnImpl(NEXT_BIN, args, { cwd: ROOT, stdio: 'inherit', env });
   const ownerPid = processImpl.pid;
   const identity = inspectProcess(ownerPid);
-  if (!identity) throw new Error('Could not identify foreground web launcher process');
+  if (!identity) {
+    error('Could not verify foreground web launcher ownership — nothing started.');
+    return 1;
+  }
+  const child = spawnImpl(NEXT_BIN, args, { cwd: ROOT, stdio: 'inherit', env });
   const launchMeta = {
     pid: ownerPid,
     prod: opts.prod,
@@ -682,6 +690,9 @@ export async function cmdStop(deps = {}) {
 // Same direct-execution guard pattern as batch/screen.mjs.
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  // Ownership metadata is rooted to this checkout. Normalize direct launches
+  // from subdirectories before inspecting the wrapper process cwd.
+  process.chdir(ROOT);
   let opts;
   try {
     opts = parseWebArgs(process.argv.slice(2));

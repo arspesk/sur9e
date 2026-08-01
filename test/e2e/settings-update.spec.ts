@@ -77,6 +77,8 @@ test('runs the one-click update flow through restart downtime and restores the e
   let applyCalls = 0;
   let rollbackCalls = 0;
   let statusCalls = 0;
+  let statusPhase = 'queued';
+  let failStatus = false;
   const unexpectedRequests: string[] = [];
 
   await page.route('**/api/version', route =>
@@ -115,24 +117,14 @@ test('runs the one-click update flow through restart downtime and restores the e
         body: JSON.stringify({ jobId: JOB_ID }),
       });
     }
-    if (pathname === `/api/update/status/${JOB_ID}` && request.method() === 'GET') {
+    if (pathname === `/api/update/status/${JOB_ID}` && request.method() === 'POST') {
       statusCalls += 1;
-      if (statusCalls >= 4 && statusCalls <= 7) {
-        return route.abort('connectionfailed');
-      }
-      const phases = new Map([
-        [1, 'queued'],
-        [2, 'rebuilding'],
-        [3, 'restarting'],
-        [8, 'verifying'],
-        [9, 'succeeded'],
-      ]);
-      const phase = phases.get(statusCalls) ?? 'succeeded';
-      if (phase === 'succeeded') installedVersion = '0.4.0';
+      if (failStatus) return route.abort('connectionfailed');
+      if (statusPhase === 'succeeded') installedVersion = '0.4.0';
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(job(phase)),
+        body: JSON.stringify(job(statusPhase)),
       });
     }
     if (pathname === '/api/update/rollback' && request.method() === 'POST') {
@@ -185,10 +177,16 @@ test('runs the one-click update flow through restart downtime and restores the e
   await page.keyboard.press('Enter');
 
   await expect(section.getByRole('status')).toContainText('Starting update');
+  statusPhase = 'rebuilding';
   await expect(section.getByRole('status')).toContainText('Rebuilding', { timeout: 8_000 });
+  statusPhase = 'restarting';
   await expect(section.getByRole('status')).toContainText('Restarting', { timeout: 8_000 });
+  failStatus = true;
   await expect(section.getByRole('status')).toContainText('Reconnecting', { timeout: 15_000 });
+  failStatus = false;
+  statusPhase = 'verifying';
   await expect(section.getByRole('status')).toContainText('Verifying restart', { timeout: 8_000 });
+  statusPhase = 'succeeded';
 
   await returnNavigation;
   await page.waitForLoadState('networkidle');
@@ -205,7 +203,7 @@ test('runs the one-click update flow through restart downtime and restores the e
   expect(checkCalls).toBe(1);
   expect(applyCalls).toBe(1);
   expect(rollbackCalls).toBe(0);
-  expect(statusCalls).toBeGreaterThanOrEqual(9);
+  expect(statusCalls).toBeGreaterThanOrEqual(6);
   expect(unexpectedRequests).toEqual([]);
 
   await page.reload();
@@ -269,6 +267,11 @@ for (const viewport of [
     await expect(edit).toHaveAttribute('aria-expanded', 'true');
     await expect(section.getByRole('textbox', { name: 'Update source' })).toBeVisible();
     await expect(section.getByRole('textbox', { name: 'Update branch' })).toBeVisible();
+
+    await page.screenshot({
+      path: `test-results/settings-update-panel-${viewport.name}-${viewport.width}x${viewport.height}.png`,
+      fullPage: true,
+    });
 
     const widths = await page.evaluate(() => ({
       viewport: window.innerWidth,

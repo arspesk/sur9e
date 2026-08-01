@@ -20,6 +20,8 @@ export type UpdateJobPhase = z.infer<typeof UpdateJobPhase>;
 export const UpdateJobLaunchState = z.enum(['claim-pending', 'owned']);
 export type UpdateJobLaunchState = z.infer<typeof UpdateJobLaunchState>;
 
+export const UpdateJobId = z.uuid();
+
 const ACTIVE_WORKER_PHASES = new Set<UpdateJobPhase>([
   'applying',
   'stopping',
@@ -42,7 +44,7 @@ export const UpdateJobCheckpoint = z.enum([
 
 export const UpdateJob = z
   .object({
-    id: z.string().uuid(),
+    id: UpdateJobId,
     phase: UpdateJobPhase,
     mode: z
       .object({
@@ -52,8 +54,8 @@ export const UpdateJob = z
       .strict(),
     fromVersion: z.string(),
     toVersion: z.string().optional(),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
     error: z.string().optional(),
     pid: z.number().int().positive().optional(),
     launchState: UpdateJobLaunchState.optional(),

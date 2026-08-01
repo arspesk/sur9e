@@ -180,7 +180,7 @@
   gap: var(--space-3) var(--space-5);
   align-items: center;
   min-width: 0;
-  min-height: 188px;
+  min-height: var(--update-panel-min-height);
   padding: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -230,7 +230,7 @@
 .system-update-panel__badge {
   width: fit-content;
   max-width: 100%;
-  padding: 4px 9px;
+  padding: var(--update-badge-padding-block) var(--update-badge-padding-inline);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   background: var(--surface);
@@ -275,7 +275,7 @@
   overflow-wrap: anywhere;
 }
 .system-update-panel__changelog {
-  border-left: 3px solid var(--accent);
+  border-left: var(--update-emphasis-border-width) solid var(--accent);
   background: var(--surface);
   color: var(--text-2);
 }
@@ -294,7 +294,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  min-height: 44px;
+  min-height: var(--update-actions-min-height);
 }
 .system-update-row {
   display: flex;
@@ -338,7 +338,7 @@
   .system-update-panel {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-3);
-    min-height: 246px;
+    min-height: var(--update-panel-mobile-min-height);
     padding: var(--space-4);
   }
   .system-update-panel__changelog,

@@ -4215,7 +4215,7 @@ select.form-input {
    meatball triggers use Ellipsis; both stay optically consistent inside the
    existing button hit areas. This rule intentionally follows .icon-btn svg
    so the requested 2px stroke wins over the generic 1.7px icon treatment. */
-.menu-dots-icon {
+svg.menu-dots-icon {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;

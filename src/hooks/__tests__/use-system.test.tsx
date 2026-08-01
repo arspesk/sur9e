@@ -156,7 +156,7 @@ describe('useActiveUpdateJob', () => {
     await flushMicrotasks();
     expect(result.current.data).toEqual({ job: null });
 
-    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
     await flushMicrotasks();
     expect(result.current.data).toEqual({ job: recoveryQueued });
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/update/status', undefined);
@@ -211,6 +211,9 @@ describe('useUpdateJob', () => {
 
     await flushMicrotasks();
     expect(result.current.data?.phase).toBe('queued');
+    expect(fetchMock).toHaveBeenLastCalledWith(`/api/update/status/${JOB_ID}`, {
+      method: 'POST',
+    });
 
     await act(async () => vi.advanceTimersByTimeAsync(1000));
     await flushMicrotasks();

@@ -85,6 +85,24 @@ function isValidTokenEvent(
   return parsed?.type === type && parsed.token === token;
 }
 
+function findOwningConfirmMessage(
+  db: ReturnType<typeof openChatDb>,
+  token: string,
+): { id: string; events: unknown[] } | null {
+  const rows = db
+    .prepare(
+      "SELECT id, events_json FROM messages WHERE role = 'assistant' AND events_json LIKE ? ORDER BY position DESC",
+    )
+    .all(`%${token}%`) as { id: string; events_json: string | null }[];
+  for (const row of rows) {
+    const events = parseEvents(row.events_json);
+    if (!events) continue;
+    if (!events.some(event => isValidTokenEvent(event, 'confirm', token))) continue;
+    return { id: row.id, events };
+  }
+  return null;
+}
+
 function nextValidEventSeq(events: unknown[]): number {
   const maxSeq = events.reduce<number>((max, event) => {
     const parsed = validTurnEvent(event);
@@ -320,58 +338,41 @@ export function appendConfirmResolution(
   },
 ): boolean {
   const db = openChatDb(root);
-  const rows = db
-    .prepare(
-      "SELECT id, events_json FROM messages WHERE role = 'assistant' AND events_json LIKE ? ORDER BY position DESC",
-    )
-    .all(`%${token}%`) as { id: string; events_json: string | null }[];
-  for (const row of rows) {
-    const events = parseEvents(row.events_json);
-    if (!events) continue;
-    // Verify the LIKE hit is the real owner (the confirm event carrying this
-    // token), not an incidental substring match elsewhere in the blob.
-    const owns = events.some(event => isValidTokenEvent(event, 'confirm', token));
-    if (!owns) continue;
-    const resolvedIndex = events.findIndex(event =>
-      isValidTokenEvent(event, 'confirm-resolved', token),
-    );
-    if (resolvedIndex >= 0) {
-      if (!presentation?.message && !presentation?.links) return true;
-      const existingResolution = ChatTurnEvent.safeParse(events[resolvedIndex]);
-      if (!existingResolution.success) return false;
-      const updatedResolution = ChatTurnEvent.safeParse({
-        ...existingResolution.data,
-        ...(presentation.message ? { message: presentation.message } : {}),
-        ...(presentation.links ? { links: presentation.links } : {}),
-      });
-      if (!updatedResolution.success) return false;
-      events[resolvedIndex] = updatedResolution.data;
-      db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
-        JSON.stringify(events),
-        row.id,
-      );
-      return true;
-    }
-    // Seq after the current max so foldEvents' seq-sort keeps the resolution
-    // last (it flips the confirm item in place regardless, but order is tidy).
-    const resolution = ChatTurnEvent.safeParse({
-      seq: nextValidEventSeq(events),
-      type: 'confirm-resolved',
-      token,
-      outcome,
-      ...(execution ? { execution } : {}),
-      ...(presentation?.message ? { message: presentation.message } : {}),
-      ...(presentation?.links ? { links: presentation.links } : {}),
+  const owner = findOwningConfirmMessage(db, token);
+  if (!owner) return false;
+  const { id, events } = owner;
+  const resolvedIndex = events.findIndex(event =>
+    isValidTokenEvent(event, 'confirm-resolved', token),
+  );
+  if (resolvedIndex >= 0) {
+    if (!presentation?.message && !presentation?.links) return true;
+    const existingResolution = ChatTurnEvent.safeParse(events[resolvedIndex]);
+    if (!existingResolution.success) return false;
+    const updatedResolution = ChatTurnEvent.safeParse({
+      ...existingResolution.data,
+      ...(presentation.message ? { message: presentation.message } : {}),
+      ...(presentation.links ? { links: presentation.links } : {}),
     });
-    if (!resolution.success) return false;
-    events.push(resolution.data);
-    db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
-      JSON.stringify(events),
-      row.id,
-    );
+    if (!updatedResolution.success) return false;
+    events[resolvedIndex] = updatedResolution.data;
+    db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
     return true;
   }
-  return false;
+  // Seq after the current max so foldEvents' seq-sort keeps the resolution
+  // last (it flips the confirm item in place regardless, but order is tidy).
+  const resolution = ChatTurnEvent.safeParse({
+    seq: nextValidEventSeq(events),
+    type: 'confirm-resolved',
+    token,
+    outcome,
+    ...(execution ? { execution } : {}),
+    ...(presentation?.message ? { message: presentation.message } : {}),
+    ...(presentation?.links ? { links: presentation.links } : {}),
+  });
+  if (!resolution.success) return false;
+  events.push(resolution.data);
+  db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
+  return true;
 }
 
 /**
@@ -390,35 +391,23 @@ export function appendConfirmAfter(
   child: { token: string; summary: string; meta: string },
 ): boolean {
   const db = openChatDb(root);
-  const rows = db
-    .prepare(
-      "SELECT id, events_json FROM messages WHERE role = 'assistant' AND events_json LIKE ? ORDER BY position DESC",
-    )
-    .all(`%${parentToken}%`) as { id: string; events_json: string | null }[];
-  for (const row of rows) {
-    const events = parseEvents(row.events_json);
-    if (!events) continue;
-    const owns = events.some(event => isValidTokenEvent(event, 'confirm', parentToken));
-    if (!owns) continue;
-    const alreadyAppended = events.some(event => isValidTokenEvent(event, 'confirm', child.token));
-    if (alreadyAppended) return true;
-    const confirmation = ChatTurnEvent.safeParse({
-      seq: nextValidEventSeq(events),
-      type: 'confirm',
-      token: child.token,
-      summary: child.summary,
-      meta: child.meta,
-      kind: 'start-job',
-    });
-    if (!confirmation.success) return false;
-    events.push(confirmation.data);
-    db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(
-      JSON.stringify(events),
-      row.id,
-    );
-    return true;
-  }
-  return false;
+  const owner = findOwningConfirmMessage(db, parentToken);
+  if (!owner) return false;
+  const { id, events } = owner;
+  const alreadyAppended = events.some(event => isValidTokenEvent(event, 'confirm', child.token));
+  if (alreadyAppended) return true;
+  const confirmation = ChatTurnEvent.safeParse({
+    seq: nextValidEventSeq(events),
+    type: 'confirm',
+    token: child.token,
+    summary: child.summary,
+    meta: child.meta,
+    kind: 'start-job',
+  });
+  if (!confirmation.success) return false;
+  events.push(confirmation.data);
+  db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
+  return true;
 }
 
 export function listMessages(root: string, conversationId: string): ChatMessage[] {

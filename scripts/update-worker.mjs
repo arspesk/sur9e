@@ -60,6 +60,17 @@ function pidPath(root, jobId) {
   return join(root, 'data/update/jobs', `${jobId}.pid`);
 }
 
+function inspectSidecarOwner(root, jobId, pidAlive) {
+  const path = pidPath(root, jobId);
+  if (!existsSync(path)) return { path, exists: false, alive: false };
+  const pid = Number(readFileSync(path, 'utf-8').trim());
+  return {
+    path,
+    exists: true,
+    alive: Number.isInteger(pid) && pid > 0 && pidAlive(pid),
+  };
+}
+
 function claimPid(root, jobId, pid) {
   const path = pidPath(root, jobId);
   let descriptor;
@@ -147,7 +158,6 @@ function runCommand(
             return;
           }
           terminationPoll = setTimeout(waitForTermination, 50);
-          terminationPoll.unref?.();
         };
         waitForTermination();
       }, 2_000);
@@ -407,25 +417,17 @@ export async function recoverInterruptedUpdateOnStartup(root, deps = {}) {
     return { status: 'active', jobId: job.id };
   }
   if (job.launchState === 'claim-pending') {
-    const sidecar = pidPath(root, job.id);
-    if (existsSync(sidecar)) {
-      const sidecarPid = Number(readFileSync(sidecar, 'utf-8').trim());
-      if (Number.isInteger(sidecarPid) && sidecarPid > 0 && runtime.pidAlive(sidecarPid)) {
-        return { status: 'active', jobId: job.id };
-      }
-    }
+    const sidecarOwner = inspectSidecarOwner(root, job.id, runtime.pidAlive);
+    if (sidecarOwner.alive) return { status: 'active', jobId: job.id };
     if (runtime.clock().getTime() - Date.parse(job.updatedAt) < CLAIM_PENDING_LEASE_MS) {
       return { status: 'active', jobId: job.id };
     }
   }
 
-  const sidecar = pidPath(root, job.id);
-  if (existsSync(sidecar)) {
-    const sidecarPid = Number(readFileSync(sidecar, 'utf-8').trim());
-    if (Number.isInteger(sidecarPid) && sidecarPid > 0 && runtime.pidAlive(sidecarPid)) {
-      return { status: 'active', jobId: job.id };
-    }
-    rmSync(sidecar, { force: true });
+  const sidecarOwner = inspectSidecarOwner(root, job.id, runtime.pidAlive);
+  if (sidecarOwner.alive) return { status: 'active', jobId: job.id };
+  if (sidecarOwner.exists) {
+    rmSync(sidecarOwner.path, { force: true });
   }
   const result = await runtime.runJob(root, job.id, defaultDeps, { recoveryOnly: true });
   return { status: 'recovered', jobId: job.id, result };

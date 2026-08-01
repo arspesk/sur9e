@@ -35,7 +35,7 @@ describe('fallbackTitleFrom', () => {
   it('short messages pass through', () => {
     expect(fallbackTitleFrom('Compare my offers')).toBe('Compare my offers');
   });
-  it('long messages use the wider title budget and show an explicit ellipsis', () => {
+  it('messages within the wider title budget are preserved', () => {
     const t = fallbackTitleFrom(
       'Please compare the Attio offer against the Linear offer in detail',
     );

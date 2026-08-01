@@ -14,6 +14,7 @@ import {
   useUpdateJob,
   useVersion,
 } from '@/hooks/use-system';
+import { FetchJsonError } from '@/lib/api/fetch-json';
 import type { UpdateJob, UpdateJobPhase } from '@/lib/schemas/update-job';
 import type { SettingsFormValues } from '../types';
 
@@ -171,6 +172,15 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
       );
     }
   }, [pushToast]);
+
+  useEffect(() => {
+    if (!(updateJob.error instanceof FetchJsonError) || updateJob.error.status !== 404) return;
+    window.sessionStorage.removeItem(ACTIVE_JOB_KEY);
+    window.sessionStorage.removeItem(RETURN_HREF_KEY);
+    setDiscoveryAttached(true);
+    setJobId(null);
+    setCheckError('Saved update progress is no longer available. Check again to refresh status.');
+  }, [updateJob.error]);
 
   useEffect(() => {
     if (!job) return;

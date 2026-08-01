@@ -21,7 +21,7 @@ export async function resolveOfferSource(
   offer,
   { fetcher = fetchJobDescription } = {},
 ) {
-  if (offer?.sourceKind === "text" || (offer?.sourceKind === "url" && offer?.jdPath)) {
+  if (offer?.sourceKind === "text" || offer?.sourceKind === "url") {
     const full = savedJdPath(rootPath, offer.jdPath);
     if (!full) throw new Error("invalid saved JD path");
     if (!existsSync(full)) throw new Error(`saved JD not found: ${offer.jdPath}`);

@@ -223,6 +223,56 @@ function jobsForWorkflow(root: string, workflow: WorkflowRecord): JobRecord[] {
   return workflowChildJobs(root, workflow);
 }
 
+function placeFollowupConfirm(
+  root: string,
+  rec: ConfirmRecord,
+  parentToken: string,
+  followup: NonNullable<ReturnType<typeof updateStatusWithFollowup>['followup']>,
+  persistedResolutionPlaced: boolean,
+): { followupConfirm?: { token: string }; warning?: string } {
+  const childToken = randomUUID();
+  const { summary, meta } = describeStartJob(root, followup.jobKind, { num: followup.num });
+  let childPlaced = false;
+  if (persistedResolutionPlaced) {
+    try {
+      childPlaced = appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary,
+        meta,
+      });
+    } catch {
+      // Fall through to the live turn placement below.
+    }
+  }
+  if (!childPlaced && getTurn(rec.turnId)?.status === 'running') {
+    try {
+      childPlaced =
+        emitTurnEvent(rec.turnId, {
+          type: 'confirm',
+          token: childToken,
+          summary,
+          meta,
+          kind: 'start-job',
+        }) !== null;
+    } catch {
+      // no live turn to place the follow-up on
+    }
+  }
+  if (!childPlaced) {
+    return { warning: 'Status updated, but the preparation prompt could not be shown.' };
+  }
+  confirms.set(childToken, {
+    token: childToken,
+    turnId: rec.turnId,
+    kind: 'start-job',
+    payload: { kind: followup.jobKind, params: { num: followup.num } },
+    summary,
+    meta,
+    createdAt: Date.now(),
+  });
+  return { followupConfirm: { token: childToken } };
+}
+
 /**
  * Resolve a pending confirm. Approval executes the parked payload through
  * the same library functions the web buttons use (startJob / updateStatus
@@ -363,57 +413,23 @@ export async function resolveConfirm(
 
   let followupConfirm: { token: string } | undefined;
   if (approve && rec.kind === 'set-status' && result?.ok && statusFollowup) {
-    const childToken = randomUUID();
-    const { summary, meta } = describeStartJob(root, statusFollowup.jobKind, {
-      num: statusFollowup.num,
-    });
-    let childPlaced = false;
-    if (persistedResolutionPlaced) {
-      try {
-        childPlaced = appendConfirmAfter(root, token, {
-          token: childToken,
-          summary,
-          meta,
-        });
-      } catch {
-        // Fall through to the live turn placement below.
-      }
-    }
-    if (!childPlaced && getTurn(rec.turnId)?.status === 'running') {
-      try {
-        childPlaced =
-          emitTurnEvent(rec.turnId, {
-            type: 'confirm',
-            token: childToken,
-            summary,
-            meta,
-            kind: 'start-job',
-          }) !== null;
-      } catch {
-        // no live turn to place the follow-up on
-      }
-    }
-    if (childPlaced) {
-      confirms.set(childToken, {
-        token: childToken,
-        turnId: rec.turnId,
-        kind: 'start-job',
-        payload: { kind: statusFollowup.jobKind, params: { num: statusFollowup.num } },
-        summary,
-        meta,
-        createdAt: Date.now(),
-      });
-      followupConfirm = { token: childToken };
-    } else {
-      const message = 'Status updated, but the preparation prompt could not be shown.';
+    const placement = placeFollowupConfirm(
+      root,
+      rec,
+      token,
+      statusFollowup,
+      persistedResolutionPlaced,
+    );
+    followupConfirm = placement.followupConfirm;
+    if (placement.warning) {
       result = {
         ...result,
-        message,
+        message: placement.warning,
       };
       // The parent resolution was persisted before child placement so the
       // child could be appended after it. Merge the late warning back onto
       // that durable event; otherwise reload would lose this failure detail.
-      persistResolution(root, token, outcome, execution, { message });
+      persistResolution(root, token, outcome, execution, { message: placement.warning });
     }
   }
   return {
@@ -641,7 +657,7 @@ export function describeCreateOfferFromText(
     ? `Reuse offer #${preview.offer?.num}`
     : input.url
       ? 'Import offer from source URL'
-      : `Create offer from pasted text`;
+      : 'Create offer from pasted text';
   const next = input.modes
     ? ` · then run ${input.modes.join(' → ')}`
     : input.startKind

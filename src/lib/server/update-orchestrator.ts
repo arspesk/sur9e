@@ -226,15 +226,25 @@ export function loadUpdateJob(root: string, id: string): UpdateJob | null {
   return UpdateJobSchema.parse(JSON.parse(readFileSync(path, 'utf-8')));
 }
 
-export function loadLatestActiveUpdateJob(root: string): UpdateJob | null {
+function loadScannableUpdateJobs(root: string): UpdateJob[] {
   const directory = updateJobsDir(root);
-  if (!existsSync(directory)) return null;
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory).flatMap(file => {
+    if (!file.endsWith('.json')) return [];
+    try {
+      const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
+      return job ? [job] : [];
+    } catch {
+      // One damaged job record must not block discovery or future updates.
+      return [];
+    }
+  });
+}
 
+export function loadLatestActiveUpdateJob(root: string): UpdateJob | null {
   let latest: UpdateJob | null = null;
-  for (const file of readdirSync(directory)) {
-    if (!file.endsWith('.json')) continue;
-    const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
-    if (!job || TERMINAL_PHASES.has(job.phase)) continue;
+  for (const job of loadScannableUpdateJobs(root)) {
+    if (TERMINAL_PHASES.has(job.phase)) continue;
     if (
       !latest ||
       Date.parse(job.updatedAt) > Date.parse(latest.updatedAt) ||
@@ -273,18 +283,15 @@ function failPersistedUpdateJob(
   return failUpdateJob(root, current, deps.clock(), error);
 }
 
-function findActiveUpdateJob(
-  root: string,
-  now: Date,
-  pidAlive: (pid: number) => boolean,
-): UpdateJob | null {
-  const directory = updateJobsDir(root);
-  if (!existsSync(directory)) return null;
+function findActiveUpdateJob(root: string, now: Date): UpdateJob | null {
+  const jobs = loadScannableUpdateJobs(root)
+    .filter(job => !TERMINAL_PHASES.has(job.phase))
+    .sort(
+      (left, right) =>
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt) || right.id.localeCompare(left.id),
+    );
 
-  for (const file of readdirSync(directory)) {
-    if (!file.endsWith('.json')) continue;
-    const job = loadUpdateJob(root, file.slice(0, -'.json'.length));
-    if (!job || TERMINAL_PHASES.has(job.phase)) continue;
+  for (const job of jobs) {
     if (job.launchState === 'claim-pending') {
       if (now.getTime() - Date.parse(job.updatedAt) >= CLAIM_PENDING_LEASE_MS) {
         failUpdateJob(root, job, now, CLAIM_EXPIRED_ERROR);
@@ -292,12 +299,7 @@ function findActiveUpdateJob(
       }
       return job;
     }
-    if (job.pid !== undefined) {
-      if (!pidAlive(job.pid)) {
-        return job;
-      }
-      return job;
-    }
+    if (job.pid !== undefined) return job;
     if (now.getTime() - Date.parse(job.updatedAt) >= UPDATE_JOB_LEASE_MS) {
       failUpdateJob(root, job, now, LEASE_EXPIRED_ERROR);
       continue;
@@ -332,7 +334,7 @@ function startUpdateJobUnderLock(
   now: Date,
   id: string,
 ): StartUpdateJobResult {
-  const activeJob = findActiveUpdateJob(root, now, deps.pidAlive ?? isPidAlive);
+  const activeJob = findActiveUpdateJob(root, now);
   if (activeJob) {
     if (
       activeJob.launchState === 'owned' &&
@@ -468,6 +470,20 @@ function startRecoveryWorkerUnderLock(
         // Event handlers cannot return persistence failures to the caller.
       }
     });
+    const handleAbnormalCompletion = (...args: unknown[]) => {
+      const [code, signal] = args;
+      if (code === 0 && (signal === null || signal === undefined)) return;
+      try {
+        const current = loadUpdateJob(root, interrupted.id);
+        if (current?.launchState !== 'owned') {
+          failPersistedUpdateJob(root, interrupted.id, deps, WORKER_EXITED_ERROR);
+        }
+      } catch {
+        // Event handlers cannot return persistence failures to the caller.
+      }
+    };
+    worker.once('exit', handleAbnormalCompletion);
+    worker.once('close', handleAbnormalCompletion);
     worker.unref();
     return (deps.reloadJob ?? loadUpdateJob)(root, interrupted.id) ?? recoveryJob;
   } catch {
