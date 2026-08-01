@@ -197,7 +197,12 @@ describe('runModeLLM fallback retry', () => {
       expect(r.ok).toBe(true);
       expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
       expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
-      expect(r.usedFallback?.reason).toBe('overloaded');
+      expect(r.stdout).toContain('fallback output');
+      expect(r.usedFallback).toEqual({
+        from: primary,
+        to: fallback,
+        reason: 'overloaded',
+      });
     },
   );
 
@@ -232,8 +237,9 @@ describe('runModeLLM fallback retry', () => {
       expect(r.ok).toBe(false);
       expect(f.spawnedProviders).toEqual([primaryProvider, fallbackProvider]);
       expect(f.spawnedModels).toEqual([primaryModel, fallbackModel]);
-      expect(r.error).toContain('primary:');
-      expect(r.error).toContain('fallback:');
+      expect(r.error).toBe('primary: exit 1 (overloaded); fallback: exit 1');
+      expect(r.stderr).toBe('fallback process failed');
+      expect(r.usedFallback).toBeUndefined();
     },
   );
 });
