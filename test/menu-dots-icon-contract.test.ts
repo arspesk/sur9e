@@ -36,7 +36,7 @@ describe('menu dots icon contract', () => {
 
   it('keeps both glyph orientations at the shared 16px / 2px-stroke size', () => {
     const css = read('src/app/styles/chrome.css');
-    const block = css.match(/\.menu-dots-icon\s*\{([^}]*)\}/)?.[1] ?? '';
+    const block = css.match(/\.icon-btn\s+svg\.menu-dots-icon\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(block).toMatch(/width:\s*16px/);
     expect(block).toMatch(/height:\s*16px/);
     expect(block).toMatch(/stroke-width:\s*2/);

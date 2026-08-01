@@ -147,3 +147,45 @@ test('open kebab menu never overlaps its trigger; re-click toggles closed withou
     expect(actionPosts, `kebab #${i}: dismiss-click must not fire a menu item`).toBe(before);
   }
 });
+
+const rowActionViewports = [
+  { name: 'desktop', width: 1280, height: 800, minTarget: 32 },
+  { name: 'tablet', width: 768, height: 1024, minTarget: 44 },
+  { name: 'mobile', width: 375, height: 667, minTarget: 44 },
+] as const;
+
+for (const viewport of rowActionViewports) {
+  test(`row kebab keeps its required hit target at ${viewport.name}`, async ({
+    browser,
+  }, testInfo) => {
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      hasTouch: viewport.name !== 'desktop',
+      isMobile: viewport.name === 'mobile',
+    });
+    try {
+      const page = await context.newPage();
+      await page.goto('/offers');
+
+      const trigger = page.locator('table.offers tbody tr .col-kebab button').first();
+      test.skip((await trigger.count()) === 0, 'No local offer fixture is available for visual QA');
+      await trigger.scrollIntoViewIfNeeded();
+      await expect(trigger).toBeVisible();
+
+      const box = await trigger.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) return;
+      expect(box.width).toBeGreaterThanOrEqual(viewport.minTarget);
+      expect(box.height).toBeGreaterThanOrEqual(viewport.minTarget);
+
+      await page.screenshot({
+        path: testInfo.outputPath(
+          `table-row-kebab-${viewport.name}-${viewport.width}x${viewport.height}.png`,
+        ),
+        fullPage: true,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+}

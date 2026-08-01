@@ -31,10 +31,6 @@ export function TableRowActions({ row, lockedNums: _lockedNums }: TableRowAction
 
   return (
     <>
-      {/* TODO: verify 44x44 mobile hit-target after
-       * IconButton migration via 3-width screenshot gate. Legacy .row-actions
-       * had 18px font + 44x44 padding; IconButton default size is 32x32. If
-       * WCAG 2.5.5 AAA regresses, add size="lg" or a padding decoration. */}
       <IconButton
         ref={kebabRef}
         label={`Row actions for ${row.company}`}
