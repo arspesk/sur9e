@@ -10,6 +10,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from '@playwright/test';
+import { withoutFencedCode } from './markdown-fixtures';
 
 const ROOT = process.env.SUR9E_ROOT ?? process.cwd();
 const REPORTS_DIR = join(ROOT, 'artifacts', 'reports');
@@ -29,20 +30,6 @@ function trackedReportFixtures(): string[] {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
-}
-
-function withoutFencedCode(markdown: string): string {
-  let insideFence = false;
-  return markdown
-    .split('\n')
-    .filter(line => {
-      if (/^\s*```/.test(line)) {
-        insideFence = !insideFence;
-        return false;
-      }
-      return !insideFence;
-    })
-    .join('\n');
 }
 
 const TRACKED_REPORTS = trackedReportFixtures();

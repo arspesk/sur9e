@@ -111,6 +111,14 @@ function nextValidEventSeq(events: unknown[]): number {
   return maxSeq + 1;
 }
 
+function logTurnEventValidationFailure(operation: string, token: string, issues: unknown): void {
+  console.warn('[chat-store] turn event schema validation failed', {
+    operation,
+    token,
+    issues,
+  });
+}
+
 function parseAttachments(json: string | null): unknown {
   if (!json) return null;
   try {
@@ -347,13 +355,27 @@ export function appendConfirmResolution(
   if (resolvedIndex >= 0) {
     if (!presentation?.message && !presentation?.links) return true;
     const existingResolution = ChatTurnEvent.safeParse(events[resolvedIndex]);
-    if (!existingResolution.success) return false;
+    if (!existingResolution.success) {
+      logTurnEventValidationFailure(
+        'read-confirm-resolution',
+        token,
+        existingResolution.error.issues,
+      );
+      return false;
+    }
     const updatedResolution = ChatTurnEvent.safeParse({
       ...existingResolution.data,
       ...(presentation.message ? { message: presentation.message } : {}),
       ...(presentation.links ? { links: presentation.links } : {}),
     });
-    if (!updatedResolution.success) return false;
+    if (!updatedResolution.success) {
+      logTurnEventValidationFailure(
+        'update-confirm-resolution',
+        token,
+        updatedResolution.error.issues,
+      );
+      return false;
+    }
     events[resolvedIndex] = updatedResolution.data;
     db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
     return true;
@@ -369,7 +391,10 @@ export function appendConfirmResolution(
     ...(presentation?.message ? { message: presentation.message } : {}),
     ...(presentation?.links ? { links: presentation.links } : {}),
   });
-  if (!resolution.success) return false;
+  if (!resolution.success) {
+    logTurnEventValidationFailure('append-confirm-resolution', token, resolution.error.issues);
+    return false;
+  }
   events.push(resolution.data);
   db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
   return true;
@@ -404,7 +429,14 @@ export function appendConfirmAfter(
     meta: child.meta,
     kind: 'start-job',
   });
-  if (!confirmation.success) return false;
+  if (!confirmation.success) {
+    logTurnEventValidationFailure(
+      'append-followup-confirmation',
+      child.token,
+      confirmation.error.issues,
+    );
+    return false;
+  }
   events.push(confirmation.data);
   db.prepare('UPDATE messages SET events_json = ? WHERE id = ?').run(JSON.stringify(events), id);
   return true;

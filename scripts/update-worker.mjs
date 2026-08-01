@@ -62,8 +62,14 @@ function pidPath(root, jobId) {
 
 function inspectSidecarOwner(root, jobId, pidAlive) {
   const path = pidPath(root, jobId);
-  if (!existsSync(path)) return { path, exists: false, alive: false };
-  const pid = Number(readFileSync(path, 'utf-8').trim());
+  let raw;
+  try {
+    raw = readFileSync(path, 'utf-8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { path, exists: false, alive: false };
+    throw error;
+  }
+  const pid = Number(raw.trim());
   return {
     path,
     exists: true,
