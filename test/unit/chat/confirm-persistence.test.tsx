@@ -298,6 +298,107 @@ describe('confirm resolution persists to the owning message', () => {
     ]);
   });
 
+  it('ignores invalid sibling sequences when appending reload-valid resolution and child events', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'mixed-sequence-parent';
+    const childToken = 'mixed-sequence-child';
+    const fractionalSibling = { seq: 99.5, type: 'stage', label: 'fractional sequence' };
+    const negativeSibling = { seq: -7, type: 'stage', label: 'negative sequence' };
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status change?',
+      events: [
+        {
+          seq: 2,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set offer #1001 status to "interview"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+        fractionalSibling,
+        negativeSibling,
+        { seq: 6, type: 'stage', label: 'valid sequence' },
+      ],
+    });
+
+    expect(store.appendConfirmResolution(root, parentToken, 'approved', 'succeeded')).toBe(true);
+    expect(
+      store.appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary: 'Start interview prep for offer #1001',
+        meta: 'claude · claude-sonnet-4-6 · ~5–10 min',
+      }),
+    ).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    expect(message.events).toEqual(expect.arrayContaining([fractionalSibling, negativeSibling]));
+    const events = reloadEvents(message.events);
+    expect(events.map(event => event.seq)).toEqual([2, 6, 7, 8]);
+    expect(foldEvents(events).filter(item => item.kind === 'confirm')).toEqual([
+      expect.objectContaining({ token: parentToken, outcome: 'approved' }),
+      expect.objectContaining({ token: childToken, outcome: 'pending', action: 'start-job' }),
+    ]);
+  });
+
+  it('does not let a malformed matching resolution satisfy idempotency', () => {
+    const conversation = store.createConversation(root);
+    const parentToken = 'malformed-resolution-parent';
+    const childToken = 'malformed-resolution-child';
+    const malformedResolution = {
+      seq: 2,
+      type: 'confirm-resolved',
+      token: parentToken,
+      outcome: 'approved',
+      execution: 'not-a-valid-execution',
+    };
+    store.appendMessage(root, {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: 'Status change?',
+      events: [
+        {
+          seq: 1,
+          type: 'confirm',
+          token: parentToken,
+          summary: 'Set offer #1001 status to "offer"',
+          meta: 'tracker write · no AI spend',
+          kind: 'set-status',
+        },
+        malformedResolution,
+      ],
+    });
+
+    expect(store.appendConfirmResolution(root, parentToken, 'approved', 'succeeded')).toBe(true);
+    expect(
+      store.appendConfirmAfter(root, parentToken, {
+        token: childToken,
+        summary: 'Start negotiation strategy for offer #1001',
+        meta: 'claude · claude-sonnet-4-6 · ~5–10 min',
+      }),
+    ).toBe(true);
+
+    const [message] = store.listMessages(root, conversation.id);
+    expect(message.events).toContainEqual(malformedResolution);
+    const events = reloadEvents(message.events);
+    expect(events).toEqual([
+      expect.objectContaining({ seq: 1, type: 'confirm', token: parentToken }),
+      expect.objectContaining({
+        seq: 2,
+        type: 'confirm-resolved',
+        token: parentToken,
+        outcome: 'approved',
+        execution: 'succeeded',
+      }),
+      expect.objectContaining({ seq: 3, type: 'confirm', token: childToken }),
+    ]);
+    expect(foldEvents(events).filter(item => item.kind === 'confirm')).toEqual([
+      expect.objectContaining({ token: parentToken, outcome: 'approved' }),
+      expect.objectContaining({ token: childToken, outcome: 'pending', action: 'start-job' }),
+    ]);
+  });
+
   it('is idempotent when the exact child token is already appended', () => {
     const conversation = store.createConversation(root);
     const parentToken = 'parent-idempotent';
