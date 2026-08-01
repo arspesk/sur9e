@@ -7,20 +7,26 @@ const root = process.cwd();
 const pipelineCss = readFileSync(join(root, 'src/app/styles/pipeline-inline.css'), 'utf8');
 const boardCard = readFileSync(join(root, 'src/features/pipeline/board-card.tsx'), 'utf8');
 
-function declarationsFor(source: string, selector: string): Map<string, string> {
+function allDeclarationsFor(source: string, selector: string): Map<string, string>[] {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const matches = [
     ...source.matchAll(new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')),
   ];
 
-  expect(matches, `Expected exactly one CSS rule for ${selector}`).toHaveLength(1);
+  return matches.map(match => {
+    const blockWithoutComments = match[1].replace(/\/\*[\s\S]*?\*\//g, '');
+    return new Map(
+      [...blockWithoutComments.matchAll(/(?:^|;)\s*([\w-]+)\s*:\s*([^;]+?)\s*(?=;|$)/g)].map(
+        declaration => [declaration[1], declaration[2].trim()],
+      ),
+    );
+  });
+}
 
-  const blockWithoutComments = matches[0][1].replace(/\/\*[\s\S]*?\*\//g, '');
-  return new Map(
-    [...blockWithoutComments.matchAll(/(?:^|;)\s*([\w-]+)\s*:\s*([^;]+?)\s*(?=;|$)/g)].map(
-      match => [match[1], match[2].trim()],
-    ),
-  );
+function declarationsFor(source: string, selector: string): Map<string, string> {
+  const matches = allDeclarationsFor(source, selector);
+  expect(matches, `Expected exactly one CSS rule for ${selector}`).toHaveLength(1);
+  return matches[0];
 }
 
 interface DirectJsxChild {
@@ -105,10 +111,15 @@ describe('pipeline card style contract', () => {
   });
 
   it('keeps the score beside a shrinkable company name and clear of the overflow menu', () => {
+    const column = allDeclarationsFor(pipelineCss, '.column').find(
+      declarations => declarations.get('flex') === '0 0 340px',
+    );
     const cardIdLine = declarationsFor(pipelineCss, '.card-id-line');
     const cardCompany = declarationsFor(pipelineCss, '.card-company');
     const scoreNum = declarationsFor(pipelineCss, '.card .score-num');
 
+    expect(column, 'Expected the base 340px pipeline column rule').toBeDefined();
+    expect(column?.get('min-width')).toBe('0');
     expect(cardIdLine.get('justify-content')).toBe('flex-start');
     expect(cardIdLine.get('align-items')).toBe('baseline');
     expect(cardIdLine.get('gap')).toBe('8px');
