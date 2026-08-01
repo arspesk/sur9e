@@ -112,6 +112,8 @@ function createUpdateFixture() {
 
   configureRepository(upstream);
   seedUpdaterFiles(upstream);
+  copyTargetFile(upstream, 'scripts/update-worker.mjs');
+  copyTargetFile(upstream, 'scripts/web.mjs');
   writeFixtureFile(upstream, 'VERSION', '0.3.0\n');
   writeFixtureFile(upstream, 'content/changed.md', 'upstream\n');
   writeFixtureFile(upstream, 'content/new.md', 'new upstream file\n');
@@ -206,6 +208,12 @@ describe('update-system apply and rollback', () => {
     expect(readFileSync(resolve(installed, '.claude/skills/sur9e/SKILL.md'), 'utf8')).toBe(
       'upstream skill\n',
     );
+    expect(readFileSync(resolve(installed, 'scripts/update-worker.mjs'))).toEqual(
+      readFileSync(resolve(ROOT, 'scripts/update-worker.mjs')),
+    );
+    expect(readFileSync(resolve(installed, 'scripts/web.mjs'))).toEqual(
+      readFileSync(resolve(ROOT, 'scripts/web.mjs')),
+    );
     expect(existsSync(resolve(installed, 'content/obsolete.md'))).toBe(false);
     expect(existsSync(resolve(installed, 'content/line\nbreak.md'))).toBe(false);
     expect(existsSync(resolve(installed, 'content/trailing-space.md '))).toBe(false);
@@ -229,6 +237,8 @@ describe('update-system apply and rollback', () => {
     expect(readFileSync(resolve(installed, '.claude/skills/sur9e/SKILL.md'), 'utf8')).toBe(
       'installed skill\n',
     );
+    expect(existsSync(resolve(installed, 'scripts/update-worker.mjs'))).toBe(false);
+    expect(existsSync(resolve(installed, 'scripts/web.mjs'))).toBe(false);
     expectPrivateFiles(installed, privateFiles);
     expect(git(installed, ['status', '--short', '--untracked-files=no'])).toBe('');
   });
