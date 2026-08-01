@@ -1,0 +1,64 @@
+labels:
+  - name: type:bug
+    color: a855f7
+    description: A reproducible defect in sur9e behavior.
+  - name: type:feature
+    color: a855f7
+    description: A proposed user-facing capability or improvement.
+  - name: type:question
+    color: a855f7
+    description: A request for help or clarification.
+  - name: type:task
+    color: a855f7
+    description: A scoped maintenance or contributor task.
+  - name: area:web
+    color: 2563eb
+    description: The local web UI, accessibility, or browser behavior.
+  - name: area:agent
+    color: 2563eb
+    description: Agent modes, prompts, hooks, or AI integrations.
+  - name: area:jobs
+    color: 2563eb
+    description: Job discovery, screening, evaluation, or application workflow.
+  - name: area:data
+    color: 2563eb
+    description: Local data contracts, persistence, reports, or privacy boundaries.
+  - name: area:tooling
+    color: 2563eb
+    description: Build tooling, CI, scripts, dependencies, or developer setup.
+  - name: area:docs
+    color: 2563eb
+    description: Documentation, contributor guidance, or examples.
+  - name: priority:p0
+    color: dc2626
+    description: "Critical: data loss, security risk, or a broadly blocked core workflow."
+  - name: priority:p1
+    color: ea580c
+    description: "High: a major workflow is impaired without a reasonable workaround."
+  - name: priority:p2
+    color: ca8a04
+    description: "Normal: valuable work that can be planned in the usual cadence."
+  - name: priority:p3
+    color: 16a34a
+    description: "Low: polish, niche improvement, or work deferred by higher priorities."
+  - name: status:needs-triage
+    color: 64748b
+    description: New report awaiting human review and categorization.
+  - name: status:needs-info
+    color: d97706
+    description: More information is needed before human triage can proceed.
+  - name: status:accepted
+    color: 0f766e
+    description: A maintainer accepted this issue for future work.
+  - name: status:declined
+    color: be123c
+    description: A maintainer declined this issue after review.
+  - name: resolution:duplicate
+    color: 6b7280
+    description: Closed as a duplicate of an existing tracked issue.
+  - name: resolution:invalid
+    color: 6b7280
+    description: Closed because the report is not actionable or valid.
+  - name: resolution:wontfix
+    color: 6b7280
+    description: Closed because it will not be addressed in this project.

@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose an improvement that supports sur9e's quality-over-quantity mission.
+title: "feature: "
+labels: ["type:feature", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Describe the user problem, not just a preferred implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What is difficult, confusing, or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: affected_user
+    attributes:
+      label: Affected user
+      description: Who has this problem and in what situation?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What would success look like for that person?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds, tools, or approaches have you considered?
+    validations:
+      required: true
+  - type: textarea
+    id: mission_fit
+    attributes:
+      label: Mission fit
+      description: How does this improve job-search quality, clarity, or user control without auto-submitting applications?
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy_confirmation
+    attributes:
+      label: Privacy and duplicate check
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I have removed secrets, CV content, and personal data.
+          required: true
+    validations:
+      required: true
