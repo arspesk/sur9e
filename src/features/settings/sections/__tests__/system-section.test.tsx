@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { useToastStore } from '@/components/toast/toast-store';
 import type { UpdateJob } from '@/lib/schemas/update-job';
 import type { SettingsFormValues } from '../../types';
@@ -40,7 +41,7 @@ vi.mock('@/hooks/use-system', () => ({
   useUpdateApply: () => mocks.apply,
   useUpdateJob: (jobId: string | null | undefined) => {
     mocks.requestedJobIds.push(jobId);
-    return mocks.job;
+    return jobId ? mocks.job : { data: undefined, isError: false, error: null };
   },
   useRollback: () => mocks.rollback,
 }));
@@ -79,6 +80,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.history.replaceState({}, '', '/settings');
   useToastStore.setState({ toasts: [] });
+  useDeleteConfirmStore.setState({ visible: false, options: {}, _resolve: null });
   mocks.version = { isPending: false, data: { version: '0.3.2' } };
   mocks.check = { isPending: false, mutateAsync: vi.fn() };
   mocks.apply = { isPending: false, mutateAsync: vi.fn() };
@@ -210,6 +212,32 @@ describe('SystemSection applying and returning', () => {
     expect(mocks.apply.mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('opens the mounted shared confirmation modal when no legacy window bridge exists', async () => {
+    delete (window as typeof window & { deleteConfirmModal?: unknown }).deleteConfirmModal;
+    mocks.check = {
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({
+        status: 'update-available',
+        local: '0.3.2',
+        remote: '0.4.0',
+        changelog: 'Faster restart.',
+      }),
+    };
+    renderSection();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Update now' }));
+
+    expect(useDeleteConfirmStore.getState()).toMatchObject({
+      visible: true,
+      options: {
+        title: 'Update Sur9e from v0.3.2 to v0.4.0?',
+        confirmLabel: 'Update now',
+      },
+    });
+    useDeleteConfirmStore.getState()._settle(false);
+  });
+
   it('stores the exact href and job id, then announces durable progress', async () => {
     window.history.replaceState({}, '', '/settings?view=system#system');
     mocks.check = {
@@ -268,6 +296,32 @@ describe('SystemSection applying and returning', () => {
     expect(alert).toHaveTextContent('Update failed');
     expect(alert).toHaveTextContent('Restart verification timed out');
     expect(alert).toHaveTextContent('Roll back');
+  });
+
+  it('releases a failed retained job so a fresh check can retry after reload', async () => {
+    window.sessionStorage.setItem(ACTIVE_JOB_KEY, JOB_ID);
+    mocks.job = {
+      data: makeJob({ phase: 'failed', error: 'Restart verification timed out' }),
+      isError: false,
+      error: null,
+    };
+    mocks.check = {
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({
+        status: 'update-available',
+        local: '0.3.2',
+        remote: '0.4.0',
+        changelog: 'Retry the update safely.',
+      }),
+    };
+    renderSection();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Restart verification timed out');
+    await waitFor(() => expect(window.sessionStorage.getItem(ACTIVE_JOB_KEY)).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+
+    expect(await screen.findByRole('button', { name: 'Update now' })).toBeEnabled();
   });
 
   it('keeps the last durable phase visible through expected restart downtime', () => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { Button, HelperText, Input, Label } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
 import {
@@ -54,15 +55,21 @@ interface SystemSectionProps {
 }
 
 function defaultNavigate(href: string) {
+  if (href === window.location.href) {
+    window.location.reload();
+    return;
+  }
   window.location.replace(href);
 }
 
 function getConfirmation(): ((options: ConfirmOptions) => Promise<boolean>) | undefined {
   return (
-    window as typeof window & {
-      deleteConfirmModal?: { confirm: (options: ConfirmOptions) => Promise<boolean> };
-    }
-  ).deleteConfirmModal?.confirm;
+    (
+      window as typeof window & {
+        deleteConfirmModal?: { confirm: (options: ConfirmOptions) => Promise<boolean> };
+      }
+    ).deleteConfirmModal?.confirm ?? useDeleteConfirmStore.getState().confirm
+  );
 }
 
 function changelogExcerpt(changelog: string) {
@@ -152,6 +159,11 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
 
   useEffect(() => {
     if (!job) return;
+    if (job.phase === 'failed') {
+      window.sessionStorage.removeItem(ACTIVE_JOB_KEY);
+      window.sessionStorage.removeItem(RETURN_HREF_KEY);
+      return;
+    }
     const notice = resultFromJob(job);
     if (!notice) return;
 
@@ -165,6 +177,7 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
   }, [job, navigate]);
 
   const checkUpdates = useCallback(async () => {
+    if (job?.phase === 'failed') setJobId(null);
     setIsChecking(true);
     setCheckError(null);
     try {
@@ -182,7 +195,7 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
     } finally {
       setIsChecking(false);
     }
-  }, [pushToast, updateCheck]);
+  }, [job?.phase, pushToast, updateCheck]);
 
   const applyUpdate = useCallback(async () => {
     if (checkResult?.status !== 'update-available') return;
