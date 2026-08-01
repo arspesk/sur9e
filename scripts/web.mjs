@@ -126,8 +126,37 @@ function readMeta(stateDir) {
   }
 }
 
-function clearState(stateDir) {
+function writeMeta(stateDir, meta) {
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(pidFile(stateDir), String(meta.pid));
+  writeFileSync(metaFile(stateDir), JSON.stringify(meta, null, 2));
+}
+
+function clearState(stateDir, expectedPid) {
+  if (expectedPid !== undefined) {
+    const pid = readPid(stateDir);
+    const meta = readMeta(stateDir);
+    if (pid !== expectedPid || meta?.pid !== expectedPid) return false;
+  }
   for (const f of [pidFile(stateDir), metaFile(stateDir)]) rmSync(f, { force: true });
+  return true;
+}
+
+function readManagedMeta(stateDir) {
+  const pid = readPid(stateDir);
+  const meta = readMeta(stateDir);
+  if (
+    !pid ||
+    !meta ||
+    meta.pid !== pid ||
+    typeof meta.prod !== 'boolean' ||
+    typeof meta.tailscale !== 'boolean' ||
+    typeof meta.startedAt !== 'string' ||
+    !Number.isFinite(Date.parse(meta.startedAt))
+  ) {
+    return null;
+  }
+  return meta;
 }
 
 /** Command line of a live process, or null when the PID is dead.
@@ -140,6 +169,14 @@ function psCommand(pid, { exec }) {
 /** True when `pid` is a live process whose command line is this launcher. */
 function isOurLauncher(pid, { exec }) {
   return psCommand(pid, { exec })?.includes('scripts/web.mjs') ?? false;
+}
+
+/** Persisted launch mode for server-side orchestrators. Stale, foreign, or
+ * malformed state falls back to the local dev mode with no tailnet exposure. */
+export function getWebLaunchMode({ stateDir = DEFAULT_STATE_DIR, exec = defaultExec } = {}) {
+  const meta = readManagedMeta(stateDir);
+  if (!meta || !isOurLauncher(meta.pid, { exec })) return { prod: false, tailscale: false };
+  return { prod: meta.prod, tailscale: meta.tailscale };
 }
 
 // ── Tailscale serve (tailnet-internal HTTPS; NEVER funnel) ──
@@ -197,6 +234,8 @@ export async function cmdStart(opts, deps = {}) {
     error = console.error,
     stateDir = DEFAULT_STATE_DIR,
     env = process.env,
+    processImpl = process,
+    now = () => new Date().toISOString(),
   } = deps;
 
   const listener = getListener({ exec });
@@ -221,11 +260,36 @@ export async function cmdStart(opts, deps = {}) {
     }
   }
 
-  if (opts.detach) return detachSelf(opts, { log, error, stateDir, exec, exists });
-  return runForeground(opts, { exec, spawnImpl, exists, log, error, stateDir });
+  if (opts.detach) {
+    return detachSelf(opts, {
+      log,
+      error,
+      stateDir,
+      exec,
+      exists,
+      spawnImpl,
+      env,
+      processImpl,
+      now,
+    });
+  }
+  return runForeground(opts, {
+    exec,
+    spawnImpl,
+    exists,
+    log,
+    error,
+    stateDir,
+    env,
+    processImpl,
+    now,
+  });
 }
 
-function detachSelf(opts, { log, error: _error, stateDir, exec, exists }) {
+function detachSelf(
+  opts,
+  { log, error: _error, stateDir, exec, exists, spawnImpl, env, processImpl, now },
+) {
   mkdirSync(stateDir, { recursive: true });
   const fd = openSync(logFile(stateDir), 'a');
   const args = [fileURLToPath(import.meta.url)];
@@ -234,26 +298,18 @@ function detachSelf(opts, { log, error: _error, stateDir, exec, exists }) {
   // explicit --dev so a `--dev --tailscale` start stays dev after re-spawn.
   else if (opts.tailscale) args.push('--dev');
   if (opts.tailscale) args.push('--tailscale');
-  const child = spawn(process.execPath, args, {
+  const child = spawnImpl(processImpl.execPath, args, {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', fd, fd],
-    env: { ...process.env, SUR9E_WEB_SKIP_BUILD: '1' },
+    env: { ...env, SUR9E_WEB_SKIP_BUILD: '1' },
   });
-  writeFileSync(pidFile(stateDir), String(child.pid));
-  writeFileSync(
-    metaFile(stateDir),
-    JSON.stringify(
-      {
-        pid: child.pid,
-        prod: opts.prod,
-        tailscale: opts.tailscale,
-        startedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-  );
+  writeMeta(stateDir, {
+    pid: child.pid,
+    prod: opts.prod,
+    tailscale: opts.tailscale,
+    startedAt: now(),
+  });
   child.unref();
   log(
     `Started detached (PID ${child.pid}, mode: ${opts.prod ? 'prod' : 'dev'}${opts.tailscale ? ' + tailscale' : ''}).`,
@@ -268,7 +324,10 @@ function detachSelf(opts, { log, error: _error, stateDir, exec, exists }) {
   return 0;
 }
 
-function runForeground(opts, { exec, spawnImpl, exists, log, error }) {
+function runForeground(
+  opts,
+  { exec, spawnImpl, exists, log, error, stateDir, env: inheritedEnv, processImpl, now },
+) {
   // Spawn the local next binary DIRECTLY — an npx intermediary does not
   // reliably forward SIGTERM to its child, so `stop` would orphan the
   // actual server while the port stays bound.
@@ -280,12 +339,19 @@ function runForeground(opts, { exec, spawnImpl, exists, log, error }) {
   // the tailnet hostname so next.config.ts can list it in
   // allowedDevOrigins. Prod builds don't have the restriction but the
   // env var is harmless there.
-  const env = { ...process.env };
+  const env = { ...inheritedEnv };
   if (opts.tailscale) {
     const url = getTailnetUrl({ exec, exists });
     if (url) env.SUR9E_TAILNET_HOST = new URL(url).hostname;
   }
   const child = spawnImpl(NEXT_BIN, args, { cwd: ROOT, stdio: 'inherit', env });
+  const ownerPid = processImpl.pid;
+  writeMeta(stateDir, {
+    pid: ownerPid,
+    prod: opts.prod,
+    tailscale: opts.tailscale,
+    startedAt: now(),
+  });
 
   let serveEnabled = false;
   if (opts.tailscale) {
@@ -304,11 +370,12 @@ function runForeground(opts, { exec, spawnImpl, exists, log, error }) {
     if (serveEnabled) resetServe({ exec, exists, error });
     child.kill('SIGTERM');
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  processImpl.on('SIGINT', shutdown);
+  processImpl.on('SIGTERM', shutdown);
   child.on('exit', code => {
     if (serveEnabled) resetServe({ exec, exists, error });
-    process.exit(code ?? 0);
+    clearState(stateDir, ownerPid);
+    processImpl.exit(code ?? 0);
   });
   return new Promise(() => {}); // lifetime owned by the child's exit handler
 }
