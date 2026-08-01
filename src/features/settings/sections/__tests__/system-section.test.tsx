@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
     error: null,
   } as Record<string, unknown>,
   active: {
-    data: { job: null },
+    data: undefined,
     isError: false,
     error: null,
   } as Record<string, unknown>,
@@ -96,7 +96,7 @@ beforeEach(() => {
   mocks.check = { isPending: false, mutateAsync: vi.fn() };
   mocks.apply = { isPending: false, mutateAsync: vi.fn() };
   mocks.job = { data: undefined, isError: false, error: null };
-  mocks.active = { data: { job: null }, isError: false, error: null };
+  mocks.active = { data: undefined, isError: false, error: null };
   mocks.rollback = { isPending: false, mutateAsync: vi.fn() };
   mocks.requestedJobIds = [];
   mocks.activeEnabled = [];
@@ -110,6 +110,57 @@ afterEach(() => {
 });
 
 describe('SystemSection update status', () => {
+  it('checks automatically when Settings mounts', async () => {
+    const check = vi.fn().mockResolvedValue({
+      status: 'update-available',
+      local: '0.3.2',
+      remote: '0.4.0',
+      changelog: 'Faster restart. Improved update recovery.',
+    });
+    mocks.check = { isPending: false, mutateAsync: check };
+    mocks.active = { data: { job: null }, isError: false, error: null };
+
+    renderSection();
+
+    expect(await screen.findByText('v0.4.0 available')).toBeTruthy();
+    expect(check).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Update now' })).toBeTruthy();
+  });
+
+  it('keeps an automatic check failure inline without showing a toast', async () => {
+    mocks.check = {
+      isPending: false,
+      mutateAsync: vi.fn().mockRejectedValue(new Error('update service unavailable')),
+    };
+    mocks.active = { data: { job: null }, isError: false, error: null };
+
+    renderSection();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('update service unavailable');
+    expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it('still toasts when a manual retry fails', async () => {
+    mocks.check = {
+      isPending: false,
+      mutateAsync: vi.fn().mockRejectedValue(new Error('update service unavailable')),
+    };
+    mocks.active = { data: { job: null }, isError: false, error: null };
+    renderSection();
+    await screen.findByRole('alert');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts).toEqual([
+        expect.objectContaining({
+          tone: 'danger',
+          message: expect.stringContaining('update service unavailable'),
+        }),
+      ]),
+    );
+  });
+
   it('discovers and attaches the latest durable job when this tab has no retained id', async () => {
     window.history.replaceState({}, '', '/settings?view=system#system');
     mocks.active = {
@@ -132,6 +183,7 @@ describe('SystemSection update status', () => {
     expect(mocks.activeEnabled).toContain(true);
     expect(mocks.activeEnabled.at(-1)).toBe(false);
     expect(mocks.requestedJobIds).toContain(JOB_ID);
+    expect(mocks.check.mutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent('Preparing recovery');
   });
 
@@ -143,6 +195,7 @@ describe('SystemSection update status', () => {
 
     expect(mocks.activeEnabled.length).toBeGreaterThan(0);
     expect(mocks.activeEnabled.every(enabled => !enabled)).toBe(true);
+    expect(mocks.check.mutateAsync).not.toHaveBeenCalled();
   });
 
   it('discards a corrupt retained job id instead of trapping the controls', () => {
