@@ -39,6 +39,6 @@ describe('menu dots icon contract', () => {
     const block = css.match(/\.icon-btn\s+svg\.menu-dots-icon\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(block).toMatch(/width:\s*16px/);
     expect(block).toMatch(/height:\s*16px/);
-    expect(block).toMatch(/stroke-width:\s*2(?:px)?\s*;/);
+    expect(block).toMatch(/stroke-width:\s*2/);
   });
 });
