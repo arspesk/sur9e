@@ -52,19 +52,33 @@ function defaultExec(cmd, args, opts) {
 const PROCESS_TREE_EXIT_GRACE_MS = 1000;
 const PROCESS_TREE_POLL_MS = 10;
 const STREAMED_ERROR_TAIL_CHARS = 16 * 1024;
+const PROVIDER_CLEANUP_FAILED_MARKER = "[SUR9E_PROVIDER_CLEANUP_FAILED]";
 const ISOLATED_PROVIDER_GROUP = Symbol("sur9e.isolated-provider-group");
 const PROVIDER_SUPERVISOR = resolve(import.meta.dirname, "provider-supervisor.mjs");
 
-function descendantPids(pid, { freeze = false } = {}) {
-  if (!Number.isInteger(pid) || pid <= 1 || process.platform === "win32") return [];
+function descendantPids(
+  pid,
+  {
+    freeze = false,
+    platform = process.platform,
+    spawnSyncImpl = spawnSync,
+    killImpl = process.kill,
+    onError = () => {},
+  } = {},
+) {
+  if (!Number.isInteger(pid) || pid <= 1 || platform === "win32") return [];
   const found = [];
   const visited = new Set([pid]);
   const visit = (parentPid) => {
     // `ps --ppid` is GNU-only; macOS ships BSD ps. `pgrep -P` is available
     // on both supported Unix families and returns one direct child per line.
-    const result = spawnSync("pgrep", ["-P", String(parentPid)], {
+    const result = spawnSyncImpl("pgrep", ["-P", String(parentPid)], {
       encoding: "utf-8",
     });
+    if (result.error) {
+      onError(result.error);
+      return;
+    }
     if (result.status !== 0) return;
     const children = String(result.stdout ?? "")
       .trim()
@@ -77,13 +91,16 @@ function descendantPids(pid, { freeze = false } = {}) {
     );
     for (const childPid of children) {
       visited.add(childPid);
+      let vanished = false;
       if (freeze) {
         try {
-          process.kill(childPid, "SIGSTOP");
+          killImpl(childPid, "SIGSTOP");
         } catch (error) {
-          if (error?.code !== "ESRCH") throw error;
+          if (error?.code === "ESRCH") vanished = true;
+          else onError(error);
         }
       }
+      if (vanished) continue;
       visit(childPid);
       found.push(childPid);
     }
@@ -93,21 +110,30 @@ function descendantPids(pid, { freeze = false } = {}) {
 }
 
 /** Stop the provider wrapper and every descendant it spawned. */
-export function terminateProviderTree(child, signal = "SIGTERM") {
+export function terminateProviderTree(
+  child,
+  signal = "SIGTERM",
+  { platform = process.platform, spawnSyncImpl = spawnSync, killImpl = process.kill } = {},
+) {
   const pid = child?.pid;
-  if (process.platform === "win32" && Number.isInteger(pid)) {
+  if (platform === "win32" && Number.isInteger(pid) && pid > 1) {
     const args = ["/PID", String(pid), "/T"];
     if (signal === "SIGKILL") args.push("/F");
-    const result = spawnSync("taskkill", args, { stdio: "ignore" });
+    const result = spawnSyncImpl("taskkill", args, { encoding: "utf-8" });
     if (result.error) throw result.error;
-    if (result.status !== 0) {
+    const diagnostic = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const alreadyGone = result.status === 128 || /not found|no running instance/i.test(diagnostic);
+    if (result.status !== 0 && !alreadyGone) {
       throw new Error(`taskkill failed for provider process ${pid} (exit ${result.status})`);
     }
     return [];
   }
   if (child?.[ISOLATED_PROVIDER_GROUP] && Number.isInteger(pid) && pid > 1) {
     try {
-      process.kill(-pid, signal);
+      // The detached supervisor owns a separate detached provider group. Ask
+      // it to SIGKILL that group so the supervisor can preserve the provider's
+      // real exit status and clean up after an uncatchable worker death.
+      child.kill("SIGTERM");
     } catch (error) {
       if (error?.code !== "ESRCH") throw error;
     }
@@ -118,29 +144,42 @@ export function terminateProviderTree(child, signal = "SIGTERM") {
     Number.isInteger(pid) &&
     pid > 1 &&
     typeof child?.spawnfile === "string";
+  let cleanupError = null;
+  const rememberError = (error) => {
+    cleanupError ??= error;
+  };
+  let freezeDescendants = canFreeze;
   if (canFreeze) {
     try {
       // Freeze the wrapper before walking its descendants. Each descendant is
       // frozen before recursion, so no process in the tree can fork between
       // discovery and the final SIGKILL pass.
-      process.kill(pid, "SIGSTOP");
+      killImpl(pid, "SIGSTOP");
     } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
+      if (error?.code !== "ESRCH") rememberError(error);
+      freezeDescendants = false;
     }
   }
-  const descendants = descendantPids(pid, { freeze: canFreeze });
+  const descendants = descendantPids(pid, {
+    freeze: freezeDescendants,
+    platform,
+    spawnSyncImpl,
+    killImpl,
+    onError: rememberError,
+  });
   for (const childPid of descendants) {
     try {
-      process.kill(childPid, signal);
+      killImpl(childPid, signal);
     } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
+      if (error?.code !== "ESRCH") rememberError(error);
     }
   }
   try {
     child.kill(signal);
   } catch (error) {
-    if (error?.code !== "ESRCH") throw error;
+    if (error?.code !== "ESRCH") rememberError(error);
   }
+  if (cleanupError) throw cleanupError;
   return descendants;
 }
 
@@ -238,6 +277,8 @@ export function buildSpawnArgsForMode(
     if (result.error?.code === "ETIMEDOUT") {
       const error = new Error(`provider command build timed out after ${commandTimeoutMs}ms`);
       error.code = "ETIMEDOUT";
+      error.stderr = String(result.stderr ?? "");
+      error.cleanupFailed = error.stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER);
       throw error;
     }
     if (result.status !== 0) {
@@ -293,12 +334,15 @@ function runOnce(
               error: `timeout ${timeoutMs}ms`,
               failureCategory: "timeout",
               stdout: "",
-              stderr: "",
+              stderr: err?.stderr ?? "",
               promptText: prompt,
               // spawnSync cannot verify a timed-out npx/tsx descendant tree on
-              // Windows. Suppress fallback rather than overlap an orphaned
-              // builder with a second provider attempt.
-              ...(process.platform === "win32" ? { cleanupFailed: true } : {}),
+              // Windows. The POSIX supervisor marks the same condition if its
+              // bounded process-group verification fails. Either case must
+              // suppress fallback rather than overlap a surviving builder.
+              ...(process.platform === "win32" || err?.cleanupFailed
+                ? { cleanupFailed: true }
+                : {}),
             }
           : { ok: false, error: err.message, stdout: "", stderr: "", promptText: prompt },
       );
@@ -347,6 +391,7 @@ function runOnce(
     let hardStopFailed = false;
     let childClosed = false;
     let childExitCode = null;
+    let cleanupFailureReported = false;
     const trackedDescendants = new Set();
     let timer = null;
     let settleTimer = null;
@@ -520,12 +565,28 @@ function runOnce(
     child.stderr.on("data", (d) => {
       const text = d.toString();
       stderr += text;
+      cleanupFailureReported ||= stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER);
       if (tee) process.stderr.write(text);
       detectStreamedTerminalFailure();
     });
     child.on("close", (code) => {
       childClosed = true;
       childExitCode = code;
+      if (cleanupFailureReported) {
+        finish(
+          stopReason
+            ? stoppedResult(true)
+            : {
+                ok: false,
+                error: "provider process tree did not terminate",
+                stdout,
+                stderr,
+                promptText: prompt,
+                cleanupFailed: true,
+              },
+        );
+        return;
+      }
       if (stopReason) {
         settleStoppedAttempt();
         return;

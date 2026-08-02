@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -128,38 +128,54 @@ describe('spawnJob fallback metadata', () => {
       };
       persistJobRecord(root, job);
 
-      await spawnJob(root, job, { trackUsage: vi.fn() });
-      realWorkerProcessGroupId = readJobRecord(root, JOB_ID)?.processGroupId ?? null;
-      await vi.waitFor(
-        () => {
-          expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
-        },
-        { timeout: 5000, interval: 25 },
-      );
+      let descendantPid = 0;
+      try {
+        await spawnJob(root, job, { trackUsage: vi.fn() });
+        realWorkerProcessGroupId = readJobRecord(root, JOB_ID)?.processGroupId ?? null;
+        await vi.waitFor(() => expect(existsSync(descendantPidFile)).toBe(true), {
+          timeout: 5000,
+          interval: 25,
+        });
+        descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+        await vi.waitFor(
+          () => {
+            expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
+          },
+          { timeout: 5000, interval: 25 },
+        );
 
-      const completed = readJobRecord(root, JOB_ID);
-      expect(completed).toMatchObject({
-        status: 'done',
-        provider: fallback.provider,
-        model: fallback.model,
-        fallback: { from: primary, reason: 'timeout' },
-      });
-      expect(completed?.output).toContain('> build · glm-5.2');
-      expect(completed?.output).toContain('fallback completed');
-      expect(completed?.output).toContain(
-        `[FALLBACK] ${JSON.stringify({ from: primary, to: fallback, reason: 'timeout' })}`,
-      );
+        const completed = readJobRecord(root, JOB_ID);
+        expect(completed).toMatchObject({
+          status: 'done',
+          provider: fallback.provider,
+          model: fallback.model,
+          fallback: { from: primary, reason: 'timeout' },
+        });
+        expect(completed?.output).toContain('> build · glm-5.2');
+        expect(completed?.output).toContain('fallback completed');
+        expect(completed?.output).toContain(
+          `[FALLBACK] ${JSON.stringify({ from: primary, to: fallback, reason: 'timeout' })}`,
+        );
 
-      const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
-      expect(descendantPid).toBeGreaterThan(1);
-      await vi.waitFor(
-        () => {
-          expect(() => process.kill(descendantPid, 0)).toThrow(
-            expect.objectContaining({ code: 'ESRCH' }),
-          );
-        },
-        { timeout: 1000, interval: 20 },
-      );
+        expect(descendantPid).toBeGreaterThan(1);
+        await vi.waitFor(
+          () => {
+            expect(() => process.kill(descendantPid, 0)).toThrow(
+              expect.objectContaining({ code: 'ESRCH' }),
+            );
+          },
+          { timeout: 1000, interval: 20 },
+        );
+      } finally {
+        if (descendantPid <= 1 && existsSync(descendantPidFile)) {
+          descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+        }
+        if (descendantPid > 1) {
+          try {
+            process.kill(descendantPid, 'SIGKILL');
+          } catch {}
+        }
+      }
     },
   );
 

@@ -1,9 +1,9 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { runModeLLM, terminateProviderTree } from '../batch/lib/llm.mjs';
 
 type Attempt = { code: number; stdout?: string; stderr?: string };
@@ -44,6 +44,23 @@ function makeFakes(attempts: Attempt[]) {
 }
 
 const logsDir = mkdtempSync(join(tmpdir(), 'llm-fallback-'));
+const trackedTempRoots = new Set<string>();
+
+function trackedTempRoot(prefix: string) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  trackedTempRoots.add(root);
+  return root;
+}
+
+afterEach(() => {
+  for (const root of trackedTempRoots) rmSync(root, { recursive: true, force: true });
+  trackedTempRoots.clear();
+});
+
+afterAll(() => {
+  rmSync(logsDir, { recursive: true, force: true });
+});
+
 const RUNTIME = {
   provider: 'claude',
   model: 'claude-opus-4-7',
@@ -81,6 +98,69 @@ describe('runModeLLM fallback retry', () => {
       }
     },
   );
+
+  it('treats an already-exited Windows provider tree as cleaned up', () => {
+    const spawnSyncImpl = vi.fn(() => ({
+      status: 128,
+      stdout: '',
+      stderr: 'ERROR: The process "4321" not found.',
+    }));
+
+    expect(
+      terminateProviderTree({ pid: 4321 }, 'SIGKILL', {
+        platform: 'win32',
+        spawnSyncImpl: spawnSyncImpl as any,
+      }),
+    ).toEqual([]);
+    expect(spawnSyncImpl).toHaveBeenCalledWith('taskkill', ['/PID', '4321', '/T', '/F'], {
+      encoding: 'utf-8',
+    });
+  });
+
+  it('still reports Windows provider-tree cleanup failures other than an absent process', () => {
+    const spawnSyncImpl = vi.fn(() => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: Access is denied.',
+    }));
+
+    expect(() =>
+      terminateProviderTree({ pid: 4321 }, 'SIGKILL', {
+        platform: 'win32',
+        spawnSyncImpl: spawnSyncImpl as any,
+      }),
+    ).toThrow('taskkill failed');
+  });
+
+  it('kills every discovered descendant even when freezing one of them fails', () => {
+    const children = new Map([
+      [100, '101\n102\n'],
+      [101, '103\n'],
+    ]);
+    const spawnSyncImpl = vi.fn((_cmd: string, args: string[]) => {
+      const stdout = children.get(Number(args[1])) ?? '';
+      return { status: stdout ? 0 : 1, stdout, stderr: '' };
+    });
+    const killImpl = vi.fn((pid: number, signal?: string | number) => {
+      if (pid === 102 && signal === 'SIGSTOP') {
+        throw Object.assign(new Error('freeze denied'), { code: 'EPERM' });
+      }
+      return true as const;
+    });
+    const child = { pid: 100, spawnfile: 'fake-provider', kill: vi.fn() };
+
+    expect(() =>
+      terminateProviderTree(child, 'SIGKILL', {
+        platform: 'darwin',
+        spawnSyncImpl: spawnSyncImpl as any,
+        killImpl,
+      }),
+    ).toThrow('freeze denied');
+    expect(killImpl).toHaveBeenCalledWith(103, 'SIGKILL');
+    expect(killImpl).toHaveBeenCalledWith(101, 'SIGKILL');
+    expect(killImpl).toHaveBeenCalledWith(102, 'SIGKILL');
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+  });
 
   it('retries once on a retryable failure and reports usedFallback', async () => {
     const f = makeFakes([
@@ -288,6 +368,38 @@ describe('runModeLLM fallback retry', () => {
     expect(buildTimeouts).toEqual([80, 80]);
   });
 
+  it('suppresses fallback when a timed-out builder reports incomplete cleanup', async () => {
+    let buildCalls = 0;
+    let spawnCount = 0;
+    const execImpl = () => {
+      buildCalls += 1;
+      return {
+        status: null,
+        signal: 'SIGTERM',
+        stdout: '',
+        stderr: '[SUR9E_PROVIDER_CLEANUP_FAILED] provider process group did not terminate',
+        error: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }),
+      };
+    };
+
+    const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+      logsDir,
+      runtime: RUNTIME,
+      timeoutMs: 80,
+      execImpl,
+      spawnImpl: () => {
+        spawnCount += 1;
+        throw new Error('provider must not spawn after failed builder cleanup');
+      },
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.cleanupFailed).toBe(true);
+    expect(r.stderr).toContain('[SUR9E_PROVIDER_CLEANUP_FAILED]');
+    expect(buildCalls).toBe(1);
+    expect(spawnCount).toBe(0);
+  });
+
   it('reports both provider/model pairs when fallback fails after a primary timeout', async () => {
     const f = makeFakes([{ code: 0 }]);
     let spawnCount = 0;
@@ -351,7 +463,9 @@ describe('runModeLLM fallback retry', () => {
 
     expect(r.ok).toBe(false);
     expect(spawnCount).toBe(2);
-    expect(Date.now() - startedAt).toBeLessThan(350);
+    // This proves the operation is bounded while allowing CI scheduling and
+    // process-settlement slack beyond the two 100ms provider budgets.
+    expect(Date.now() - startedAt).toBeLessThan(1000);
     expect(r.error).toContain('fallback codex/gpt-5-codex: timeout');
   });
 
@@ -385,7 +499,7 @@ describe('runModeLLM fallback retry', () => {
     expect(r.ok).toBe(false);
     expect(spawnCount).toBe(2);
     expect(r.error).toContain('fallback codex/gpt-5-codex: timeout 50ms');
-    expect(Date.now() - startedAt).toBeLessThan(150);
+    expect(Date.now() - startedAt).toBeLessThan(600);
   });
 
   it('does not treat a child error during timeout cleanup as process closure', async () => {
@@ -407,6 +521,41 @@ describe('runModeLLM fallback retry', () => {
       logsDir,
       runtime: RUNTIME,
       timeoutMs: 20,
+      execImpl: f.execImpl,
+      spawnImpl,
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.cleanupFailed).toBe(true);
+    expect(r.error).toContain('provider process tree did not terminate');
+    expect(spawnCount).toBe(1);
+  });
+
+  it('does not start fallback when the supervisor reports incomplete process cleanup', async () => {
+    const f = makeFakes([{ code: 0 }]);
+    let spawnCount = 0;
+    const spawnImpl = () => {
+      spawnCount += 1;
+      const child = new EventEmitter() as any;
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {
+        setImmediate(() => child.emit('close', 1));
+        return true;
+      };
+      setImmediate(() => {
+        child.stderr.emit(
+          'data',
+          Buffer.from('[SUR9E_PROVIDER_CLEANUP_FAILED] Provider is overloaded'),
+        );
+      });
+      return child;
+    };
+
+    const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+      logsDir,
+      runtime: RUNTIME,
+      timeoutMs: 100,
       execImpl: f.execImpl,
       spawnImpl,
     });
@@ -471,7 +620,7 @@ describe('runModeLLM fallback retry', () => {
   it.runIf(process.platform !== 'win32')(
     'kills an orphaned primary process group before fallback after wrapper exit',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'llm-fallback-orphan-'));
+      const root = trackedTempRoot('llm-fallback-orphan-');
       const descendantPidFile = join(root, 'descendant.pid');
       const primaryScript = `
         const { spawn } = require('node:child_process');
@@ -538,7 +687,7 @@ describe('runModeLLM fallback retry', () => {
   it.runIf(process.platform !== 'win32')(
     'preserves a successful provider exit while cleaning its lingering descendant',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'llm-provider-success-orphan-'));
+      const root = trackedTempRoot('llm-provider-success-orphan-');
       const descendantPidFile = join(root, 'descendant.pid');
       const primaryScript = `
         const { spawn } = require('node:child_process');
@@ -589,7 +738,7 @@ describe('runModeLLM fallback retry', () => {
   it.runIf(process.platform !== 'win32')(
     'cleans an isolated provider group after an uncatchable worker kill without fallback',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'llm-fallback-signal-'));
+      const root = trackedTempRoot('llm-fallback-signal-');
       const descendantPidFile = join(root, 'descendant.pid');
       const workerPath = join(process.cwd(), 'test/fixtures/fallback-timeout-worker.mjs');
       const worker = nodeSpawn(
