@@ -35,6 +35,31 @@ import { extractFallbackStamp, spawnJob } from '../runner';
 
 const JOB_ID = '0123456789abcdef';
 
+type KillProcess = (pid: number, signal: NodeJS.Signals) => unknown;
+
+function cleanupWorkerProcessGroup(
+  rootPath: string,
+  processGroupId: number | null,
+  killProcess: KillProcess = process.kill,
+): boolean {
+  if (
+    process.platform === 'win32' ||
+    typeof processGroupId !== 'number' ||
+    !Number.isInteger(processGroupId) ||
+    processGroupId <= 1
+  ) {
+    return false;
+  }
+  const job = readJobRecord(rootPath, JOB_ID);
+  if (job?.status !== 'running' || job.processGroupId !== processGroupId) return false;
+  try {
+    killProcess(-processGroupId, 'SIGKILL');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const PROVIDER_CASES = [
   {
     provider: 'claude' as const,
@@ -101,6 +126,36 @@ describe('extractFallbackStamp', () => {
   });
 });
 
+describe('cleanupWorkerProcessGroup', () => {
+  it.runIf(process.platform !== 'win32')(
+    'does not signal a terminal job process group whose id may have been reused',
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'sur9e-terminal-worker-cleanup-'));
+      const processGroupId = 4321;
+      const killProcess = vi.fn();
+      persistJobRecord(root, {
+        id: JOB_ID,
+        type: 'evaluate',
+        status: 'done',
+        params: { num: 56 },
+        startedAt: '2026-08-02T01:29:47.873Z',
+        finishedAt: '2026-08-02T01:29:48.873Z',
+        output: 'fallback completed',
+        error: null,
+        exitCode: 0,
+        processGroupId,
+      });
+
+      try {
+        expect(cleanupWorkerProcessGroup(root, processGroupId, killProcess)).toBe(false);
+        expect(killProcess).not.toHaveBeenCalled();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe('spawnJob fallback metadata', () => {
   let root: string;
   let realWorkerProcessGroupId: number | null;
@@ -115,15 +170,7 @@ describe('spawnJob fallback metadata', () => {
   });
 
   afterEach(() => {
-    if (
-      process.platform !== 'win32' &&
-      Number.isInteger(realWorkerProcessGroupId) &&
-      (realWorkerProcessGroupId as number) > 1
-    ) {
-      try {
-        process.kill(-(realWorkerProcessGroupId as number), 'SIGKILL');
-      } catch {}
-    }
+    cleanupWorkerProcessGroup(root, realWorkerProcessGroupId);
     rmSync(root, { recursive: true, force: true });
   });
 
