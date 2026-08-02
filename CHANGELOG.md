@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/arspesk/sur9e/compare/v0.4.0...v0.4.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **update:** install build dependencies in production ([1e0d872](https://github.com/arspesk/sur9e/commit/1e0d872d6eca0d009d0592e7e5259005691b152b))
+* **update:** recover failed updates safely ([efbd0d5](https://github.com/arspesk/sur9e/commit/efbd0d56a2bbd2a56baf97301faecffc190e6ec1))
+
 ## [0.4.0](https://github.com/arspesk/sur9e/compare/v0.3.2...v0.4.0) (2026-08-02)
 
 
