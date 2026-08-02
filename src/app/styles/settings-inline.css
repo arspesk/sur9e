@@ -288,6 +288,17 @@
   background: var(--surface);
   color: var(--text-2);
 }
+.system-update-panel__changelog ul {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-5);
+}
+.system-update-panel__changelog li + li {
+  margin-top: var(--space-1);
+}
+.system-update-panel__changelog a {
+  color: var(--accent-text);
+  font-weight: 600;
+}
 .system-update-panel__changelog strong,
 .system-update-panel__error strong {
   color: var(--text);
@@ -712,7 +723,7 @@
     grid-template-columns: 1fr;
   }
   .settings-content .form-section[id] {
-    scroll-margin-top: 64px;
+    scroll-margin-top: calc(var(--topbar-h) + var(--space-8));
   }
   /* Rows wrap to two lines: toggle+name+pill / host+actions. */
   .portal-row__meta {

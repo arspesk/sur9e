@@ -16,8 +16,8 @@
  * See docs/data-contract.md for the full system/user layer definitions.
  */
 
-import { execFileSync, execSync } from 'child_process';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { execFileSync } from 'child_process';
+import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'fs';
 import yaml from 'js-yaml';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -26,6 +26,10 @@ import { isSystemPath, isUserPath, SYSTEM_PATHS } from './src/lib/repo-path-poli
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
+const MIN_NODE_MAJOR = 24;
+const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+const COMMIT_TIMEOUT_MS = 15 * 60_000;
 
 // Update source repo (GitHub "<owner>/<repo>" slug). Defaults to the public
 // repo. Maintainers / fork users can override with the UPDATE_REPO env var
@@ -100,9 +104,21 @@ function resolveUpdateRemote() {
 }
 const REMOTE = resolveUpdateRemote();
 
-function localVersion() {
+function workingVersion() {
   const vPath = join(ROOT, 'VERSION');
   return existsSync(vPath) ? readFileSync(vPath, 'utf-8').trim() : '0.0.0';
+}
+
+function committedVersion() {
+  try {
+    return execFileSync('git', ['show', 'HEAD:VERSION'], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      timeout: DEFAULT_COMMAND_TIMEOUT_MS,
+    }).trim();
+  } catch {
+    return workingVersion();
+  }
 }
 
 function compareVersions(a, b) {
@@ -115,8 +131,33 @@ function compareVersions(a, b) {
   return 0;
 }
 
+function gitWithTimeout(timeout, ...args) {
+  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout }).trim();
+}
+
 function git(...args) {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+  return gitWithTimeout(DEFAULT_COMMAND_TIMEOUT_MS, ...args);
+}
+
+function validateRuntime() {
+  const major = Number(process.versions.node.split('.')[0]);
+  if (!Number.isInteger(major) || major < MIN_NODE_MAJOR) {
+    throw new Error(`sur9e updates require Node ${MIN_NODE_MAJOR}+; found ${process.version}`);
+  }
+  execFileSync('npm', ['--version'], {
+    cwd: ROOT,
+    encoding: 'utf-8',
+    timeout: DEFAULT_COMMAND_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+}
+
+function installDependencies() {
+  execFileSync('npm', ['ci', '--no-audit', '--no-fund'], {
+    cwd: ROOT,
+    timeout: INSTALL_TIMEOUT_MS,
+    stdio: 'inherit',
+  });
 }
 
 function gitStatusEntries() {
@@ -133,6 +174,25 @@ function revertPaths(paths) {
   // deletion by the sync step (plain `git checkout --` can't, since `git rm`
   // removed them from the index too).
   git('checkout', 'HEAD', '--', ...paths);
+}
+
+function restoreCommittedSystemState() {
+  const changedSystemPaths = [
+    ...new Set(
+      gitStatusEntries()
+        .map(entry => entry.path)
+        .filter(isSystemPath),
+    ),
+  ];
+  for (const path of changedSystemPaths) {
+    try {
+      git('checkout', 'HEAD', '--', path);
+    } catch {
+      // The path was added by the fetched tree and does not exist in HEAD.
+      git('rm', '-f', '--ignore-unmatch', '--', path);
+      rmSync(join(ROOT, path), { recursive: true, force: true });
+    }
+  }
 }
 
 // True sync for one system path: `git checkout <ref> -- <path>` only
@@ -189,7 +249,7 @@ async function check() {
     return;
   }
 
-  const local = localVersion();
+  const local = committedVersion();
   let remote;
 
   try {
@@ -208,6 +268,8 @@ async function check() {
 
   // Fetch changelog from GitHub releases
   let changelog = '';
+  let releaseDate = '';
+  let releaseUrl = '';
   try {
     const res = await fetch(REMOTE.releasesApi, {
       headers: { Accept: 'application/vnd.github.v3+json' },
@@ -215,6 +277,8 @@ async function check() {
     if (res.ok) {
       const release = await res.json();
       changelog = release.body || '';
+      releaseDate = release.published_at || release.created_at || '';
+      releaseUrl = release.html_url || '';
     }
   } catch {
     // No changelog available, that's OK
@@ -225,7 +289,9 @@ async function check() {
       status: 'update-available',
       local,
       remote,
-      changelog: changelog.slice(0, 500),
+      changelog: changelog.slice(0, 10_000),
+      ...(releaseDate ? { releaseDate } : {}),
+      ...(releaseUrl ? { releaseUrl } : {}),
     }),
   );
 }
@@ -233,7 +299,15 @@ async function check() {
 // ── APPLY ───────────────────────────────────────────────────────
 
 async function apply() {
-  const local = localVersion();
+  try {
+    validateRuntime();
+  } catch (error) {
+    console.error(`Update runtime check failed: ${error.message}`);
+    process.exitCode = 2;
+    return;
+  }
+
+  const local = committedVersion();
   const initialStatusEntries = gitStatusEntries();
   const initialStatusPaths = new Set(initialStatusEntries.map(entry => entry.path));
 
@@ -244,7 +318,7 @@ async function apply() {
   if (dirtySystem.length > 0) {
     console.error('Uncommitted changes in system files — commit or stash them first:');
     for (const entry of dirtySystem) console.error(`  ${entry.code} ${entry.path}`);
-    process.exit(1);
+    process.exit(2);
   }
 
   // Check for lock
@@ -253,12 +327,14 @@ async function apply() {
     console.error(
       'Update already in progress (.update-lock exists). If stuck, delete it manually.',
     );
-    process.exit(1);
+    process.exit(2);
   }
 
   // Create lock
   writeFileSync(lockFile, new Date().toISOString());
 
+  let checkoutStarted = false;
+  let dependencyInstallStarted = false;
   try {
     // 1. Fetch from canonical repo
     console.log('Fetching latest from upstream...');
@@ -272,12 +348,12 @@ async function apply() {
     if (upstreamPrivatePaths.length > 0) {
       console.error('Upstream update contains protected user paths — aborting before checkout:');
       for (const path of upstreamPrivatePaths) console.error(`  ${path}`);
-      process.exitCode = 1;
+      process.exitCode = 2;
       return;
     }
 
     // 3. Backup: create branch only after the fetched tree passes preflight.
-    const backupBranch = `backup-pre-update-${local}`;
+    const backupBranch = `backup-pre-update-${local}-${git('rev-parse', '--short=12', 'HEAD')}`;
     try {
       git('branch', backupBranch);
       console.log(`Backup branch created: ${backupBranch}`);
@@ -289,6 +365,7 @@ async function apply() {
     // never removes files, so anything deleted/renamed upstream must be
     // explicitly removed or it lingers (stale routes break the build).
     console.log('Updating system files...');
+    checkoutStarted = true;
     const updated = [];
     const removed = [];
     for (const path of SYSTEM_PATHS) {
@@ -326,32 +403,56 @@ async function apply() {
       process.exit(1);
     }
 
-    // 6. Install any new dependencies
-    try {
-      execSync('npm install --silent', { cwd: ROOT, timeout: 60000 });
-    } catch {
-      console.log('npm install skipped (may need manual run)');
-    }
+    // 6. Install the exact dependency tree. Failure is fatal because an
+    // incomplete node_modules cannot safely build or run the fetched version.
+    dependencyInstallStarted = true;
+    installDependencies();
 
     // 7. Commit the update
-    const remote = localVersion(); // Re-read after checkout updated VERSION
+    const remote = workingVersion(); // Re-read after checkout updated VERSION
     const dismissFile = join(ROOT, '.update-dismissed');
     if (existsSync(dismissFile)) unlinkSync(dismissFile); // gitignored — never staged
     addPaths(updated);
     if (git('diff', '--cached', '--name-only')) {
       try {
-        git('commit', '-m', `chore: auto-update system files to v${remote}`);
+        gitWithTimeout(
+          COMMIT_TIMEOUT_MS,
+          'commit',
+          '-m',
+          `chore: auto-update system files to v${remote}`,
+        );
       } catch (err) {
-        console.error(`Commit failed — update is staged but NOT committed: ${err.message}`);
-        console.error('Resolve the failure (e.g. pre-commit gate) and commit manually.');
-        unlinkSync(lockFile); // process.exit skips the finally block
-        process.exit(1);
+        throw new Error(`commit failed: ${err.message}`);
       }
     }
 
     console.log(`\nUpdate complete: v${local} → v${remote}`);
     console.log(`Updated ${updated.length} system paths.`);
     console.log(`Rollback available: node update-system.mjs rollback`);
+  } catch (error) {
+    if (checkoutStarted) {
+      let filesRestored = false;
+      try {
+        restoreCommittedSystemState();
+        filesRestored = true;
+        console.error('Update failed; restored the previous committed version.');
+      } catch (restoreError) {
+        console.error(`Update failed and automatic file recovery failed: ${restoreError.message}`);
+      }
+      if (filesRestored && dependencyInstallStarted) {
+        try {
+          installDependencies();
+        } catch (dependencyError) {
+          console.error(
+            `Previous system files were restored, but dependency recovery failed: ${dependencyError.message}`,
+          );
+        }
+      }
+      process.exitCode = 1;
+    } else {
+      console.error(`Update failed before changing system files: ${error.message}`);
+      process.exitCode = 2;
+    }
   } finally {
     // Remove lock
     if (existsSync(lockFile)) unlinkSync(lockFile);
@@ -405,7 +506,20 @@ function rollback() {
 
     // removeFilesAbsentInTarget uses `git rm`, so deletions are already staged.
     addPaths([...new Set(updated)]);
-    git('commit', '-m', `chore: rollback system files from ${latest}`);
+    if (!git('diff', '--cached', '--name-only')) {
+      console.log(`Checkout already matches ${latest}; no rollback commit needed.`);
+      return;
+    }
+    // A rollback restores an already committed tree. Skip the full pre-commit
+    // gate here so recovery cannot exceed the wrapper timeout before npm ci
+    // and the worker's health verification run.
+    gitWithTimeout(
+      COMMIT_TIMEOUT_MS,
+      'commit',
+      '--no-verify',
+      '-m',
+      `chore: rollback system files from ${latest}`,
+    );
 
     console.log(`Rollback complete. System files restored from ${latest}.`);
     console.log('Your data (CV, profile, tracker, reports) was not affected.');

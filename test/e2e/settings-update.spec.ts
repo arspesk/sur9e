@@ -7,7 +7,16 @@ const availableCheck = {
   status: 'update-available',
   local: '0.3.2',
   remote: '0.4.0',
-  changelog: 'Faster restart. Improved update recovery without touching your personal data.',
+  changelog: [
+    '## [0.4.0](https://github.com/arspesk/sur9e/compare/v0.3.2...v0.4.0) (2026-08-02)',
+    '',
+    '### Features',
+    '',
+    '* safer update recovery ([e458cc4](https://github.com/arspesk/sur9e/commit/e458cc4))',
+    '* readable release notes ([6932308](https://github.com/arspesk/sur9e/commit/6932308))',
+  ].join('\n'),
+  releaseDate: '2026-08-02T12:00:00Z',
+  releaseUrl: 'https://github.com/arspesk/sur9e/releases/tag/v0.4.0',
 } as const;
 
 function job(phase: string) {
@@ -179,7 +188,15 @@ test('runs the one-click update flow through restart downtime and restores the e
   await page.waitForLoadState('networkidle');
   const section = page.locator('section#system');
   await expect(section.getByText('v0.4.0 available')).toBeVisible();
-  await expect(section.getByText(availableCheck.changelog)).toBeVisible();
+  await expect(section.getByText('What’s new in v0.4.0 · Aug 2, 2026')).toBeVisible();
+  await expect(section.getByText('safer update recovery')).toBeVisible();
+  await expect(section.getByText('readable release notes')).toBeVisible();
+  await expect(section.getByText(/compare\/v0\.3\.2/)).toHaveCount(0);
+  await expect(section.getByText(/e458cc4/)).toHaveCount(0);
+  await expect(section.getByRole('link', { name: 'View release notes' })).toHaveAttribute(
+    'href',
+    availableCheck.releaseUrl,
+  );
   await expect(section.getByRole('button', { name: 'Update now' })).toBeVisible();
   expect(checkCalls).toBe(1);
 
@@ -267,6 +284,81 @@ test('consumes an automatic rollback notice for one load', async ({ page }) => {
   await expect(page.getByText(/automatically recovered v0\.3\.2/i)).toHaveCount(0);
 });
 
+test('shows failed apply recovery from the durable job and permits a clean retry', async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  let statusCalls = 0;
+  let rollbackCalls = 0;
+  const phases = ['applying', 'recovering', 'rolled-back'] as const;
+
+  await page.route('**/api/version', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":"0.3.2"}' }),
+  );
+  await page.route('**/api/update/**', route => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/update/status' && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"job":null}',
+      });
+    }
+    if (pathname === '/api/update/check' && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(availableCheck),
+      });
+    }
+    if (pathname === '/api/update/apply' && request.method() === 'POST') {
+      return route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ jobId: JOB_ID }),
+      });
+    }
+    if (pathname === `/api/update/status/${JOB_ID}` && request.method() === 'POST') {
+      const phase = phases[Math.min(statusCalls, phases.length - 1)];
+      statusCalls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...job(phase),
+          ...(phase === 'rolled-back'
+            ? { error: 'Update failed while applying the new version' }
+            : {}),
+        }),
+      });
+    }
+    if (pathname === '/api/update/rollback' && request.method() === 'POST') {
+      rollbackCalls += 1;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    }
+    return route.fulfill({ status: 418, body: 'unexpected update request' });
+  });
+
+  await page.goto(SETTINGS_HREF);
+  const section = page.locator('section#system');
+  await expect(section.getByRole('button', { name: 'Update now' })).toBeVisible();
+  await section.getByRole('button', { name: 'Update now' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Update now' }).click();
+
+  await expect(section.getByRole('status')).toContainText('Updating files');
+  await expect(section.getByRole('status')).toContainText('Recovering previous version', {
+    timeout: 8_000,
+  });
+  await expect(page.getByText(/automatically recovered v0\.3\.2/i)).toBeVisible({
+    timeout: 10_000,
+  });
+  expect(rollbackCalls).toBe(0);
+
+  await page.reload();
+  await expect(section.getByRole('button', { name: 'Update now' })).toBeEnabled();
+});
+
 for (const viewport of [
   { name: 'desktop', width: 1280, height: 800 },
   { name: 'tablet', width: 768, height: 1024 },
@@ -295,6 +387,16 @@ for (const viewport of [
     await expect(edit).toHaveAttribute('aria-expanded', 'true');
     await expect(section.getByRole('textbox', { name: 'Update source' })).toBeVisible();
     await expect(section.getByRole('textbox', { name: 'Update branch' })).toBeVisible();
+
+    if (viewport.name === 'mobile') {
+      const [topbarBox, headingBox] = await Promise.all([
+        page.locator('.topbar').boundingBox(),
+        section.getByRole('heading', { name: 'Updates & about' }).boundingBox(),
+      ]);
+      expect(topbarBox).not.toBeNull();
+      expect(headingBox).not.toBeNull();
+      expect(headingBox!.y).toBeGreaterThanOrEqual(topbarBox!.y + topbarBox!.height);
+    }
 
     await page.screenshot({
       path: `test-results/settings-update-panel-${viewport.name}-${viewport.width}x${viewport.height}.png`,

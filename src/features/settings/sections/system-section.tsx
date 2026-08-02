@@ -15,6 +15,7 @@ import {
   useVersion,
 } from '@/hooks/use-system';
 import { FetchJsonError } from '@/lib/api/fetch-json';
+import { parseReleaseNotes } from '@/lib/release-notes';
 import type { UpdateJob, UpdateJobPhase } from '@/lib/schemas/update-job';
 import type { SettingsFormValues } from '../types';
 
@@ -73,12 +74,6 @@ function getConfirmation(): ((options: ConfirmOptions) => Promise<boolean>) | un
       }
     ).deleteConfirmModal?.confirm ?? useDeleteConfirmStore.getState().confirm
   );
-}
-
-function changelogExcerpt(changelog: string) {
-  const normalized = changelog.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= 180) return normalized;
-  return `${normalized.slice(0, 177).trimEnd()}…`;
 }
 
 function readActiveJobId() {
@@ -364,6 +359,10 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
   }, [checkError, checkResult, isChecking, job, jobRunning, resultNotice, updateJob.isError]);
 
   const phaseLabel = job?.phase ? PHASE_LABEL[job.phase] : 'Starting update…';
+  const releaseNotes =
+    checkResult?.status === 'update-available'
+      ? parseReleaseNotes(checkResult.remote, checkResult.changelog, checkResult.releaseDate)
+      : null;
   const canUpdate = checkResult?.status === 'update-available' && !jobId && !resultNotice;
   const checkLabel = isChecking
     ? 'Checking…'
@@ -391,10 +390,20 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
           <span className="system-update-panel__detail">{status.detail}</span>
         </div>
 
-        {checkResult?.status === 'update-available' && checkResult.changelog.trim() ? (
-          <p className="system-update-panel__changelog">
-            <strong>What&rsquo;s new:</strong> {changelogExcerpt(checkResult.changelog)}
-          </p>
+        {checkResult?.status === 'update-available' && releaseNotes?.items.length ? (
+          <div className="system-update-panel__changelog">
+            <strong>What&rsquo;s new in {releaseNotes.title}</strong>
+            <ul>
+              {releaseNotes.items.map(item => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            {checkResult.releaseUrl?.startsWith('https://github.com/') ? (
+              <a href={checkResult.releaseUrl} target="_blank" rel="noreferrer">
+                View release notes
+              </a>
+            ) : null}
+          </div>
         ) : null}
 
         {job?.phase === 'failed' || checkError ? (

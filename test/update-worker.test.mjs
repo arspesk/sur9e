@@ -54,15 +54,18 @@ function harness(root, overrides = {}) {
   const states = [];
   const runCommand = vi.fn().mockResolvedValue(undefined);
   const waitForHealth = vi.fn().mockResolvedValue(undefined);
+  const validateRuntime = vi.fn().mockResolvedValue(undefined);
   return {
     states,
     runCommand,
     waitForHealth,
+    validateRuntime,
     deps: {
       pid: 4242,
       clock: () => NOW,
       runCommand,
       waitForHealth,
+      validateRuntime,
       claimPid: vi.fn(),
       readLaunchIdentity: vi.fn(() => ({ launchId: 'launch-123' })),
       readVersion: vi.fn(() => '0.4.0'),
@@ -180,10 +183,36 @@ describe('runUpdateRestartJob', () => {
     expect(runCommand).not.toHaveBeenCalled();
   });
 
-  it('marks apply failure failed without stopping or attempting rollback', async () => {
+  it('routes apply failure through automatic rollback and recovery', async () => {
     const root = makeRoot();
     const { states, runCommand, deps } = harness(root);
     runCommand.mockRejectedValueOnce(new Error('token=do-not-persist command details'));
+
+    const result = await runUpdateRestartJob(root, JOB_ID, deps);
+
+    expect(result).toEqual({ status: 'rolled-back' });
+    expect(states.map(job => job.phase)).toEqual([
+      'applying',
+      'recovering',
+      'recovering',
+      'recovering',
+      'recovering',
+      'rolled-back',
+    ]);
+    expect(runCommand.mock.calls[0][1]).toEqual([join(root, 'update-system.mjs'), 'apply']);
+    expect(runCommand.mock.calls.map(([, args]) => args)).toContainEqual([
+      join(root, 'update-system.mjs'),
+      'rollback',
+    ]);
+    expect(states.at(-1).error).toBe('Update failed while applying the new version');
+  });
+
+  it('does not roll back a stale backup when apply fails before checkout', async () => {
+    const root = makeRoot();
+    const { states, runCommand, deps } = harness(root);
+    runCommand.mockRejectedValueOnce(
+      Object.assign(new Error('fetch failed before checkout'), { exitCode: 2 }),
+    );
 
     const result = await runUpdateRestartJob(root, JOB_ID, deps);
 
@@ -191,7 +220,21 @@ describe('runUpdateRestartJob', () => {
     expect(states.map(job => job.phase)).toEqual(['applying', 'failed']);
     expect(runCommand).toHaveBeenCalledTimes(1);
     expect(runCommand.mock.calls[0][1]).toEqual([join(root, 'update-system.mjs'), 'apply']);
-    expect(states.at(-1).error).toBe('Update failed while applying the new version');
+    expect(states.at(-1).error).toBe('Update failed before changing system files');
+  });
+
+  it('fails before apply without rollback when the worker runtime is unsupported', async () => {
+    const root = makeRoot();
+    const { states, runCommand, waitForHealth, validateRuntime, deps } = harness(root);
+    validateRuntime.mockRejectedValueOnce(new Error('npm is unavailable'));
+
+    const result = await runUpdateRestartJob(root, JOB_ID, deps);
+
+    expect(result).toEqual({ status: 'failed' });
+    expect(states.map(job => job.phase)).toEqual(['failed']);
+    expect(states.at(-1).error).toBe('Update requires Node 24+ and a working npm installation');
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(waitForHealth).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -375,6 +418,7 @@ describe('runUpdateRestartJob', () => {
       clock: () => NOW,
       runCommand,
       waitForHealth,
+      validateRuntime: vi.fn().mockResolvedValue(undefined),
       readLaunchIdentity: () => ({ launchId: 'launch-123' }),
     });
 
@@ -569,9 +613,15 @@ describe('owned command timeout', () => {
         persistJob: (_root, job) => states.push(structuredClone(job)),
         waitForHealth: vi.fn().mockResolvedValue(undefined),
         readLaunchIdentity: vi.fn(() => ({ launchId: 'launch-123' })),
+        validateRuntime: vi.fn().mockResolvedValue(undefined),
       });
 
+      await Promise.resolve();
+      await Promise.resolve();
       expect(spawnProcess).toHaveBeenCalledTimes(1);
+      expect(spawnProcess.mock.calls[0][2]).toMatchObject({
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
       children[0].emit('exit', 0, null);
       await Promise.resolve();
       await Promise.resolve();
