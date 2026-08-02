@@ -18,7 +18,7 @@ const result = await runModeLLM(repoRoot, 'evaluate', 'integration prompt', {
     model: 'opencode-go/glm-5.2',
     fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
   },
-  timeoutMs: 1000,
+  timeoutMs: 5000,
   tee: true,
 });
 

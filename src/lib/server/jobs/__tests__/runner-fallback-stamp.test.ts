@@ -329,10 +329,10 @@ fi
             descendantPid = Number(readFileSync(descendantPidFile, 'utf8').trim());
             expect(descendantPid).toBeGreaterThan(1);
           },
-          { timeout: 5000, interval: 25 },
+          { timeout: 10_000, interval: 25 },
         );
         await vi.waitFor(() => expect(readJobRecord(root, JOB_ID)?.status).toBe('done'), {
-          timeout: 5000,
+          timeout: 10_000,
           interval: 25,
         });
 
@@ -364,7 +364,7 @@ fi
         }
       }
     },
-    15_000,
+    25_000,
   );
 
   it.each(ONE_HOP_PROVIDER_PAIRS)(

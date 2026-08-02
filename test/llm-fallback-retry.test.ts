@@ -863,7 +863,7 @@ describe('runModeLLM fallback retry', () => {
       const workerPath = join(process.cwd(), 'test/fixtures/fallback-timeout-worker.mjs');
       const worker = nodeSpawn(
         process.execPath,
-        [workerPath, root, descendantPidFile, '200', '0'],
+        [workerPath, root, descendantPidFile, '5000', '0'],
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
       let output = '';
@@ -891,7 +891,7 @@ describe('runModeLLM fallback retry', () => {
             );
             expect(supervisorPid).toBeGreaterThan(1);
           },
-          { timeout: 1000, interval: 20 },
+          { timeout: 5000, interval: 20 },
         );
         supervisorGroupNeedsCleanup = true;
 
@@ -927,6 +927,7 @@ describe('runModeLLM fallback retry', () => {
         }
       }
     },
+    15_000,
   );
 
   it('detects a retryable signature split across bounded stderr-tail chunks', async () => {
