@@ -82,7 +82,7 @@ describe('isRetryable', () => {
     ['overloaded', true],
     ['quota', true],
     ['install', true],
-    ['auth', false],
+    ['auth', true],
     ['context_overflow', false],
     ['unknown', false],
   ])('%s → %s', (category, expected) => {

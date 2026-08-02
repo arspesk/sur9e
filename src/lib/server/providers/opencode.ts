@@ -8,7 +8,9 @@
 //
 //   - Headless subcommand is `opencode run "<prompt>"` (positional prompt).
 //   - **Headless `run` stays plain-text**: `buildHeadlessArgs` deliberately
-//     emits plain stdout (token telemetry is estimated via tiktoken at job
+//     emits the report on plain stdout while forwarding ERROR-level OpenCode
+//     logs to stderr so the fallback classifier can see provider failures
+//     (token telemetry is estimated via tiktoken at job
 //     close), so every `BuildHeadlessOpts` field that implies a structured
 //     stream (outputFormat !== 'text', pipeToParser: true) throws rather than
 //     silently degrade. The interactive CHAT path is different: `buildChatArgs`
@@ -165,8 +167,11 @@ const opencode: Provider = {
     // Warp cli-agent notifier) hijack the output streams — machine events on
     // stdout, the model transcript ANSI-rendered on stderr — which broke
     // sentinel parsing in the provider matrix. Headless runs need the plain
-    // response on stdout.
-    const cmdline = `opencode run --pure -m ${model} ${escapeForBash(prompt)}`;
+    // response on stdout. --print-logs with ERROR-only verbosity exposes
+    // provider quota, rate-limit, auth, and model failures on stderr; without
+    // it OpenCode can log the terminal error privately and remain alive until
+    // sur9e's outer timeout instead of triggering the configured fallback.
+    const cmdline = `opencode run --pure --print-logs --log-level ERROR -m ${model} ${escapeForBash(prompt)}`;
     return { cmd: '/bin/bash', args: ['-c', cmdline] };
   },
 
