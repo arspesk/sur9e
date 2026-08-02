@@ -130,10 +130,10 @@ export function terminateProviderTree(
   }
   if (child?.[ISOLATED_PROVIDER_GROUP] && Number.isInteger(pid) && pid > 1) {
     try {
-      // The detached supervisor owns a separate detached provider group. Ask
-      // it to SIGKILL that group so the supervisor can preserve the provider's
-      // real exit status and clean up after an uncatchable worker death.
-      child.kill("SIGTERM");
+      // The detached supervisor is the process-group leader and the provider
+      // inherits that group. This remains effective even if the supervisor has
+      // already exited while one of its provider descendants is still alive.
+      killImpl(-pid, signal);
     } catch (error) {
       if (error?.code !== "ESRCH") throw error;
     }
@@ -198,13 +198,21 @@ function processGroupIsAlive(processGroupId) {
   if (!Number.isInteger(processGroupId) || processGroupId <= 1 || process.platform === "win32") {
     return false;
   }
-  try {
-    process.kill(-processGroupId, 0);
-    return true;
-  } catch (error) {
-    if (error?.code === "ESRCH") return false;
-    return true;
-  }
+  // BSD ps and procps disagree about `-g`; filter an explicit PGID column.
+  // Zombies are already terminal and cannot overlap/fork into the fallback.
+  const result = spawnSync("ps", ["-A", "-o", "pid=", "-o", "pgid=", "-o", "stat="], {
+    encoding: "utf-8",
+    detached: true,
+  });
+  if (result.error || result.status !== 0) return true;
+  return String(result.stdout ?? "")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .some((line) => {
+      const [pid, pgid, state = ""] = line.trim().split(/\s+/, 3);
+      return Number(pid) > 1 && Number(pgid) === processGroupId && !state.includes("Z");
+    });
 }
 
 export function resolveRuntimeForMode(rootPath, modeId, { execImpl = defaultExec } = {}) {
@@ -278,7 +286,14 @@ export function buildSpawnArgsForMode(
       const error = new Error(`provider command build timed out after ${commandTimeoutMs}ms`);
       error.code = "ETIMEDOUT";
       error.stderr = String(result.stderr ?? "");
-      error.cleanupFailed = error.stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER);
+      // Timed production builders already run under provider-supervisor via
+      // defaultExec. Verify its known process group as an extra guard for a
+      // surviving D-state member; custom execImpl fakes may omit result.pid.
+      error.cleanupFailed =
+        error.stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER) ||
+        (process.platform !== "win32" &&
+          Number.isInteger(result.pid) &&
+          processGroupIsAlive(result.pid));
       throw error;
     }
     if (result.status !== 0) {
@@ -308,6 +323,7 @@ function runOnce(
     execImpl = defaultExec,
     spawnImpl = nodeSpawn,
     signal,
+    isolateProviderGroup: isolateProviderGroupOption,
     // Echo the provider's streams to OUR stdout/stderr as they arrive, so a
     // parent that captures this process's output (the job runner persisting
     // mode-runner stdout into the job record) shows progress live. Opt-in:
@@ -360,7 +376,9 @@ function runOnce(
       });
       return;
     }
-    const isolateProviderGroup = process.platform !== "win32" && spawnImpl === nodeSpawn;
+    const isolateProviderGroup =
+      process.platform !== "win32" &&
+      (isolateProviderGroupOption ?? spawnImpl === nodeSpawn);
     const child = spawnImpl(
       isolateProviderGroup ? process.execPath : built.spawn.cmd,
       isolateProviderGroup
@@ -395,6 +413,7 @@ function runOnce(
     const trackedDescendants = new Set();
     let timer = null;
     let settleTimer = null;
+    let settlePollMs = PROCESS_TREE_POLL_MS;
     const finish = (result) => {
       if (settled) return;
       settled = true;
@@ -502,8 +521,8 @@ function runOnce(
         );
         return;
       }
-      settleTimer = setTimeout(settleStoppedAttempt, PROCESS_TREE_POLL_MS);
-      settleTimer.unref?.();
+      settleTimer = setTimeout(settleStoppedAttempt, settlePollMs);
+      settlePollMs = Math.min(settlePollMs * 2, 100);
     };
 
     const killTree = (killSignal) => {
@@ -564,8 +583,10 @@ function runOnce(
     });
     child.stderr.on("data", (d) => {
       const text = d.toString();
+      const cleanupWindow =
+        stderr.slice(-(PROVIDER_CLEANUP_FAILED_MARKER.length - 1)) + text;
       stderr += text;
-      cleanupFailureReported ||= stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER);
+      cleanupFailureReported ||= cleanupWindow.includes(PROVIDER_CLEANUP_FAILED_MARKER);
       if (tee) process.stderr.write(text);
       detectStreamedTerminalFailure();
     });

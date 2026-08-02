@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn } from 'node:child_process';
+import { spawn as nodeSpawn, spawnSync as nodeSpawnSync } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,6 +50,19 @@ function trackedTempRoot(prefix: string) {
   const root = mkdtempSync(join(tmpdir(), prefix));
   trackedTempRoots.add(root);
   return root;
+}
+
+async function waitForPidFile(path: string, timeout = 2000) {
+  let pid = 0;
+  await vi.waitFor(
+    () => {
+      expect(existsSync(path)).toBe(true);
+      pid = Number(readFileSync(path, 'utf8').trim());
+      expect(pid).toBeGreaterThan(1);
+    },
+    { timeout, interval: 20 },
+  );
+  return pid;
 }
 
 afterEach(() => {
@@ -180,6 +193,36 @@ describe('runModeLLM fallback retry', () => {
       to: { provider: 'codex', model: 'gpt-5-codex' },
       reason: 'rate_limit',
     });
+  });
+
+  it('allows a wrapped spawn implementation to request provider-group isolation explicitly', async () => {
+    const f = makeFakes([{ code: 0 }]);
+    let spawnedCommand = '';
+    let spawnedArgs: string[] = [];
+    const spawnImpl = (command: string, args: string[]) => {
+      spawnedCommand = command;
+      spawnedArgs = args;
+      const child = new EventEmitter() as any;
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => true;
+      setImmediate(() => child.emit('close', 0));
+      return child;
+    };
+
+    const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+      logsDir,
+      runtime: { provider: 'claude', model: 'claude-opus-4-7' },
+      timeoutMs: 100,
+      execImpl: f.execImpl,
+      spawnImpl,
+      isolateProviderGroup: true,
+    });
+
+    expect(r.ok).toBe(true);
+    expect(spawnedCommand).toBe(process.execPath);
+    expect(spawnedArgs[0]).toMatch(/provider-supervisor\.mjs$/);
+    expect(spawnedArgs).toContain('--parent-pid');
   });
 
   it.each([
@@ -544,10 +587,9 @@ describe('runModeLLM fallback retry', () => {
         return true;
       };
       setImmediate(() => {
-        child.stderr.emit(
-          'data',
-          Buffer.from('[SUR9E_PROVIDER_CLEANUP_FAILED] Provider is overloaded'),
-        );
+        const marker = '[SUR9E_PROVIDER_CLEANUP_FAILED]';
+        child.stderr.emit('data', Buffer.from(marker.slice(0, -5)));
+        child.stderr.emit('data', Buffer.from(`${marker.slice(-5)} Provider is overloaded`));
       });
       return child;
     };
@@ -758,11 +800,7 @@ describe('runModeLLM fallback retry', () => {
       let descendantPid = 0;
 
       try {
-        await vi.waitFor(() => expect(existsSync(descendantPidFile)).toBe(true), {
-          timeout: 2000,
-          interval: 20,
-        });
-        descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+        descendantPid = await waitForPidFile(descendantPidFile);
         worker.kill('SIGKILL');
         const [code, signal] = (await once(worker, 'close')) as [number | null, string | null];
 
@@ -781,6 +819,77 @@ describe('runModeLLM fallback retry', () => {
         try {
           worker.kill('SIGKILL');
         } catch {}
+        if (descendantPid > 1) {
+          try {
+            process.kill(descendantPid, 'SIGKILL');
+          } catch {}
+        }
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'kills the provider group and falls back if its supervisor dies first',
+    async () => {
+      const root = trackedTempRoot('llm-fallback-dead-supervisor-');
+      const descendantPidFile = join(root, 'descendant.pid');
+      const workerPath = join(process.cwd(), 'test/fixtures/fallback-timeout-worker.mjs');
+      const worker = nodeSpawn(
+        process.execPath,
+        [workerPath, root, descendantPidFile, '200', '0'],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let output = '';
+      worker.stdout.on('data', chunk => {
+        output += chunk.toString();
+      });
+      worker.stderr.on('data', chunk => {
+        output += chunk.toString();
+      });
+      let descendantPid = 0;
+      let supervisorPid = 0;
+
+      try {
+        descendantPid = await waitForPidFile(descendantPidFile);
+        await vi.waitFor(
+          () => {
+            const result = nodeSpawnSync('pgrep', ['-P', String(worker.pid)], {
+              encoding: 'utf8',
+            });
+            supervisorPid = Number(
+              String(result.stdout ?? '')
+                .trim()
+                .split(/\s+/)[0],
+            );
+            expect(supervisorPid).toBeGreaterThan(1);
+          },
+          { timeout: 1000, interval: 20 },
+        );
+
+        process.kill(supervisorPid, 'SIGKILL');
+        const [code, signal] = (await once(worker, 'close')) as [number | null, string | null];
+
+        expect(code).toBe(0);
+        expect(signal).toBeNull();
+        expect(output).toContain('[FALLBACK]');
+        expect(output).toContain('fallback completed');
+        await vi.waitFor(
+          () => {
+            expect(() => process.kill(descendantPid, 0)).toThrow(
+              expect.objectContaining({ code: 'ESRCH' }),
+            );
+          },
+          { timeout: 1000, interval: 20 },
+        );
+      } finally {
+        try {
+          worker.kill('SIGKILL');
+        } catch {}
+        if (supervisorPid > 1) {
+          try {
+            process.kill(-supervisorPid, 'SIGKILL');
+          } catch {}
+        }
         if (descendantPid > 1) {
           try {
             process.kill(descendantPid, 'SIGKILL');

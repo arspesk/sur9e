@@ -132,11 +132,14 @@ describe('spawnJob fallback metadata', () => {
       try {
         await spawnJob(root, job, { trackUsage: vi.fn() });
         realWorkerProcessGroupId = readJobRecord(root, JOB_ID)?.processGroupId ?? null;
-        await vi.waitFor(() => expect(existsSync(descendantPidFile)).toBe(true), {
-          timeout: 5000,
-          interval: 25,
-        });
-        descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+        await vi.waitFor(
+          () => {
+            expect(existsSync(descendantPidFile)).toBe(true);
+            descendantPid = Number(readFileSync(descendantPidFile, 'utf8').trim());
+            expect(descendantPid).toBeGreaterThan(1);
+          },
+          { timeout: 5000, interval: 25 },
+        );
         await vi.waitFor(
           () => {
             expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
@@ -168,7 +171,8 @@ describe('spawnJob fallback metadata', () => {
         );
       } finally {
         if (descendantPid <= 1 && existsSync(descendantPidFile)) {
-          descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+          const parsedPid = Number(readFileSync(descendantPidFile, 'utf8').trim());
+          if (parsedPid > 1) descendantPid = parsedPid;
         }
         if (descendantPid > 1) {
           try {
