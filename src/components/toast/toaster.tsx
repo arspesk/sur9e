@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useToastStore } from './toast-store';
 
@@ -52,7 +53,7 @@ function ToastItem({ id, message, tone }: { id: string; message: string; tone: s
           opacity: 0.7,
         }}
       >
-        <span aria-hidden="true">×</span>
+        <X aria-hidden="true" />
       </button>
     </div>
   );

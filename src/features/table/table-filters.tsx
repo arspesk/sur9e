@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef } from 'react';
 import { Button } from '@/components/primitives';
@@ -153,7 +154,7 @@ export function TableFilters({ value, onChange, open = false, onClose }: TableFi
           aria-label="Close filters"
           onClick={onClose}
         >
-          ×
+          <X aria-hidden="true" />
         </button>
       </header>
 
@@ -186,7 +187,7 @@ export function TableFilters({ value, onChange, open = false, onClose }: TableFi
               }))
             }
           >
-            <span aria-hidden="true">{value.sort.dir === 'asc' ? '▲' : '▼'}</span>{' '}
+            <span aria-hidden="true">{value.sort.dir === 'asc' ? <ArrowUp /> : <ArrowDown />}</span>{' '}
             {value.sort.dir === 'asc' ? 'Ascending' : 'Descending'}
           </button>
         </section>

@@ -97,6 +97,15 @@
   --space-9: 96px;
   --space-10: 128px;
 
+  /* ─── Icons ─── */
+  --icon-size-micro: 10px;
+  --icon-size-compact: 12px;
+  --icon-size-small: 14px;
+  --icon-size-control: 16px;
+  --icon-size-feature: 24px;
+  --icon-stroke-default: 1.7;
+  --icon-stroke-menu: 2;
+
   /* ─── Update controls ─── */
   --update-badge-padding-block: 4px;
   --update-badge-padding-inline: 9px;

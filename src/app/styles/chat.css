@@ -40,6 +40,17 @@
 .chat-tool__glyph--err {
   color: var(--st-danger);
 }
+.chat-tool__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.chat-tool__glyph svg {
+  width: var(--icon-size-micro);
+  height: var(--icon-size-micro);
+  stroke-width: var(--icon-stroke-default);
+}
 .chat-tool__name {
   white-space: nowrap;
 }
@@ -140,8 +151,17 @@
   flex-wrap: wrap;
 }
 .chat-confirm__resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   margin: 0;
   font-size: 12px;
+}
+.chat-confirm__resolved svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  flex: 0 0 auto;
+  stroke-width: var(--icon-stroke-default);
 }
 .chat-confirm__result {
   margin: 0;
@@ -215,6 +235,9 @@
 }
 .chat-bubble__mark {
   display: block;
+  width: var(--icon-size-feature);
+  height: var(--icon-size-feature);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* Active-jobs count badge — dark pill, top-right. */
@@ -649,6 +672,9 @@
   padding: 0;
 }
 .chat-composer__queued-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: var(--text-3);
@@ -851,6 +877,11 @@
 .chat-jump:hover {
   color: var(--text);
   background: var(--surface-2);
+}
+.chat-jump svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
 }
 .chat-jump:focus-visible {
   outline: 2px solid var(--accent);
@@ -1438,6 +1469,12 @@
 .chat-jobs__cross {
   background: var(--st-danger);
 }
+.chat-jobs__check svg,
+.chat-jobs__cross svg {
+  width: var(--icon-size-micro);
+  height: var(--icon-size-micro);
+  stroke-width: var(--icon-stroke-default);
+}
 .chat-jobs__cancelled {
   color: var(--text-3);
 }
@@ -1514,6 +1551,11 @@
 .chat-jobs__close {
   font-size: 14px;
   line-height: 1;
+}
+.chat-jobs__close svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .chat-jobs__logs-toggle:hover,
 .chat-jobs__close:hover {
@@ -1729,6 +1771,11 @@
   background: var(--surface-2);
   color: var(--text);
 }
+.chat-versions__arrow svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
+}
 .chat-versions__arrow:focus-visible,
 .chat-regenerate:focus-visible {
   outline: 2px solid var(--accent);
@@ -1801,11 +1848,20 @@
   flex-shrink: 0;
 }
 .chat-attach-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
   padding: 0 2px;
+}
+.chat-attach-chip__remove svg,
+.chat-composer__queued-clear svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .chat-attach-chip__remove:hover {
   color: var(--st-danger);
@@ -1867,8 +1923,8 @@
   background: var(--surface-2);
   font-size: 18px;
 }
-/* File/selection chip leading glyph — the ▤ file fallback and the selection
-   chip's quote mark both live here; keep it a snug, muted, non-shrinking box. */
+/* File/selection chip leading Lucide icon — keep it a snug, muted,
+   non-shrinking box. */
 .chat-attach-chip__icon {
   display: inline-flex;
   align-items: center;
@@ -1877,6 +1933,13 @@
 }
 .chat-attach-chip__icon svg {
   display: block;
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
+.chat-msg__attachments .chat-attach-chip__icon svg {
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
 }
 /* A captured text selection reads as quoted material — italic preview sets it
    apart from a filename at a glance (the quote glyph already distinguishes it). */
@@ -2040,8 +2103,9 @@
   justify-content: center;
 }
 .chat-msg__copy--inline svg {
-  width: 12px;
-  height: 12px;
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* Lucide square glyph inside the stop button. */
@@ -2051,8 +2115,9 @@
   justify-content: center;
 }
 .chat-composer__stop svg {
-  width: 14px;
-  height: 14px;
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* Copy, regenerate, and the version arrows share one square footprint so
@@ -2077,14 +2142,27 @@
   justify-content: center;
 }
 .chat-composer__attach svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
+
+.chat-composer__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-composer__send svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* Lucide refresh-cw glyph inside the regenerate button. */
 .chat-regenerate svg {
-  width: 12px;
-  height: 12px;
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* ── Session-row ⋮ kebab (replaces the inline rename/archive/delete icons) ── */

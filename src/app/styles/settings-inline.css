@@ -615,8 +615,13 @@
     transform var(--dur-quick) var(--ease-firm);
 }
 .portal-row__expand svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
+.portal-row__meta .form-row__remove svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
 }
 .portal-row__expand:hover {
   color: var(--text);
