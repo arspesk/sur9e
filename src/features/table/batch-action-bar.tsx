@@ -54,23 +54,25 @@ export function BatchActionBar() {
     // (network drop, payload parse error) would otherwise vanish as an
     // unhandled rejection — toast it and keep the selection so the user can
     // retry.
-    let ok: number;
-    let failed: number;
+    let result: Awaited<ReturnType<typeof batchUpdateApplicationStatusAction>>;
     try {
-      ({ ok, failed } = await batchUpdateApplicationStatusAction({
+      result = await batchUpdateApplicationStatusAction({
         nums,
         status: newStatus,
-      }));
+      });
     } catch (err) {
       push('danger', err instanceof Error ? err.message : 'Bulk status update failed');
-      return;
+      return [];
     }
+    const { ok, failed } = result;
     if (failed === 0) push('success', `Updated ${ok} offer${ok === 1 ? '' : 's'}`);
     else if (ok === 0) push('danger', `Failed to update ${failed} offers`);
     else push('info', `Updated ${ok} offers (${failed} failed)`);
     clear();
     queryClient.invalidateQueries({ queryKey: ['applications'] });
     queryClient.invalidateQueries({ queryKey: ['status-log'] });
+    const failedNums = new Set(result.errors.map(item => item.num));
+    return nums.filter(num => !failedNums.has(num));
   }
 
   async function handleBulkStatus(newStatus: ApplicationStatus) {
@@ -82,17 +84,17 @@ export function BatchActionBar() {
     // Bulk variant of the interceptStatusPick rule (single-row surfaces call
     // it directly — see status-popover-host.tsx). Selection statuses vary
     // per row, so instead of comparing prev/next we key off the pick alone:
-    // 'evaluated' routes through the evaluate confirm modal. Confirming
-    // spawns real evaluation jobs (nums[] fan-out); the modal's explicit
-    // "Set status only" button applies the plain bulk PATCH without running
-    // anything. Cancel / Escape / overlay-click abort entirely — they're
-    // indistinguishable from an accidental dismiss, so they must not write.
+    // 'evaluated' persists the bulk status change first, then offers the
+    // evaluation jobs as an optional follow-up for rows that succeeded.
     if (newStatus === 'evaluated') {
-      openModal('evaluate', {
-        count: liveNums.length,
-        nums: liveNums,
-        onStatusOnly: () => void applyBulkStatus(liveNums, 'evaluated'),
-      });
+      const updatedNums = await applyBulkStatus(liveNums, 'evaluated');
+      if (updatedNums.length > 0) {
+        openModal('evaluate', {
+          count: updatedNums.length,
+          nums: updatedNums,
+          statusFollowup: true,
+        });
+      }
       return;
     }
 

@@ -75,15 +75,15 @@ export function PendingOffersSection({ offers }: { offers: PendingOffer[] }) {
   const updateStatus = useUpdateApplicationStatus();
 
   function evaluate(o: PendingOffer) {
-    openModal('evaluate', {
-      num: o.num,
-      patchToEvaluated: true,
-      // EvaluateModal fires onConfirm *before* its own status PATCH, and
-      // the action only revalidates /offers, /pipeline and /report — Home
-      // isn't in that list, so refresh from here. The pill may lag by one
-      // frame; the next refresh settles it.
-      onConfirm: () => router.refresh(),
-    });
+    updateStatus.mutate(
+      { num: o.num, status: 'evaluated' },
+      {
+        onSuccess: () => {
+          router.refresh();
+          openModal('evaluate', { num: o.num, statusFollowup: true });
+        },
+      },
+    );
   }
 
   function setStatus(o: PendingOffer, status: 'applied' | 'discarded') {

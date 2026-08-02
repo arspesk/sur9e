@@ -10,10 +10,9 @@
  * positioning + the PATCH on pick.
  *
  * Status picks go through interceptStatusPick so the pill behaves exactly
- * like the kanban drag: picking "evaluated" opens the evaluate confirm
- * modal, which offers BOTH "Run evaluation" (PATCH + spawn the eval job)
- * and "Set status only" (plain PATCH, no job) — the user chooses. Every
- * other transition is a plain PATCH.
+ * like the kanban drag: picking "evaluated" persists the status first, then
+ * opens an optional evaluation follow-up. Every other transition is a plain
+ * PATCH.
  */
 
 import { useToastStore } from '@/components/toast/toast-store';
@@ -57,18 +56,15 @@ export function StatusPopoverHost() {
           return;
         }
         if (intercept.kind === 'evaluate-modal') {
-          // patchToEvaluated → "Run evaluation" flips status then spawns the
-          // job; onStatusOnly → "Set status only" just flips to evaluated
-          // with no job (same plain PATCH the hook toasts on error).
-          openModal('evaluate', {
-            num,
-            patchToEvaluated: true,
-            onStatusOnly: () =>
-              updateStatus(
-                { num, status: 'evaluated' },
-                { onSuccess: () => pushToast('success', `#${num} → evaluated`) },
-              ),
-          });
+          updateStatus(
+            { num, status: 'evaluated' },
+            {
+              onSuccess: () => {
+                pushToast('success', `#${num} → evaluated`);
+                openModal('evaluate', { num, statusFollowup: true });
+              },
+            },
+          );
           return;
         }
         // Failure toast comes from useUpdateApplicationStatus's hook-level
