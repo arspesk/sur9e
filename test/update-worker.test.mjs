@@ -207,6 +207,19 @@ describe('runUpdateRestartJob', () => {
     expect(states.at(-1).error).toBe('Update failed while applying the new version');
   });
 
+  it('restores build dependencies during production-server recovery', async () => {
+    const root = makeRoot({ prod: true, tailscale: true });
+    const { runCommand, deps } = harness(root);
+    runCommand.mockRejectedValueOnce(new Error('apply failed'));
+
+    await runUpdateRestartJob(root, JOB_ID, deps);
+
+    expect(runCommand.mock.calls.map(([command, args]) => [command, args])).toContainEqual([
+      'npm',
+      ['ci', '--include=dev', '--no-audit', '--no-fund'],
+    ]);
+  });
+
   it('does not roll back a stale backup when apply fails before checkout', async () => {
     const root = makeRoot();
     const { states, runCommand, deps } = harness(root);
@@ -274,7 +287,7 @@ describe('runUpdateRestartJob', () => {
     ]);
     expect(runCommand.mock.calls.map(([command, args]) => [command, args])).toContainEqual([
       'npm',
-      ['ci', '--no-audit', '--no-fund'],
+      ['ci', '--include=dev', '--no-audit', '--no-fund'],
     ]);
     const finalStart = runCommand.mock.calls
       .filter(([, args]) => args[0] === join(root, 'scripts/web.mjs') && args[1] !== 'stop')
@@ -361,7 +374,7 @@ describe('runUpdateRestartJob', () => {
     {
       recoveryStage: 'install',
       mode: { prod: false, tailscale: false },
-      failCommand: 'ci --no-audit --no-fund',
+      failCommand: 'ci --include=dev --no-audit --no-fund',
     },
     {
       recoveryStage: 'rebuild',
@@ -387,7 +400,8 @@ describe('runUpdateRestartJob', () => {
         if (args[0] === join(root, 'scripts/web.mjs') && args[1] !== 'stop') startCount += 1;
         const recoveryFailure =
           (failCommand === 'rollback' && args[1] === 'rollback') ||
-          (failCommand === 'ci --no-audit --no-fund' && label === 'ci --no-audit --no-fund') ||
+          (failCommand === 'ci --include=dev --no-audit --no-fund' &&
+            label === 'ci --include=dev --no-audit --no-fund') ||
           (failCommand === 'second build' && label === 'run build' && buildCount === 2) ||
           (failCommand === 'web start' && startCount === 2);
         if (recoveryFailure) throw new Error('recovery secret with command details');
@@ -467,7 +481,7 @@ describe('runUpdateRestartJob', () => {
       expect(result).toEqual({ status: 'rolled-back' });
       const calls = runCommand.mock.calls.map(([, args]) => args);
       expect(calls).not.toContainEqual([join(root, 'update-system.mjs'), 'apply']);
-      expect(calls).toContainEqual(['ci', '--no-audit', '--no-fund']);
+      expect(calls).toContainEqual(['ci', '--include=dev', '--no-audit', '--no-fund']);
       expect(calls).toContainEqual([join(root, 'scripts/web.mjs'), '--detach']);
       const rollbackCalls = calls.filter(
         args => args[0] === join(root, 'update-system.mjs') && args[1] === 'rollback',
