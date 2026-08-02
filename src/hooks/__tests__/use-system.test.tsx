@@ -70,7 +70,14 @@ afterEach(() => {
 describe('UpdateCheckResponse', () => {
   it('models every response shape emitted by the update check route', () => {
     expectTypeOf<UpdateCheckResponse>().toEqualTypeOf<
-      | { status: 'update-available'; local: string; remote: string; changelog: string }
+      | {
+          status: 'update-available';
+          local: string;
+          remote: string;
+          changelog: string;
+          releaseDate?: string;
+          releaseUrl?: string;
+        }
       | { status: 'up-to-date'; local: string; remote: string }
       | { status: 'dismissed' }
       | { status: 'offline'; local: string }
@@ -85,6 +92,8 @@ describe('UpdateCheckResponse', () => {
         local: '0.3.2',
         remote: '0.4.0',
         changelog: 'Faster restart',
+        releaseDate: '2026-08-02T12:00:00Z',
+        releaseUrl: 'https://github.com/arspesk/sur9e/releases/tag/v0.4.0',
       },
     ];
 

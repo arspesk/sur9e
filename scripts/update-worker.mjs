@@ -28,6 +28,7 @@ const POST_ROLLBACK_CHECKPOINTS = new Set([
   'recovery-server-started',
 ]);
 const COMMAND_TIMEOUTS_MS = {
+  preflight: 30_000,
   apply: 15 * 60_000,
   stop: 2 * 60_000,
   build: 15 * 60_000,
@@ -120,7 +121,7 @@ function runCommand(
       ...options,
       detached: true,
       shell: false,
-      stdio: 'ignore',
+      stdio: ['ignore', 'inherit', 'inherit'],
     });
     let settled = false;
     let timedOut = false;
@@ -178,8 +179,27 @@ function runCommand(
     child.once('exit', (code, signal) => {
       if (timedOut) return;
       if (code === 0 && signal === null) finish(resolvePromise)();
-      else finish(reject)(new Error('Command failed'));
+      else {
+        console.error(
+          `[update-worker] command failed (${command}, exit ${code ?? 'none'}, signal ${signal ?? 'none'})`,
+        );
+        const error = new Error('Command failed');
+        error.exitCode = code;
+        error.signal = signal;
+        finish(reject)(error);
+      }
     });
+  });
+}
+
+async function validateRuntime(root) {
+  const major = Number(process.versions.node.split('.')[0]);
+  if (!Number.isInteger(major) || major < 24) {
+    throw new Error(`Node ${process.version} is below the required Node 24 runtime`);
+  }
+  await runCommand('npm', ['--version'], {
+    cwd: root,
+    timeoutMs: COMMAND_TIMEOUTS_MS.preflight,
   });
 }
 
@@ -228,6 +248,7 @@ const defaultDeps = {
   waitForHealth: waitForSur9eHealth,
   readLaunchIdentity,
   readVersion,
+  validateRuntime,
 };
 
 /**
@@ -343,15 +364,25 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps, optio
     return recover(job.error ?? 'Update worker stopped before completion');
   }
 
+  try {
+    await runtime.validateRuntime(root);
+  } catch {
+    transition('failed', 'Update requires Node 24+ and a working npm installation');
+    return { status: 'failed' };
+  }
+
   transition('applying', undefined, 'apply-started');
   try {
     await runPhaseCommand(process.execPath, [join(root, 'update-system.mjs'), 'apply'], {
       cwd: root,
       timeoutMs: COMMAND_TIMEOUTS_MS.apply,
     });
-  } catch {
-    transition('failed', 'Update failed while applying the new version', 'apply-started');
-    return { status: 'failed' };
+  } catch (error) {
+    if (error?.exitCode === 2) {
+      transition('failed', 'Update failed before changing system files', 'apply-started');
+      return { status: 'failed' };
+    }
+    return recover('Update failed while applying the new version');
   }
 
   let failedPhase;

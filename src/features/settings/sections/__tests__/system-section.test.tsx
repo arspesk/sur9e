@@ -232,6 +232,40 @@ describe('SystemSection update status', () => {
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
   });
 
+  it('renders Markdown release notes as a concise date, feature list, and normal link', async () => {
+    mocks.check = {
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({
+        status: 'update-available',
+        local: '0.3.2',
+        remote: '0.4.0',
+        changelog: [
+          '## [0.4.0](https://github.com/arspesk/sur9e/compare/v0.3.2...v0.4.0) (2026-08-02)',
+          '',
+          '### Features',
+          '',
+          '* add guided status follow-ups ([e458cc4](https://github.com/arspesk/sur9e/commit/e458cc4))',
+          '* **status:** guide interview preparation ([6932308](https://github.com/arspesk/sur9e/commit/6932308))',
+        ].join('\n'),
+        releaseDate: '2026-08-02T12:00:00Z',
+        releaseUrl: 'https://github.com/arspesk/sur9e/releases/tag/v0.4.0',
+      }),
+    };
+    renderSection();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+
+    expect(await screen.findByText('What’s new in v0.4.0 · Aug 2, 2026')).toBeTruthy();
+    expect(screen.getByText('add guided status follow-ups')).toBeTruthy();
+    expect(screen.getByText('status: guide interview preparation')).toBeTruthy();
+    expect(screen.queryByText(/compare\/v0\.3\.2/)).toBeNull();
+    expect(screen.queryByText(/e458cc4/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'View release notes' })).toHaveAttribute(
+      'href',
+      'https://github.com/arspesk/sur9e/releases/tag/v0.4.0',
+    );
+  });
+
   it('uses the shared medium Settings button size for update actions', () => {
     renderSection();
 

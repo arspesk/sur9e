@@ -22,7 +22,14 @@ export interface VersionResponse {
 }
 
 export type UpdateCheckResponse =
-  | { status: 'update-available'; local: string; remote: string; changelog: string }
+  | {
+      status: 'update-available';
+      local: string;
+      remote: string;
+      changelog: string;
+      releaseDate?: string;
+      releaseUrl?: string;
+    }
   | { status: 'up-to-date'; local: string; remote: string }
   | { status: 'dismissed' }
   | { status: 'offline'; local: string };
