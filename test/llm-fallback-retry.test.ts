@@ -875,6 +875,7 @@ describe('runModeLLM fallback retry', () => {
       });
       let descendantPid = 0;
       let supervisorPid = 0;
+      let supervisorGroupNeedsCleanup = false;
 
       try {
         descendantPid = await waitForPidFile(descendantPidFile);
@@ -892,6 +893,7 @@ describe('runModeLLM fallback retry', () => {
           },
           { timeout: 1000, interval: 20 },
         );
+        supervisorGroupNeedsCleanup = true;
 
         process.kill(supervisorPid, 'SIGKILL');
         const [code, signal] = (await once(worker, 'close')) as [number | null, string | null];
@@ -908,11 +910,12 @@ describe('runModeLLM fallback retry', () => {
           },
           { timeout: 1000, interval: 20 },
         );
+        supervisorGroupNeedsCleanup = false;
       } finally {
         try {
           worker.kill('SIGKILL');
         } catch {}
-        if (supervisorPid > 1) {
+        if (supervisorGroupNeedsCleanup && supervisorPid > 1) {
           try {
             process.kill(-supervisorPid, 'SIGKILL');
           } catch {}
