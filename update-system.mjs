@@ -153,7 +153,7 @@ function validateRuntime() {
 }
 
 function installDependencies() {
-  execFileSync('npm', ['ci', '--no-audit', '--no-fund'], {
+  execFileSync('npm', ['ci', '--include=dev', '--no-audit', '--no-fund'], {
     cwd: ROOT,
     timeout: INSTALL_TIMEOUT_MS,
     stdio: 'inherit',

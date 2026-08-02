@@ -333,7 +333,7 @@ export async function runUpdateRestartJob(root, jobId, deps = defaultDeps, optio
       }
       transition('recovering', originalError, 'rollback-complete');
       recoveryStage = 'install';
-      await runPhaseCommand('npm', ['ci', '--no-audit', '--no-fund'], {
+      await runPhaseCommand('npm', ['ci', '--include=dev', '--no-audit', '--no-fund'], {
         cwd: root,
         timeoutMs: COMMAND_TIMEOUTS_MS.install,
       });

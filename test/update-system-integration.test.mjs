@@ -150,6 +150,12 @@ function createUpdateFixture() {
       '#!/bin/sh',
       'if [ "$1" = "--version" ]; then echo "11.0.0"; exit 0; fi',
       'if [ -n "$SUR9E_TEST_NPM_CALL_LOG" ]; then echo "$*" >> "$SUR9E_TEST_NPM_CALL_LOG"; fi',
+      'if [ "$SUR9E_TEST_NPM_REQUIRE_DEV" = "1" ]; then',
+      '  case " $* " in',
+      '    *" --include=dev "*) ;;',
+      '    *) echo "fixture development dependencies were omitted" >&2; exit 43 ;;',
+      '  esac',
+      'fi',
       'if [ "$SUR9E_TEST_NPM_INSTALL_FAIL" = "1" ]; then',
       '  echo "fixture dependency install failed" >&2',
       '  exit 42',
@@ -281,12 +287,32 @@ describe('update-system apply and rollback', () => {
     expect(git(installed, ['status', '--short', '--untracked-files=no'])).toBe('');
     expectPrivateFiles(installed, privateFiles);
     expect(readFileSync(npmCallLog, 'utf8').trim().split('\n')).toEqual([
-      'ci --no-audit --no-fund',
-      'ci --no-audit --no-fund',
+      'ci --include=dev --no-audit --no-fund',
+      'ci --include=dev --no-audit --no-fund',
     ]);
 
     const retry = runUpdater(installed, environment, 'apply');
     expect(retry.status, retry.stderr).toBe(0);
+    expect(readFileSync(resolve(installed, 'VERSION'), 'utf8')).toBe('0.3.0\n');
+  }, 15_000);
+
+  it('installs build dependencies when launched from a production server', () => {
+    const { environment, installed } = createUpdateFixture();
+    const npmCallLog = resolve(installed, '.fixture-home', 'npm-calls.log');
+
+    const result = runUpdater(
+      installed,
+      {
+        ...environment,
+        NODE_ENV: 'production',
+        SUR9E_TEST_NPM_REQUIRE_DEV: '1',
+        SUR9E_TEST_NPM_CALL_LOG: npmCallLog,
+      },
+      'apply',
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(npmCallLog, 'utf8').trim()).toBe('ci --include=dev --no-audit --no-fund');
     expect(readFileSync(resolve(installed, 'VERSION'), 'utf8')).toBe('0.3.0\n');
   }, 15_000);
 
