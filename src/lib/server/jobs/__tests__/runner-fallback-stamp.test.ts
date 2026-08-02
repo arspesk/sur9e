@@ -1,6 +1,14 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +34,27 @@ import { persistJobRecord, readJobRecord } from '../lifecycle';
 import { extractFallbackStamp, spawnJob } from '../runner';
 
 const JOB_ID = '0123456789abcdef';
+
+const PROVIDER_CASES = [
+  {
+    provider: 'claude' as const,
+    primaryModel: 'claude-opus-4-7',
+    fallbackModel: 'claude-sonnet-4-6',
+  },
+  { provider: 'codex' as const, primaryModel: 'gpt-5.4-mini', fallbackModel: 'gpt-5-codex' },
+  {
+    provider: 'opencode' as const,
+    primaryModel: 'opencode-go/glm-5.2',
+    fallbackModel: 'opencode/big-pickle',
+  },
+];
+
+const ONE_HOP_PROVIDER_PAIRS = PROVIDER_CASES.flatMap(primary =>
+  PROVIDER_CASES.map(fallback => ({
+    primary: { provider: primary.provider, model: primary.primaryModel },
+    fallback: { provider: fallback.provider, model: fallback.fallbackModel },
+  })),
+);
 
 function fakeChild(): ChildProcess & {
   stdout: NonNullable<ChildProcess['stdout']>;
@@ -183,20 +212,114 @@ describe('spawnJob fallback metadata', () => {
     },
   );
 
-  it.each([
-    {
-      primary: { provider: 'claude', model: 'claude-sonnet-4-6' },
-      fallback: { provider: 'codex', model: 'gpt-5.4-mini' },
+  it.runIf(process.platform !== 'win32')(
+    'persists an immediate OpenCode quota fallback from the real adapter command',
+    async () => {
+      const primary = { provider: 'opencode' as const, model: 'opencode-go/glm-5.2' };
+      const fallback = { provider: 'opencode' as const, model: 'opencode/big-pickle' };
+      const fakeBin = join(root, 'fake-bin');
+      const fakeOpencode = join(fakeBin, 'opencode');
+      const descendantPidFile = join(root, 'opencode-descendant.pid');
+      const worker = join(process.cwd(), 'test/fixtures/fallback-opencode-quota-worker.mjs');
+      mkdirSync(fakeBin, { recursive: true });
+      writeFileSync(
+        fakeOpencode,
+        `#!/bin/sh
+print_logs=false
+model=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --print-logs) print_logs=true ;;
+    -m|--model) shift; model="$1" ;;
+  esac
+  shift
+done
+if [ "$model" = "opencode-go/glm-5.2" ]; then
+  sleep 30 &
+  descendant=$!
+  printf '%s' "$descendant" > "$SUR9E_TEST_DESCENDANT_PID_FILE"
+  if [ "$print_logs" = true ]; then
+    printf '%s\n' 'AI_APICallError: Weekly usage limit reached. Resets in 1 day.' >&2
+  fi
+  wait "$descendant"
+else
+  printf '%s\n' 'fallback completed'
+fi
+`,
+        'utf8',
+      );
+      chmodSync(fakeOpencode, 0o755);
+      buildCommandMock.mockReturnValue({
+        cmd: process.execPath,
+        args: [worker, root, process.cwd(), fakeBin, descendantPidFile],
+      });
+      resolveModeRuntimeMock.mockReturnValue({
+        ...primary,
+        exec: 'headless',
+        resolvedFrom: 'mode_setting',
+        fallback,
+      });
+      const job: JobRecord = {
+        id: JOB_ID,
+        type: 'evaluate',
+        status: 'queued',
+        params: { num: 56 },
+        startedAt: '2026-08-02T01:29:47.873Z',
+        finishedAt: null,
+        output: '',
+        error: null,
+        exitCode: null,
+      };
+      persistJobRecord(root, job);
+
+      let descendantPid = 0;
+      try {
+        await spawnJob(root, job, { trackUsage: vi.fn() });
+        realWorkerProcessGroupId = readJobRecord(root, JOB_ID)?.processGroupId ?? null;
+        await vi.waitFor(
+          () => {
+            expect(existsSync(descendantPidFile)).toBe(true);
+            descendantPid = Number(readFileSync(descendantPidFile, 'utf8').trim());
+            expect(descendantPid).toBeGreaterThan(1);
+          },
+          { timeout: 5000, interval: 25 },
+        );
+        await vi.waitFor(() => expect(readJobRecord(root, JOB_ID)?.status).toBe('done'), {
+          timeout: 5000,
+          interval: 25,
+        });
+
+        const completed = readJobRecord(root, JOB_ID);
+        expect(completed).toMatchObject({
+          status: 'done',
+          provider: fallback.provider,
+          model: fallback.model,
+          fallback: { from: primary, reason: 'quota' },
+        });
+        expect(completed?.output).toContain('Weekly usage limit reached');
+        expect(completed?.output).toContain('fallback completed');
+        expect(completed?.output).toContain(
+          `[FALLBACK] ${JSON.stringify({ from: primary, to: fallback, reason: 'quota' })}`,
+        );
+        await vi.waitFor(
+          () => {
+            expect(() => process.kill(descendantPid, 0)).toThrow(
+              expect.objectContaining({ code: 'ESRCH' }),
+            );
+          },
+          { timeout: 1000, interval: 20 },
+        );
+      } finally {
+        if (descendantPid > 1) {
+          try {
+            process.kill(descendantPid, 'SIGKILL');
+          } catch {}
+        }
+      }
     },
-    {
-      primary: { provider: 'codex', model: 'gpt-5.4-mini' },
-      fallback: { provider: 'opencode', model: 'opencode/big-pickle' },
-    },
-    {
-      primary: { provider: 'opencode', model: 'opencode/big-pickle' },
-      fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
-    },
-  ])(
+  );
+
+  it.each(ONE_HOP_PROVIDER_PAIRS)(
     're-stamps $primary.provider → $fallback.provider onto the selected fallback provider and model',
     async ({ primary, fallback }) => {
       resolveModeRuntimeMock.mockReturnValue({

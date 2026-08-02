@@ -80,6 +80,35 @@ const RUNTIME = {
   fallback: { provider: 'codex', model: 'gpt-5-codex' },
 };
 
+const PROVIDER_CASES = [
+  {
+    provider: 'claude',
+    primaryModel: 'claude-opus-4-7',
+    fallbackModel: 'claude-sonnet-4-6',
+    quota: "You've hit your session limit. It resets at 3pm",
+  },
+  {
+    provider: 'codex',
+    primaryModel: 'gpt-5.4-mini',
+    fallbackModel: 'gpt-5-codex',
+    quota: "You've hit your usage limit. Switch to another model now.",
+  },
+  {
+    provider: 'opencode',
+    primaryModel: 'opencode-go/glm-5.2',
+    fallbackModel: 'opencode/big-pickle',
+    quota: 'Weekly usage limit reached. Resets in 1 day.',
+  },
+] as const;
+
+const ONE_HOP_PROVIDER_PAIRS = PROVIDER_CASES.flatMap(primary =>
+  PROVIDER_CASES.map(fallback => ({
+    primary: { provider: primary.provider, model: primary.primaryModel },
+    fallback: { provider: fallback.provider, model: fallback.fallbackModel },
+    quota: primary.quota,
+  })),
+);
+
 describe('runModeLLM fallback retry', () => {
   it.runIf(process.platform !== 'win32')(
     'terminates the provider wrapper and its descendant process',
@@ -284,55 +313,53 @@ describe('runModeLLM fallback retry', () => {
     expect(f.spawnedModels).toEqual(['claude-opus-4-7']);
   });
 
-  it.each([
-    ['claude', 'claude-sonnet-4-6'],
-    ['codex', 'gpt-5.4-mini'],
-    ['opencode', 'opencode-go/glm-5.2'],
-  ])('falls back after a silent %s timeout', async (provider, model) => {
-    const f = makeFakes([{ code: 0 }]);
-    let spawnCount = 0;
-    const killed: string[] = [];
-    const spawnImpl = () => {
-      spawnCount += 1;
-      const child = new EventEmitter() as any;
-      child.stdout = new EventEmitter();
-      child.stderr = new EventEmitter();
-      child.kill = (signal: string) => {
-        killed.push(signal);
-        setImmediate(() => child.emit('close', null));
-        return true;
+  it.each(ONE_HOP_PROVIDER_PAIRS)(
+    'falls back after a silent $primary.provider → $fallback.provider timeout',
+    async ({ primary, fallback }) => {
+      const f = makeFakes([{ code: 0 }]);
+      let spawnCount = 0;
+      const killed: string[] = [];
+      const spawnImpl = () => {
+        spawnCount += 1;
+        const child = new EventEmitter() as any;
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = (signal: string) => {
+          killed.push(signal);
+          setImmediate(() => child.emit('close', null));
+          return true;
+        };
+        if (spawnCount === 2) {
+          setImmediate(() => {
+            child.stdout.emit('data', Buffer.from('fallback output'));
+            child.emit('close', 0);
+          });
+        }
+        return child;
       };
-      if (spawnCount === 2) {
-        setImmediate(() => {
-          child.stdout.emit('data', Buffer.from('fallback output'));
-          child.emit('close', 0);
-        });
-      }
-      return child;
-    };
 
-    const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
-      logsDir,
-      runtime: {
-        provider,
-        model,
-        fallback: { provider: 'claude', model: 'claude-sonnet-5' },
-      },
-      timeoutMs: 80,
-      execImpl: f.execImpl,
-      spawnImpl,
-    });
+      const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
+        logsDir,
+        runtime: {
+          ...primary,
+          fallback,
+        },
+        timeoutMs: 80,
+        execImpl: f.execImpl,
+        spawnImpl,
+      });
 
-    expect(r.ok).toBe(true);
-    expect(spawnCount).toBe(2);
-    expect(killed).toContain('SIGKILL');
-    expect(r.stdout).toContain('fallback output');
-    expect(r.usedFallback).toEqual({
-      from: { provider, model },
-      to: { provider: 'claude', model: 'claude-sonnet-5' },
-      reason: 'timeout',
-    });
-  });
+      expect(r.ok).toBe(true);
+      expect(spawnCount).toBe(2);
+      expect(killed).toContain('SIGKILL');
+      expect(r.stdout).toContain('fallback output');
+      expect(r.usedFallback).toEqual({
+        from: primary,
+        to: fallback,
+        reason: 'timeout',
+      });
+    },
+  );
 
   it('returns a timeout without retrying when no fallback is configured', async () => {
     const f = makeFakes([{ code: 0 }]);
@@ -936,18 +963,14 @@ describe('runModeLLM fallback retry', () => {
     expect(spawnCount).toBe(2);
   });
 
-  it.each([
-    ['claude', 'claude-sonnet-4-6', "You've hit your session limit. It resets at 3pm"],
-    ['codex', 'gpt-5.4-mini', "You've hit your usage limit. Switch to another model now."],
-    ['opencode', 'opencode/deepseek-v4-flash-free', 'Weekly usage limit reached. Resets in 1 day.'],
-  ])(
-    'terminates a hung %s process after streamed quota output and immediately uses fallback',
-    async (provider, model, stderr) => {
+  it.each(ONE_HOP_PROVIDER_PAIRS)(
+    'terminates a hung $primary.provider → $fallback.provider process after streamed quota output',
+    async ({ primary, fallback, quota }) => {
       const f = makeFakes([{ code: 0 }]);
       let spawnCount = 0;
       const killed: Array<{ provider: string; signal: string }> = [];
       const spawnImpl = () => {
-        const currentProvider = spawnCount === 0 ? provider : 'claude';
+        const currentProvider = spawnCount === 0 ? primary.provider : fallback.provider;
         spawnCount += 1;
         const child = new EventEmitter() as any;
         child.stdout = new EventEmitter();
@@ -959,7 +982,7 @@ describe('runModeLLM fallback retry', () => {
         };
         setImmediate(() => {
           if (spawnCount === 1) {
-            child.stderr.emit('data', Buffer.from(stderr));
+            child.stderr.emit('data', Buffer.from(quota));
             return;
           }
           child.stdout.emit('data', Buffer.from('fallback output'));
@@ -971,9 +994,8 @@ describe('runModeLLM fallback retry', () => {
       const r = await runModeLLM(process.cwd(), 'evaluate', 'prompt', {
         logsDir,
         runtime: {
-          provider,
-          model,
-          fallback: { provider: 'claude', model: 'claude-sonnet-4-6' },
+          ...primary,
+          fallback,
         },
         timeoutMs: 100,
         execImpl: f.execImpl,
@@ -983,7 +1005,9 @@ describe('runModeLLM fallback retry', () => {
       expect(r.ok).toBe(true);
       expect(r.stdout).toContain('fallback output');
       expect(r.usedFallback?.reason).toBe('quota');
-      expect(killed).toContainEqual({ provider, signal: 'SIGKILL' });
+      expect(killed).toContainEqual({ provider: primary.provider, signal: 'SIGKILL' });
+      expect(f.spawnedProviders).toEqual([primary.provider, fallback.provider]);
+      expect(f.spawnedModels).toEqual([primary.model, fallback.model]);
       expect(spawnCount).toBe(2);
     },
   );
