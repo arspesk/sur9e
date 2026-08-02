@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 type IconButtonVariant = 'default' | 'subtle' | 'danger';
 type IconButtonSize = 'sm' | 'md' | 'lg';
 
-interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon: ReactNode;
   label: string;
   variant?: IconButtonVariant;

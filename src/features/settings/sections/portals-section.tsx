@@ -14,6 +14,7 @@
 //   Row edits autosave (600ms debounce); the smart-add composer, delete,
 //   and example import save immediately.
 
+import { ChevronDown, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { Button, ErrorText, HelperText, Input, Label, Pill } from '@/components/primitives';
@@ -454,17 +455,7 @@ export function PortalsSection({ initialPortals }: PortalsSectionProps = {}) {
                           }}
                           onClick={() => toggleRow(idx)}
                         >
-                          <svg
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
+                          <ChevronDown aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -472,7 +463,7 @@ export function PortalsSection({ initialPortals }: PortalsSectionProps = {}) {
                           aria-label={`Remove ${displayName}`}
                           onClick={() => removeRow(idx)}
                         >
-                          ×
+                          <X aria-hidden="true" />
                         </button>
                       </span>
                     </div>

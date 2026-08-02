@@ -4,7 +4,7 @@
 // custom) + custom-range modal. Shares the .actions-menu and
 // .range-modal chrome with the table/pipeline action menus.
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/primitives';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
@@ -234,7 +234,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
               aria-label="Close"
               onClick={closeModal}
             >
-              ×
+              <X aria-hidden="true" />
             </button>
           </header>
           <div className="range-modal__body">

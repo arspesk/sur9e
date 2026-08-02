@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowUp, FileText, Plus, Square, TextQuote, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Textarea } from '@/components/primitives';
 import { useApplications } from '@/hooks/use-applications';
@@ -304,7 +305,7 @@ export function ChatComposer({
                 setQueuedAttachments(key, null);
               }}
             >
-              ✕
+              <X aria-hidden="true" />
             </button>
           </div>
           {queuedAttachments.length > 0 && (
@@ -380,23 +381,7 @@ export function ChatComposer({
             aria-label="Attach files"
             onClick={() => fileInputRef.current?.click()}
           >
-            {/* Lucide plus glyph (inline SVG — no icon dep). */}
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="lucide lucide-plus"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14" />
-              <path d="M12 5v14" />
-            </svg>
+            <Plus aria-hidden="true" />
           </button>
           <span className="chat-composer__tools-spacer" />
           <ModelChip />
@@ -408,22 +393,7 @@ export function ChatComposer({
               title="Stop reply"
               onClick={onStop}
             >
-              {/* User-supplied lucide square glyph (inline SVG — no icon dep). */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="lucide lucide-square"
-                aria-hidden="true"
-              >
-                <rect width="18" height="18" x="3" y="3" rx="2" />
-              </svg>
+              <Square aria-hidden="true" />
             </button>
           ) : (
             <button
@@ -435,7 +405,7 @@ export function ChatComposer({
               // something to send. Styling lives in .chat-composer__send[:disabled].
               disabled={sendDisabled || (value.trim().length === 0 && files.length === 0)}
             >
-              ↑
+              <ArrowUp aria-hidden="true" />
             </button>
           )}
         </div>
@@ -444,7 +414,7 @@ export function ChatComposer({
   );
 }
 
-/** File preview chips (image thumb or ▤ icon, name, size, remove). Shared by
+/** File preview chips (image thumb or file icon, name, size, remove). Shared by
  * the live draft row (inside the box) and the queued-attachments row (under the
  * "Queued" hint) so both look identical. */
 function AttachChips({ files, onRemove }: { files: File[]; onRemove: (index: number) => void }) {
@@ -461,7 +431,7 @@ function AttachChips({ files, onRemove }: { files: File[]; onRemove: (index: num
             />
           ) : (
             <span className="chat-attach-chip__icon" aria-hidden="true">
-              ▤
+              <FileText />
             </span>
           )}
           <span className="chat-attach-chip__name">{f.name}</span>
@@ -472,7 +442,7 @@ function AttachChips({ files, onRemove }: { files: File[]; onRemove: (index: num
             aria-label={`Remove ${f.name}`}
             onClick={() => onRemove(i)}
           >
-            ✕
+            <X aria-hidden="true" />
           </button>
         </span>
       ))}
@@ -506,25 +476,7 @@ function SelectionChips({
         return (
           <span key={`${preview}-${i}`} className="chat-attach-chip chat-selection-chip">
             <span className="chat-attach-chip__icon" aria-hidden="true">
-              {/* Lucide text-quote glyph (inline SVG — no icon dep), marking
-                  this chip as a text selection rather than a file. */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="lucide lucide-text-quote"
-              >
-                <path d="M17 6H3" />
-                <path d="M21 12H8" />
-                <path d="M21 18H8" />
-                <path d="M3 12v6" />
-              </svg>
+              <TextQuote />
             </span>
             <span className="chat-attach-chip__name" title={preview}>
               {preview}
@@ -540,7 +492,7 @@ function SelectionChips({
                 window.getSelection()?.removeAllRanges();
               }}
             >
-              ✕
+              <X aria-hidden="true" />
             </button>
           </span>
         );

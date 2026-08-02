@@ -25,7 +25,6 @@ export interface JobType {
   menuTitle: string | null;
   menuTitleBusy: string | null;
   menuSub: string | null;
-  menuIcon: string | null;
   pillTitle: string;
   pillTitleNum?: string;
   failMsg: string;
@@ -41,7 +40,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null, // not in the Add menu — triggered from per-row actions
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Evaluating…',
     // Per-num title used when params.num is present — keeps the cross-page
     // reattach pill in sync with what run-evaluate shows on the page that
@@ -56,7 +54,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Tailoring CV…',
     pillTitleNum: 'Tailoring CV for #{num}…',
     failMsg: 'CV generation failed — retry from the offer',
@@ -68,7 +65,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Generating LaTeX CV…',
     pillTitleNum: 'Generating LaTeX CV for #{num}…',
     failMsg: 'LaTeX CV generation failed — retry from the offer',
@@ -80,7 +76,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Generating cover letter…',
     pillTitleNum: 'Generating cover letter for #{num}…',
     failMsg: 'Cover-letter generation failed — retry from the offer',
@@ -92,7 +87,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Researching company…',
     pillTitleNum: 'Researching #{num}…',
     failMsg: 'Company research failed — retry from the offer',
@@ -104,7 +98,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Generating interview prep…',
     pillTitleNum: 'Generating interview prep for #{num}…',
     failMsg: 'Interview prep generation failed — retry from the offer',
@@ -116,7 +109,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Drafting outreach…',
     pillTitleNum: 'Drafting outreach for #{num}…',
     failMsg: 'Outreach generation failed — retry from the offer',
@@ -128,7 +120,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null,
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Building negotiation strategy…',
     pillTitleNum: 'Building negotiation strategy for #{num}…',
     failMsg: 'Negotiation strategy failed — retry from the offer',
@@ -140,7 +131,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: 'Scan with screening',
     menuTitleBusy: 'Scanning…',
     menuSub: 'Scan for offers with basic screening',
-    menuIcon: '⌕',
     pillTitle: 'Scanning portals…',
     failMsg: 'Scan failed — check Settings → Job scanning and retry',
     refreshOnDone: true,
@@ -151,7 +141,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: 'Scan with evaluation',
     menuTitleBusy: 'Batch evaluating…',
     menuSub: 'Scan for offers with full evaluation',
-    menuIcon: '⇪',
     pillTitle: 'Batch evaluating offers…',
     failMsg: 'Batch evaluation failed — see logs',
     refreshOnDone: true,
@@ -162,7 +151,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: 'Add offer',
     menuTitleBusy: 'Adding…',
     menuSub: 'Paste a job posting link',
-    menuIcon: '+',
     pillTitle: 'Screening…',
     failMsg: "Couldn't read that posting — paste the link again or check it",
     refreshOnDone: true,
@@ -173,7 +161,6 @@ export const JOB_TYPES: JobType[] = [
     menuTitle: null, // not a menu item — the second depth option inside the Add-offer modal
     menuTitleBusy: null,
     menuSub: null,
-    menuIcon: null,
     pillTitle: 'Adding & evaluating offer…',
     failMsg: "Couldn't add & evaluate the offer — try again from Add offer",
     refreshOnDone: true,

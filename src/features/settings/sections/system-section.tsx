@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { Button, HelperText, Input, Label } from '@/components/primitives';
@@ -130,6 +130,7 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
   const [jobId, setJobId] = useState<string | null>(readActiveJobId);
   const [discoveryAttached, setDiscoveryAttached] = useState(false);
   const [resultNotice, setResultNotice] = useState<ResultNotice | null>(null);
+  const autoCheckStarted = useRef(false);
 
   const versionQuery = useVersion();
   const installedVersion = versionQuery.isPending ? '…' : (versionQuery.data?.version ?? '?');
@@ -201,26 +202,39 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
     navigate(href);
   }, [job, navigate]);
 
-  const checkUpdates = useCallback(async () => {
-    if (job?.phase === 'failed') setJobId(null);
-    setIsChecking(true);
-    setCheckError(null);
-    try {
-      const result = await updateCheck.mutateAsync();
-      setCheckResult(result);
-      if (result.status === 'offline') {
-        setCheckError('Could not reach the update service. Try checking again.');
-      } else if (result.status === 'dismissed') {
-        setCheckError('The update check was dismissed. Try checking again when you are ready.');
+  const checkUpdates = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (job?.phase === 'failed') setJobId(null);
+      setIsChecking(true);
+      setCheckError(null);
+      try {
+        const result = await updateCheck.mutateAsync();
+        setCheckResult(result);
+        if (result.status === 'offline') {
+          setCheckError('Could not reach the update service. Try checking again.');
+        } else if (result.status === 'dismissed') {
+          setCheckError('The update check was dismissed. Try checking again when you are ready.');
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setCheckError(`Update check failed: ${message}. Try checking again.`);
+        if (!silent) {
+          pushToast('danger', `Update check failed (${message}) — try again later.`);
+        }
+      } finally {
+        setIsChecking(false);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setCheckError(`Update check failed: ${message}. Try checking again.`);
-      pushToast('danger', `Update check failed (${message}) — try again later.`);
-    } finally {
-      setIsChecking(false);
-    }
-  }, [job?.phase, pushToast, updateCheck]);
+    },
+    [job?.phase, pushToast, updateCheck],
+  );
+
+  useEffect(() => {
+    if (autoCheckStarted.current || jobId || discoveryAttached) return;
+    const discoverySettled = activeUpdateJob.data !== undefined || activeUpdateJob.isError;
+    if (!discoverySettled || activeUpdateJob.data?.job) return;
+    autoCheckStarted.current = true;
+    void checkUpdates({ silent: true });
+  }, [activeUpdateJob.data, activeUpdateJob.isError, checkUpdates, discoveryAttached, jobId]);
 
   const applyUpdate = useCallback(async () => {
     if (checkResult?.status !== 'update-available') return;
@@ -406,7 +420,7 @@ export function SystemSection({ navigate = defaultNavigate }: SystemSectionProps
           <Button
             variant="secondary"
             id="checkUpdates"
-            onClick={checkUpdates}
+            onClick={() => void checkUpdates()}
             disabled={actionsPending}
           >
             {checkLabel}

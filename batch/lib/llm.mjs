@@ -8,10 +8,12 @@
 // Extracted from batch/screen.mjs and generalized to any mode.
 // execImpl/spawnImpl are injectable for tests.
 //
-// Fallback retry: when a run fails (and is NOT a timeout) and the runtime
-// carries a `.fallback = {provider, model}` pair, the combined output is
-// classified via cli/classify-error.mjs; a retryable category triggers ONE
-// retry on the fallback pair. On fallback success the result gains a
+// Fallback retry: when a run fails with a retryable provider error or a silent
+// timeout and the runtime carries a `.fallback = {provider, model}` pair, ONE
+// retry runs on the fallback pair. Each attempt has the configured provider
+// timeout and the full operation is capped at two such budgets; the primary
+// process tree must be gone before the fallback starts. On fallback success
+// the result gains a
 // `usedFallback` field and a `[FALLBACK] {json}` marker is prepended to
 // stdout (mirroring the `[USAGE]` marker) so the job runner can re-stamp the
 // record with the model that actually ran. A double failure returns a
@@ -19,10 +21,198 @@
 
 import { spawn as nodeSpawn, spawnSync } from "node:child_process";
 import { unlinkSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { classifyProviderError, isRetryable } from "../../cli/classify-error.mjs";
 
 function defaultExec(cmd, args, opts) {
+  if (process.platform !== "win32" && Number.isFinite(opts?.timeout) && opts.timeout > 0) {
+    return spawnSync(
+      process.execPath,
+      [
+        PROVIDER_SUPERVISOR,
+        "--parent-pid",
+        String(process.pid),
+        "--",
+        cmd,
+        ...args,
+      ],
+      {
+        encoding: "utf-8",
+        ...opts,
+        detached: true,
+        // The supervisor converts this catchable signal into a process-group
+        // SIGKILL, so a timed-out npx/tsx builder cannot leave descendants.
+        killSignal: "SIGTERM",
+      },
+    );
+  }
   return spawnSync(cmd, args, { encoding: "utf-8", ...opts });
+}
+
+const PROCESS_TREE_EXIT_GRACE_MS = 1000;
+const PROCESS_TREE_POLL_MS = 10;
+const STREAMED_ERROR_TAIL_CHARS = 16 * 1024;
+const PROVIDER_CLEANUP_FAILED_MARKER = "[SUR9E_PROVIDER_CLEANUP_FAILED]";
+const ISOLATED_PROVIDER_GROUP = Symbol("sur9e.isolated-provider-group");
+const PROVIDER_SUPERVISOR = resolve(import.meta.dirname, "provider-supervisor.mjs");
+
+function descendantPids(
+  pid,
+  {
+    freeze = false,
+    platform = process.platform,
+    spawnSyncImpl = spawnSync,
+    killImpl = process.kill,
+    onError = () => {},
+  } = {},
+) {
+  if (!Number.isInteger(pid) || pid <= 1 || platform === "win32") return [];
+  const found = [];
+  const visited = new Set([pid]);
+  const visit = (parentPid) => {
+    // `ps --ppid` is GNU-only; macOS ships BSD ps. `pgrep -P` is available
+    // on both supported Unix families and returns one direct child per line.
+    const result = spawnSyncImpl("pgrep", ["-P", String(parentPid)], {
+      encoding: "utf-8",
+    });
+    if (result.error) {
+      onError(result.error);
+      return;
+    }
+    if (result.status !== 0) return;
+    const children = String(result.stdout ?? "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(Number)
+      .filter(
+        (childPid) =>
+          Number.isInteger(childPid) && childPid > 1 && childPid !== process.pid && !visited.has(childPid),
+    );
+    for (const childPid of children) {
+      visited.add(childPid);
+      let vanished = false;
+      if (freeze) {
+        try {
+          killImpl(childPid, "SIGSTOP");
+        } catch (error) {
+          if (error?.code === "ESRCH") vanished = true;
+          else onError(error);
+        }
+      }
+      if (vanished) continue;
+      visit(childPid);
+      found.push(childPid);
+    }
+  };
+  visit(pid);
+  return found;
+}
+
+/** Stop the provider wrapper and every descendant it spawned. */
+export function terminateProviderTree(
+  child,
+  signal = "SIGTERM",
+  { platform = process.platform, spawnSyncImpl = spawnSync, killImpl = process.kill } = {},
+) {
+  const pid = child?.pid;
+  if (platform === "win32" && Number.isInteger(pid) && pid > 1) {
+    const args = ["/PID", String(pid), "/T"];
+    if (signal === "SIGKILL") args.push("/F");
+    const result = spawnSyncImpl("taskkill", args, { encoding: "utf-8" });
+    if (result.error) throw result.error;
+    const diagnostic = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const alreadyGone = result.status === 128 || /not found|no running instance/i.test(diagnostic);
+    if (result.status !== 0 && !alreadyGone) {
+      throw new Error(`taskkill failed for provider process ${pid} (exit ${result.status})`);
+    }
+    return [];
+  }
+  if (child?.[ISOLATED_PROVIDER_GROUP] && Number.isInteger(pid) && pid > 1) {
+    try {
+      // The detached supervisor is the process-group leader and the provider
+      // inherits that group. This remains effective even if the supervisor has
+      // already exited while one of its provider descendants is still alive.
+      killImpl(-pid, signal);
+    } catch (error) {
+      if (error?.code !== "ESRCH") throw error;
+    }
+    return [];
+  }
+  const canFreeze =
+    signal === "SIGKILL" &&
+    Number.isInteger(pid) &&
+    pid > 1 &&
+    typeof child?.spawnfile === "string";
+  let cleanupError = null;
+  const rememberError = (error) => {
+    cleanupError ??= error;
+  };
+  let freezeDescendants = canFreeze;
+  if (canFreeze) {
+    try {
+      // Freeze the wrapper before walking its descendants. Each descendant is
+      // frozen before recursion, so no process in the tree can fork between
+      // discovery and the final SIGKILL pass.
+      killImpl(pid, "SIGSTOP");
+    } catch (error) {
+      if (error?.code !== "ESRCH") rememberError(error);
+      freezeDescendants = false;
+    }
+  }
+  const descendants = descendantPids(pid, {
+    freeze: freezeDescendants,
+    platform,
+    spawnSyncImpl,
+    killImpl,
+    onError: rememberError,
+  });
+  for (const childPid of descendants) {
+    try {
+      killImpl(childPid, signal);
+    } catch (error) {
+      if (error?.code !== "ESRCH") rememberError(error);
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch (error) {
+    if (error?.code !== "ESRCH") rememberError(error);
+  }
+  if (cleanupError) throw cleanupError;
+  return descendants;
+}
+
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    return true;
+  }
+}
+
+function processGroupIsAlive(processGroupId) {
+  if (!Number.isInteger(processGroupId) || processGroupId <= 1 || process.platform === "win32") {
+    return false;
+  }
+  // BSD ps and procps disagree about `-g`; filter an explicit PGID column.
+  // Zombies are already terminal and cannot overlap/fork into the fallback.
+  const result = spawnSync("ps", ["-A", "-o", "pid=", "-o", "pgid=", "-o", "stat="], {
+    encoding: "utf-8",
+    detached: true,
+  });
+  if (result.error || result.status !== 0) return true;
+  return String(result.stdout ?? "")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .some((line) => {
+      const [pid, pgid, state = ""] = line.trim().split(/\s+/, 3);
+      return Number(pid) > 1 && Number(pgid) === processGroupId && !state.includes("Z");
+    });
 }
 
 export function resolveRuntimeForMode(rootPath, modeId, { execImpl = defaultExec } = {}) {
@@ -51,7 +241,7 @@ export function buildSpawnArgsForMode(
   rootPath,
   modeId,
   prompt,
-  { logsDir, execImpl = defaultExec, runtime } = {},
+  { logsDir, execImpl = defaultExec, runtime, commandTimeoutMs } = {},
 ) {
   // Prompt goes through a tmp file: it inlines CV/profile/JD/mode bodies
   // and can be tens of KB — too big for argv across the extra shim hop.
@@ -85,8 +275,27 @@ export function buildSpawnArgsForMode(
         // spawn ran claude) is structurally impossible with an explicit pair.
         ...(runtime ? ["--platform", runtime.provider, "--model", runtime.model] : []),
       ],
-      { cwd: rootPath },
+      {
+        cwd: rootPath,
+        ...(Number.isFinite(commandTimeoutMs) && commandTimeoutMs > 0
+          ? { timeout: commandTimeoutMs, killSignal: "SIGTERM" }
+          : {}),
+      },
     );
+    if (result.error?.code === "ETIMEDOUT") {
+      const error = new Error(`provider command build timed out after ${commandTimeoutMs}ms`);
+      error.code = "ETIMEDOUT";
+      error.stderr = String(result.stderr ?? "");
+      // Timed production builders already run under provider-supervisor via
+      // defaultExec. Verify its known process group as an extra guard for a
+      // surviving D-state member; custom execImpl fakes may omit result.pid.
+      error.cleanupFailed =
+        error.stderr.includes(PROVIDER_CLEANUP_FAILED_MARKER) ||
+        (process.platform !== "win32" &&
+          Number.isInteger(result.pid) &&
+          processGroupIsAlive(result.pid));
+      throw error;
+    }
     if (result.status !== 0) {
       throw new Error(
         `build-claude-cmd.mjs failed for ${modeId} (exit ${result.status}): ${result.stderr || result.stdout || "(no output)"}`,
@@ -113,6 +322,8 @@ function runOnce(
     logsDir,
     execImpl = defaultExec,
     spawnImpl = nodeSpawn,
+    signal,
+    isolateProviderGroup: isolateProviderGroupOption,
     // Echo the provider's streams to OUR stdout/stderr as they arrive, so a
     // parent that captures this process's output (the job runner persisting
     // mode-runner stdout into the job record) shows progress live. Opt-in:
@@ -122,31 +333,249 @@ function runOnce(
   runtime,
 ) {
   return new Promise((resolvePromise) => {
+    const attemptDeadline = Date.now() + timeoutMs;
     let built;
     try {
-      built = buildSpawnArgsForMode(rootPath, modeId, prompt, { logsDir, execImpl, runtime });
+      built = buildSpawnArgsForMode(rootPath, modeId, prompt, {
+        logsDir,
+        execImpl,
+        runtime,
+        commandTimeoutMs: timeoutMs,
+      });
     } catch (err) {
-      resolvePromise({ ok: false, error: err.message, stdout: "", stderr: "", promptText: prompt });
+      resolvePromise(
+        err?.code === "ETIMEDOUT"
+          ? {
+              ok: false,
+              error: `timeout ${timeoutMs}ms`,
+              failureCategory: "timeout",
+              stdout: "",
+              stderr: err?.stderr ?? "",
+              promptText: prompt,
+              // spawnSync cannot verify a timed-out npx/tsx descendant tree on
+              // Windows. The POSIX supervisor marks the same condition if its
+              // bounded process-group verification fails. Either case must
+              // suppress fallback rather than overlap a surviving builder.
+              ...(process.platform === "win32" || err?.cleanupFailed
+                ? { cleanupFailed: true }
+                : {}),
+            }
+          : { ok: false, error: err.message, stdout: "", stderr: "", promptText: prompt },
+      );
       return;
     }
-    const child = spawnImpl(built.spawn.cmd, built.spawn.args, {
-      cwd: rootPath,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      try {
-        child.kill("SIGKILL");
-      } catch {}
+    const providerTimeoutMs = attemptDeadline - Date.now();
+    if (providerTimeoutMs <= 0) {
       resolvePromise({
         ok: false,
         error: `timeout ${timeoutMs}ms`,
+        failureCategory: "timeout",
+        stdout: "",
+        stderr: "",
+        promptText: prompt,
+      });
+      return;
+    }
+    const isolateProviderGroup =
+      process.platform !== "win32" &&
+      (isolateProviderGroupOption ?? spawnImpl === nodeSpawn);
+    const child = spawnImpl(
+      isolateProviderGroup ? process.execPath : built.spawn.cmd,
+      isolateProviderGroup
+        ? [
+            PROVIDER_SUPERVISOR,
+            "--parent-pid",
+            String(process.pid),
+            "--",
+            built.spawn.cmd,
+            ...built.spawn.args,
+          ]
+        : built.spawn.args,
+      {
+        cwd: rootPath,
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: isolateProviderGroup,
+      },
+    );
+    if (isolateProviderGroup && Number.isInteger(child.pid) && child.pid > 1) {
+      child[ISOLATED_PROVIDER_GROUP] = true;
+    }
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let stoppingCategory = null;
+    let stopReason = null;
+    let hardStopStartedAt = 0;
+    let hardStopFailed = false;
+    let childClosed = false;
+    let childExitCode = null;
+    let cleanupFailureReported = false;
+    const trackedDescendants = new Set();
+    let timer = null;
+    let settleTimer = null;
+    let settlePollMs = PROCESS_TREE_POLL_MS;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (settleTimer) clearTimeout(settleTimer);
+      signal?.removeEventListener("abort", abort);
+      resolvePromise(result);
+    };
+
+    const stoppedResult = (cleanupFailed = false) => {
+      const cleanupSuffix = cleanupFailed ? "; provider process tree did not terminate" : "";
+      if (stopReason === "process_exit") {
+        if (cleanupFailed) {
+          return {
+            ok: false,
+            error: `exit ${childExitCode}${cleanupSuffix}`,
+            stdout,
+            stderr,
+            promptText: prompt,
+            cleanupFailed: true,
+          };
+        }
+        return childExitCode === 0
+          ? { ok: true, stdout, stderr, promptText: prompt }
+          : { ok: false, error: `exit ${childExitCode}`, stdout, stderr, promptText: prompt };
+      }
+      if (stopReason === "cancelled") {
+        return {
+          ok: false,
+          cancelled: true,
+          error: `cancelled${cleanupSuffix}`,
+          stdout,
+          stderr,
+          promptText: prompt,
+          ...(cleanupFailed ? { cleanupFailed: true } : {}),
+        };
+      }
+      if (stopReason === "timeout") {
+        return {
+          ok: false,
+          error: `timeout ${timeoutMs}ms${cleanupSuffix}`,
+          failureCategory: "timeout",
+          stdout,
+          stderr,
+          promptText: prompt,
+          ...(cleanupFailed ? { cleanupFailed: true } : {}),
+        };
+      }
+      if (childClosed && childExitCode !== null && childExitCode !== 0) {
+        return {
+          ok: false,
+          error: `exit ${childExitCode}${cleanupSuffix}`,
+          failureCategory: stoppingCategory,
+          stdout,
+          stderr,
+          promptText: prompt,
+          ...(cleanupFailed ? { cleanupFailed: true } : {}),
+        };
+      }
+      return {
+        ok: false,
+        error: `provider ${stoppingCategory}${cleanupSuffix}`,
+        failureCategory: stoppingCategory,
         stdout,
         stderr,
         promptText: prompt,
-      });
-    }, timeoutMs);
+        ...(cleanupFailed ? { cleanupFailed: true } : {}),
+      };
+    };
+
+    const settleStoppedAttempt = () => {
+      if (settled || !stopReason) return;
+      const descendantsAlive = [...trackedDescendants].some(processIsAlive);
+      const isolatedGroupAlive =
+        child[ISOLATED_PROVIDER_GROUP] && processGroupIsAlive(child.pid);
+      // Real ChildProcess instances expose spawnfile. Test doubles settle via
+      // their close event instead of probing an arbitrary fake pid.
+      const rootAlive =
+        !childClosed &&
+        !child[ISOLATED_PROVIDER_GROUP] &&
+        typeof child.spawnfile === "string" &&
+        processIsAlive(child.pid);
+      if (
+        !descendantsAlive &&
+        !isolatedGroupAlive &&
+        !rootAlive &&
+        childClosed &&
+        !hardStopFailed
+      ) {
+        finish(stoppedResult());
+        return;
+      }
+      if (
+        hardStopStartedAt > 0 &&
+        Date.now() - hardStopStartedAt >= PROCESS_TREE_EXIT_GRACE_MS
+      ) {
+        finish(
+          stoppedResult(
+            descendantsAlive ||
+              isolatedGroupAlive ||
+              rootAlive ||
+              !childClosed ||
+              hardStopFailed,
+          ),
+        );
+        return;
+      }
+      settleTimer = setTimeout(settleStoppedAttempt, settlePollMs);
+      settlePollMs = Math.min(settlePollMs * 2, 100);
+    };
+
+    const killTree = (killSignal) => {
+      let failed = false;
+      try {
+        for (const pid of terminateProviderTree(child, killSignal)) trackedDescendants.add(pid);
+      } catch {
+        failed = true;
+      }
+      // The wrapper may have exited after the first traversal. Keep signaling
+      // every descendant already discovered so escalation cannot lose it.
+      for (const pid of trackedDescendants) {
+        try {
+          process.kill(pid, killSignal);
+        } catch (error) {
+          if (error?.code !== "ESRCH") failed = true;
+        }
+      }
+      if (killSignal === "SIGKILL") hardStopFailed = failed;
+    };
+
+    const stopImmediately = () => {
+      if (!hardStopStartedAt) hardStopStartedAt = Date.now();
+      killTree("SIGKILL");
+      settleStoppedAttempt();
+    };
+
+    const abort = () => {
+      if (settled || stopReason === "cancelled") return;
+      clearTimeout(timer);
+      stopReason = "cancelled";
+      stopImmediately();
+    };
+    const detectStreamedTerminalFailure = () => {
+      if (settled || stopReason || stoppingCategory) return;
+      // Provider CLIs reserve stderr for diagnostics. Restrict early
+      // termination to that channel so a successful model answer that merely
+      // discusses a "rate limit" cannot be mistaken for a CLI failure.
+      const category = classifyProviderError(
+        runtime?.provider ?? "claude",
+        stderr.slice(-STREAMED_ERROR_TAIL_CHARS),
+      );
+      if (!isRetryable(category)) return;
+      stoppingCategory = category;
+      stopReason = "provider";
+      clearTimeout(timer);
+      stopImmediately();
+    };
+    timer = setTimeout(() => {
+      if (settled || stopReason) return;
+      stopReason = "timeout";
+      stopImmediately();
+    }, providerTimeoutMs);
     child.stdout.on("data", (d) => {
       const text = d.toString();
       stdout += text;
@@ -154,40 +583,94 @@ function runOnce(
     });
     child.stderr.on("data", (d) => {
       const text = d.toString();
+      const cleanupWindow =
+        stderr.slice(-(PROVIDER_CLEANUP_FAILED_MARKER.length - 1)) + text;
       stderr += text;
+      cleanupFailureReported ||= cleanupWindow.includes(PROVIDER_CLEANUP_FAILED_MARKER);
       if (tee) process.stderr.write(text);
+      detectStreamedTerminalFailure();
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolvePromise(
-        code === 0
+      childClosed = true;
+      childExitCode = code;
+      if (cleanupFailureReported) {
+        finish(
+          stopReason
+            ? stoppedResult(true)
+            : {
+                ok: false,
+                error: "provider process tree did not terminate",
+                stdout,
+                stderr,
+                promptText: prompt,
+                cleanupFailed: true,
+              },
+        );
+        return;
+      }
+      if (stopReason) {
+        settleStoppedAttempt();
+        return;
+      }
+      if (child[ISOLATED_PROVIDER_GROUP] && processGroupIsAlive(child.pid)) {
+        stopReason = "process_exit";
+        stopImmediately();
+        return;
+      }
+      finish(
+        childExitCode === 0
           ? { ok: true, stdout, stderr, promptText: prompt }
-          : { ok: false, error: `exit ${code}`, stdout, stderr, promptText: prompt },
+          : { ok: false, error: `exit ${childExitCode}`, stdout, stderr, promptText: prompt },
       );
     });
     child.on("error", (err) => {
-      clearTimeout(timer);
-      resolvePromise({ ok: false, error: err.message, stdout, stderr, promptText: prompt });
+      if (stopReason) {
+        settleStoppedAttempt();
+        return;
+      }
+      finish({ ok: false, error: err.message, stdout, stderr, promptText: prompt });
     });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
   });
 }
 
 export async function runModeLLM(rootPath, modeId, prompt, opts = {}) {
   const { runtime, tee = false } = opts;
-  const first = await runOnce(rootPath, modeId, prompt, opts, runtime);
-  if (first.ok) return first;
-  // Timeouts never retry: a fallback attempt would double a multi-minute
-  // hang, and a timeout is not evidence of a model-side problem.
-  if (typeof first.error === "string" && first.error.startsWith("timeout")) return first;
   const fallback = runtime?.fallback;
-  if (!fallback?.provider || !fallback?.model) return first;
+  const hasFallback = Boolean(fallback?.provider && fallback?.model);
+  const timeoutMs =
+    Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? Math.floor(opts.timeoutMs) : 600000;
+  // `timeoutMs` remains the per-provider contract (evaluate is allowed its
+  // existing 15 minutes). A configured fallback gets at most one equally
+  // bounded attempt, so the operation cannot outlive two provider budgets.
+  const deadline = Date.now() + timeoutMs * (hasFallback ? 2 : 1);
+  const first = await runOnce(
+    rootPath,
+    modeId,
+    prompt,
+    { ...opts, timeoutMs },
+    runtime,
+  );
+  if (first.ok) return first;
+  if (first.cancelled) return first;
+  if (!hasFallback || first.cleanupFailed) return first;
   const combined = `${first.stderr ?? ""}\n${first.stdout ?? ""}\n${first.error ?? ""}`;
   // Classify ONCE under the primary provider. The failure text always comes
   // from the PRIMARY provider's CLI, so classifying under any other provider's
   // signature table would invite false-positive retries (e.g. job output
   // quoting a JD phrase that matches another provider's needle).
-  const category = classifyProviderError(runtime?.provider ?? "claude", combined);
-  if (!isRetryable(category)) return first;
+  const category =
+    first.failureCategory ?? classifyProviderError(runtime?.provider ?? "claude", combined);
+  if (category !== "timeout" && !isRetryable(category)) return first;
+
+  // Cancellation can land after the first attempt settles but before the
+  // retry is spawned. It must win that race and suppress fallback entirely.
+  if (opts.signal?.aborted) {
+    return { ...first, cancelled: true, error: "cancelled" };
+  }
+  const fallbackTimeoutMs = Math.min(timeoutMs, deadline - Date.now());
+  if (fallbackTimeoutMs <= 0) return first;
 
   const fromTo = {
     from: { provider: runtime.provider, model: runtime.model },
@@ -199,15 +682,26 @@ export async function runModeLLM(rootPath, modeId, prompt, opts = {}) {
   // it is also embedded in the returned stdout so per-run log files carry it.
   if (tee) process.stdout.write(`${marker}\n`);
 
-  const second = await runOnce(rootPath, modeId, prompt, opts, {
-    provider: fallback.provider,
-    model: fallback.model,
-  });
+  const second = await runOnce(
+    rootPath,
+    modeId,
+    prompt,
+    { ...opts, timeoutMs: fallbackTimeoutMs },
+    { provider: fallback.provider, model: fallback.model },
+  );
+  if (second.cancelled) return second;
   if (!second.ok) {
+    const primaryLabel = `${runtime.provider}/${runtime.model}`;
+    const fallbackLabel = `${fallback.provider}/${fallback.model}`;
+    const primaryDiagnostic = String(first.stderr || first.stdout || first.error || "(no output)");
+    const fallbackDiagnostic = String(
+      second.stderr || second.stdout || second.error || "(no output)",
+    );
     return {
       ...second,
       stdout: `${marker}\n${second.stdout}`,
-      error: `primary: ${first.error} (${category}); fallback: ${second.error}`,
+      stderr: `[PRIMARY ${primaryLabel}]\n${primaryDiagnostic}\n[FALLBACK ${fallbackLabel}]\n${fallbackDiagnostic}`,
+      error: `primary ${primaryLabel}: ${first.error} (${category}); fallback ${fallbackLabel}: ${second.error}`,
     };
   }
   return { ...second, stdout: `${marker}\n${second.stdout}`, usedFallback: fromTo };

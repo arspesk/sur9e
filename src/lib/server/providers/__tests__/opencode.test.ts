@@ -27,7 +27,7 @@ import opencode from '../opencode';
 
 describe('opencode provider', () => {
   describe('buildHeadlessArgs', () => {
-    it('produces opencode run -m <provider/model> "<prompt>"', () => {
+    it('prints OpenCode error logs while preserving the plain-text report stream', () => {
       const { cmd, args } = opencode.buildHeadlessArgs({
         prompt: 'Evaluate offer #42',
         model: 'anthropic/claude-3-haiku',
@@ -35,6 +35,8 @@ describe('opencode provider', () => {
       expect(cmd).toBe('/bin/bash');
       expect(args[0]).toBe('-c');
       expect(args[1]).toContain('opencode run');
+      expect(args[1]).toContain('--print-logs');
+      expect(args[1]).toContain('--log-level ERROR');
       expect(args[1]).toContain('-m anthropic/claude-3-haiku');
     });
 

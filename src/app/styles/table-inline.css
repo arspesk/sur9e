@@ -834,6 +834,11 @@ table.offers th.col-kebab {
   background: var(--surface-2);
   color: var(--text);
 }
+.filter-panel__close svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
 
 .filter-panel__body {
   flex: 1;
@@ -916,6 +921,9 @@ table.offers th.col-kebab {
   font-size: 12px;
 }
 .fp-sort-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   margin-top: 10px;
   padding: 6px 12px;
   font-family: var(--font-display);
@@ -927,6 +935,11 @@ table.offers th.col-kebab {
   border-radius: var(--radius);
   cursor: pointer;
   transition: background var(--dur-fast) ease;
+}
+.fp-sort-dir svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .fp-sort-dir:hover {
   background: var(--surface-2);

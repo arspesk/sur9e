@@ -62,27 +62,37 @@ describe('status follow-up modal copy', () => {
     expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
   });
 
-  it('labels EvaluateModal dismissal Not now while preserving Set status only', () => {
-    const onStatusOnly = vi.fn();
-    renderModal('evaluate', <EvaluateModal />, { num: 7, patchToEvaluated: true, onStatusOnly });
+  it('treats EvaluateModal as an optional follow-up after status is already saved', () => {
+    renderModal('evaluate', <EvaluateModal />, { num: 7, statusFollowup: true });
 
     expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Set status only' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set status only' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
 
     expect(useModalStore.getState().modal).toBeNull();
-    expect(onStatusOnly).not.toHaveBeenCalled();
     expect(updateApplicationStatusAction).not.toHaveBeenCalled();
     expect(runJob).not.toHaveBeenCalled();
   });
 
+  it('runs evaluation without attempting a second status write', () => {
+    renderModal('evaluate', <EvaluateModal />, { num: 7, statusFollowup: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run evaluation' }));
+
+    expect(updateApplicationStatusAction).not.toHaveBeenCalled();
+    expect(runJob).toHaveBeenCalledWith({ num: 7 });
+  });
+
   it('labels bulk status-triggered EvaluateModal dismissal Not now', () => {
-    const onStatusOnly = vi.fn();
-    renderModal('evaluate', <EvaluateModal />, { count: 2, nums: [7, 8], onStatusOnly });
+    renderModal('evaluate', <EvaluateModal />, {
+      count: 2,
+      nums: [7, 8],
+      statusFollowup: true,
+    });
 
     expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Set status only' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set status only' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
   });
 
