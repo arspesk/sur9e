@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0](https://github.com/arspesk/sur9e/compare/v0.3.2...v0.4.0) (2026-08-02)
+
+
+### Features
+
+* add guided status follow-ups and safe updates ([e458cc4](https://github.com/arspesk/sur9e/commit/e458cc42923a307db16829642b20451c53ac92a4))
+* **status:** guide interview and offer preparation ([6932308](https://github.com/arspesk/sur9e/commit/6932308870fab19a95f90723b58cd93ac8319da1))
+* **triage:** add GitHub issue triage workflow ([13cc864](https://github.com/arspesk/sur9e/commit/13cc864aff8c5b5c4b3b5309091da081471d9aca))
+* **update:** add resilient one-click self-updates ([6182b8a](https://github.com/arspesk/sur9e/commit/6182b8ad3263d0aae1a5081b591d262c7ecf9069))
+* **update:** check automatically on settings entry ([dc717b8](https://github.com/arspesk/sur9e/commit/dc717b82f85543f7b2b2d0e3a683415966e7e84c))
+
+
+### Bug Fixes
+
+* **chat:** expose read-only Playwright tools ([b6703ba](https://github.com/arspesk/sur9e/commit/b6703ba907595a950c402dfb2291280c8cd4e469))
+* **chat:** harden persisted offer workflows ([e690025](https://github.com/arspesk/sur9e/commit/e690025f7d9f5f97502b29d62a212031da87a080))
+* **chat:** repair offer workflows and provider fallbacks ([f6de816](https://github.com/arspesk/sur9e/commit/f6de81627c3562bf5d30d1ec8ac1a2c0f065d251))
+* **offers:** hide chat launcher behind filters ([e710b67](https://github.com/arspesk/sur9e/commit/e710b67d62a33c09da1423fcd27ea82600c7acd3))
+* **pipeline:** refine card scores and action menus ([39cb29f](https://github.com/arspesk/sur9e/commit/39cb29fb52c831f1e6bdc0b0d2098d0e792c93bf))
+* **providers:** recover from hung retryable failures ([ca24bae](https://github.com/arspesk/sur9e/commit/ca24bae48df4229a8e98193680a5acf6f8a63ab6))
+* **settings:** reduce numeric stepper size ([14b363a](https://github.com/arspesk/sur9e/commit/14b363ad651efc3edf60e0049d2742291c45d8b9))
+* **status:** save evaluated before optional follow-up ([3b7b6cd](https://github.com/arspesk/sur9e/commit/3b7b6cd126fe80797d786acf8260b68995d6c906))
+
+
+### Reverts
+
+* split bundled improvements into logical changes ([6be7e37](https://github.com/arspesk/sur9e/commit/6be7e372a5dd53de5a8885e25637d561b21a7479))
+
 ## [0.3.2](https://github.com/arspesk/sur9e/compare/v0.3.1...v0.3.2) (2026-07-30)
 
 
