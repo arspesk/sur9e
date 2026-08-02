@@ -10,6 +10,7 @@ export { HelperText } from './helper-text';
 export { IconButton } from './icon-button';
 export { Input } from './input';
 export { Label } from './label';
+export { OverflowMenuButton } from './overflow-menu-button';
 export { Pill } from './pill';
 export {
   Select,

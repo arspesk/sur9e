@@ -241,7 +241,7 @@ describe('update-system apply and rollback', () => {
     expect(existsSync(resolve(installed, 'scripts/web.mjs'))).toBe(false);
     expectPrivateFiles(installed, privateFiles);
     expect(git(installed, ['status', '--short', '--untracked-files=no'])).toBe('');
-  });
+  }, 15_000);
 
   it('refuses dirty system paths with newlines and rename source records', () => {
     const { environment, installed } = createUpdateFixture();

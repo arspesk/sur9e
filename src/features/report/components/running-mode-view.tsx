@@ -10,6 +10,7 @@
 //     dismiss button removes the node from the doc.
 
 import { type NodeViewProps, NodeViewWrapper } from '@tiptap/react';
+import { Check, LoaderCircle, OctagonX, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRunningModePoll } from '@/hooks/use-running-mode-poll';
@@ -121,60 +122,7 @@ export function RunningModeView({ node }: NodeViewProps) {
       }}
     >
       <div className="running-mode-card__icon" aria-hidden="true">
-        {isRunning ? (
-          <svg
-            viewBox="0 0 24 24"
-            width="26"
-            height="26"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-        ) : showDone ? (
-          <svg
-            viewBox="0 0 24 24"
-            width="26"
-            height="26"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        ) : showCancelled ? (
-          <svg
-            viewBox="0 0 24 24"
-            width="26"
-            height="26"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m15 9-6 6" />
-            <path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z" />
-            <path d="m9 9 6 6" />
-          </svg>
-        ) : (
-          <svg
-            viewBox="0 0 24 24"
-            width="26"
-            height="26"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        )}
+        {isRunning ? <LoaderCircle /> : showDone ? <Check /> : showCancelled ? <OctagonX /> : <X />}
       </div>
       <div className="running-mode-card__body">
         <div className="running-mode-card__label">{label}</div>
@@ -209,7 +157,7 @@ export function RunningModeView({ node }: NodeViewProps) {
           aria-label="Dismiss"
           title="Dismiss"
         >
-          ×
+          <X aria-hidden="true" />
         </button>
       )}
     </NodeViewWrapper>

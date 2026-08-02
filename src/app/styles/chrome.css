@@ -1337,6 +1337,16 @@ html:not(.boot-ready) .rail-scrim {
 .page-head .sub .sub__save-state[data-state="saved"] {
   color: var(--st-success);
 }
+.sub__save-state[data-state="saved"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sub__save-state svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
+}
 .page-head .sub .sub__save-state[data-state="error"] {
   color: var(--st-danger);
 }
@@ -1445,6 +1455,11 @@ html:not(.boot-ready) .rail-scrim {
 .chip--filter .x:hover {
   opacity: 1;
   background: var(--surface-2);
+}
+.chip--filter .x svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .filter-sep {
   width: 1px;
@@ -2138,8 +2153,16 @@ input[type="range"]::-moz-range-track {
   font-size: 13px;
 }
 .providers-cli-row__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
   text-align: center;
+}
+.providers-cli-row__mark svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
 }
 .providers-cli-row--ok .providers-cli-row__mark {
   color: var(--st-success, var(--text));
@@ -2255,8 +2278,11 @@ input[type="range"]::-moz-range-track {
   text-overflow: ellipsis;
 }
 .providers-fallback-trigger__icon {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
   flex: 0 0 auto;
   color: var(--text-3, var(--text));
+  stroke-width: var(--icon-stroke-default);
 }
 .providers-fallback-popover {
   display: flex;
@@ -2567,6 +2593,12 @@ input[type="range"]::-moz-range-track {
   color: var(--text);
   background: var(--surface);
 }
+.range-modal__close svg,
+.toast__dismiss svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
 .evaluate-modal__body,
 .delete-confirm-modal__body,
 .range-modal__body {
@@ -2776,8 +2808,9 @@ input[type="range"]::-moz-range-track {
   background: var(--surface);
 }
 .section-pill__btn svg {
-  width: 18px;
-  height: 18px;
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
+  stroke-width: var(--icon-stroke-default);
 }
 
 /* ── SECTION SHEET (mobile/tablet bottom-sheet TOC) ──
@@ -3468,6 +3501,11 @@ select.form-input {
 .form-chip__remove:hover {
   color: var(--score-low);
 }
+.form-chip__remove svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
+}
 .form-chip-add {
   /* Inherits from .form-input — apply both classes. */
 }
@@ -3511,7 +3549,15 @@ select.form-input {
   color: var(--score-low);
   border-color: var(--score-low);
 }
+.form-row__remove svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
 .form-row__add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   align-self: flex-start;
   padding: 6px 12px;
   background: var(--surface);
@@ -3525,6 +3571,11 @@ select.form-input {
     color var(--dur-quick) var(--ease-firm),
     border-color var(--dur-quick) var(--ease-firm),
     background var(--dur-quick) var(--ease-firm);
+}
+.form-row__add svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
 }
 .form-row__add:hover {
   color: var(--accent);
@@ -3981,6 +4032,12 @@ select.form-input {
   flex: 0 0 auto;
   transition: transform var(--dur-quick) var(--ease-firm);
 }
+.select-trigger__icon,
+.select-scroll-button svg {
+  width: var(--icon-size-compact);
+  height: var(--icon-size-compact);
+  stroke-width: var(--icon-stroke-default);
+}
 .select-trigger[data-state="open"] .select-trigger__icon {
   transform: rotate(180deg);
 }
@@ -4184,11 +4241,11 @@ select.form-input {
 .icon-btn svg {
   /* 16x16 stroke matches drawer chevrons + report-header kebab so every
      ghost-icon trigger renders at identical scale. */
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.7;
+  stroke-width: var(--icon-stroke-default);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -4211,16 +4268,12 @@ select.form-input {
   color: var(--st-danger);
 }
 
-/* Canonical Lucide menu glyphs. Kebab triggers use EllipsisVertical while
-   meatball triggers use Ellipsis; both stay optically consistent inside the
-   existing button hit areas. Match .icon-btn svg's specificity so the
-   requested 2px stroke wins over the generic 1.7px icon treatment. */
+/* OverflowMenuButton owns the Lucide orientation and menu-specific stroke;
+   IconButton and the shared icon tokens own every other visual measurement. */
 .icon-btn svg.menu-dots-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  flex: 0 0 var(--icon-size-control);
   display: block;
-  stroke-width: 2;
+  stroke-width: var(--icon-stroke-menu);
 }
 
 /* Card — generic surface container. Padding variants opt-in. */

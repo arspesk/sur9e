@@ -18,6 +18,7 @@
 // CSS-var tokens as the rest of the chrome.
 
 import * as SelectPrimitive from '@radix-ui/react-select';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ElementRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { useBottomChromeCollisionPadding } from '@/hooks/use-floating-anchor';
@@ -40,29 +41,11 @@ type SelectTriggerProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Trigge
    * applies when `invalid` is true.
    */
   bare?: boolean;
-  /** Optional override for the chevron icon. Defaults to a small chevron-down SVG. */
+  /** Optional override for the chevron icon. Defaults to Lucide ChevronDown. */
   iconSlot?: ReactNode;
 };
 
-const ChevronIcon = (
-  <svg
-    aria-hidden="true"
-    width="10"
-    height="6"
-    viewBox="0 0 10 6"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <title>Chevron down</title>
-    <path
-      d="M1 1l4 4 4-4"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+const ChevronIcon = <ChevronDown aria-hidden="true" />;
 
 export const SelectTrigger = forwardRef<
   ElementRef<typeof SelectPrimitive.Trigger>,
@@ -110,11 +93,11 @@ export const SelectContent = forwardRef<
         {...rest}
       >
         <SelectPrimitive.ScrollUpButton className="select-scroll-button">
-          ▲
+          <ChevronUp aria-hidden="true" />
         </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport className="select-viewport">{children}</SelectPrimitive.Viewport>
         <SelectPrimitive.ScrollDownButton className="select-scroll-button">
-          ▼
+          <ChevronDown aria-hidden="true" />
         </SelectPrimitive.ScrollDownButton>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
@@ -131,23 +114,7 @@ export const SelectItem = forwardRef<ElementRef<typeof SelectPrimitive.Item>, Se
       <SelectPrimitive.Item ref={ref} className={cn('select-item', className)} {...rest}>
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
         <SelectPrimitive.ItemIndicator className="select-item__indicator">
-          <svg
-            aria-hidden="true"
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Selected</title>
-            <path
-              d="M2.5 6L5 8.5L9.5 3.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Check aria-hidden="true" />
         </SelectPrimitive.ItemIndicator>
       </SelectPrimitive.Item>
     );

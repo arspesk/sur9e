@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowDown, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ChatTurnEvent } from '@/lib/schemas/chat';
 import { foldEvents } from './fold-events';
@@ -135,7 +136,7 @@ export function ChatTranscript({
             setAtBottom(true);
           }}
         >
-          ↓
+          <ArrowDown aria-hidden="true" />
         </button>
       )}
     </div>
@@ -186,25 +187,7 @@ function RegenerateButton({ onClick }: { onClick: () => void }) {
       title="Regenerate reply"
       onClick={onClick}
     >
-      {/* Lucide refresh-cw glyph (inline SVG — no icon dep). */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="lucide lucide-refresh-cw"
-        aria-hidden="true"
-      >
-        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-        <path d="M21 3v5h-5" />
-        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-        <path d="M8 16H3v5" />
-      </svg>
+      <RefreshCw aria-hidden="true" />
     </button>
   );
 }
@@ -243,7 +226,7 @@ function AssistantVersions({
           disabled={safeIndex === 0}
           onClick={() => setIndex(i => Math.max(0, i - 1))}
         >
-          ‹
+          <ChevronLeft aria-hidden="true" />
         </button>
         <span className="chat-versions__count" aria-live="polite">
           {safeIndex + 1}/{versions.length}
@@ -255,7 +238,7 @@ function AssistantVersions({
           disabled={safeIndex >= versions.length - 1}
           onClick={() => setIndex(i => Math.min(versions.length - 1, i + 1))}
         >
-          ›
+          <ChevronRight aria-hidden="true" />
         </button>
       </div>
     </>
