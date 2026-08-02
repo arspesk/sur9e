@@ -1,16 +1,17 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { resolveModeRuntimeMock } = vi.hoisted(() => ({
+const { buildCommandMock, resolveModeRuntimeMock } = vi.hoisted(() => ({
+  buildCommandMock: vi.fn(() => ({ cmd: 'fake-worker', args: [] as string[] })),
   resolveModeRuntimeMock: vi.fn(),
 }));
 
 vi.mock('../command-registry', () => ({
-  buildCommand: vi.fn(() => ({ cmd: 'fake-worker', args: [] })),
+  buildCommand: buildCommandMock,
 }));
 
 vi.mock('../../providers/registry', () => ({
@@ -73,16 +74,94 @@ describe('extractFallbackStamp', () => {
 
 describe('spawnJob fallback metadata', () => {
   let root: string;
+  let realWorkerProcessGroupId: number | null;
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'sur9e-runner-fallback-stamp-'));
     mkdirSync(join(root, 'data/jobs'), { recursive: true });
+    buildCommandMock.mockReset();
+    buildCommandMock.mockReturnValue({ cmd: 'fake-worker', args: [] });
     resolveModeRuntimeMock.mockReset();
+    realWorkerProcessGroupId = null;
   });
 
   afterEach(() => {
+    if (
+      process.platform !== 'win32' &&
+      Number.isInteger(realWorkerProcessGroupId) &&
+      (realWorkerProcessGroupId as number) > 1
+    ) {
+      try {
+        process.kill(-(realWorkerProcessGroupId as number), 'SIGKILL');
+      } catch {}
+    }
     rmSync(root, { recursive: true, force: true });
   });
+
+  it.runIf(process.platform !== 'win32')(
+    'persists a real silent-timeout fallback and kills the primary descendant',
+    async () => {
+      const primary = { provider: 'opencode' as const, model: 'opencode-go/glm-5.2' };
+      const fallback = { provider: 'claude' as const, model: 'claude-sonnet-5' };
+      const descendantPidFile = join(root, 'descendant.pid');
+      const worker = join(process.cwd(), 'test/fixtures/fallback-timeout-worker.mjs');
+      buildCommandMock.mockReturnValue({
+        cmd: process.execPath,
+        args: [worker, root, descendantPidFile],
+      });
+      resolveModeRuntimeMock.mockReturnValue({
+        ...primary,
+        exec: 'headless',
+        resolvedFrom: 'global_default',
+        fallback,
+      });
+      const job: JobRecord = {
+        id: JOB_ID,
+        type: 'evaluate',
+        status: 'queued',
+        params: { num: 55 },
+        startedAt: '2026-08-01T20:00:00.000Z',
+        finishedAt: null,
+        output: '',
+        error: null,
+        exitCode: null,
+      };
+      persistJobRecord(root, job);
+
+      await spawnJob(root, job, { trackUsage: vi.fn() });
+      realWorkerProcessGroupId = readJobRecord(root, JOB_ID)?.processGroupId ?? null;
+      await vi.waitFor(
+        () => {
+          expect(readJobRecord(root, JOB_ID)?.status).toBe('done');
+        },
+        { timeout: 5000, interval: 25 },
+      );
+
+      const completed = readJobRecord(root, JOB_ID);
+      expect(completed).toMatchObject({
+        status: 'done',
+        provider: fallback.provider,
+        model: fallback.model,
+        fallback: { from: primary, reason: 'timeout' },
+      });
+      expect(completed?.output).toContain('> build · glm-5.2');
+      expect(completed?.output).toContain('fallback completed');
+      expect(completed?.output).toContain(
+        `[FALLBACK] ${JSON.stringify({ from: primary, to: fallback, reason: 'timeout' })}`,
+      );
+
+      const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
+      expect(descendantPid).toBeGreaterThan(1);
+      await vi.waitFor(
+        () => {
+          expect(() => process.kill(descendantPid, 0)).toThrow(
+            expect.objectContaining({ code: 'ESRCH' }),
+          );
+        },
+        { timeout: 1000, interval: 20 },
+      );
+    },
+  );
 
   it.each([
     {
