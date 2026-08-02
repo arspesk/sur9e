@@ -74,6 +74,9 @@ describe('buildChatSystemPrompt', () => {
     expect(prompt).toContain('source URL');
     expect(prompt).toContain('ask for the pasted job description');
     expect(prompt).toContain('real browser/Playwright-backed reader');
+    expect(prompt).toContain('npm run doctor');
+    expect(prompt).toContain('npx playwright install chromium');
+    expect(prompt).toContain('blocked, requires login, or cannot be read');
     expect(prompt).toMatch(/never (?:use )?WebFetch/i);
   });
 

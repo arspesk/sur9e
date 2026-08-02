@@ -147,16 +147,24 @@ async function mockChatApi(page: import('@playwright/test').Page): Promise<void>
         { seq: 1, type: 'stage', label: 'reading tracker' },
         { seq: 2, type: 'tool', name: 'get_tracker', status: 'start' },
         { seq: 3, type: 'tool', name: 'get_tracker', status: 'done' },
-        { seq: 4, type: 'text-delta', text: 'You have **3 offers** in play.' },
         {
-          seq: 5,
+          seq: 4,
+          type: 'tool',
+          name: 'mcp__playwright__browser_navigate',
+          status: 'done',
+        },
+        { seq: 5, type: 'tool', name: 'playwright.browser_snapshot', status: 'done' },
+        { seq: 6, type: 'tool', name: 'playwright_browser_network_requests', status: 'done' },
+        { seq: 7, type: 'text-delta', text: 'You have **3 offers** in play.' },
+        {
+          seq: 8,
           type: 'usage',
           costUsd: 0.14,
           inputTokens: 1000,
           outputTokens: 200,
           model: 'test-model',
         },
-        { seq: 6, type: 'done', messageId: 'm1' },
+        { seq: 9, type: 'done', messageId: 'm1' },
       ] as Array<{ seq: number }>),
     }),
   );
@@ -200,6 +208,9 @@ for (const viewport of VIEWPORTS) {
 
       await expect(dialog.getByText('3 offers')).toBeVisible({ timeout: 10_000 });
       await expect(dialog.getByText('get_tracker')).toBeVisible();
+      await expect(dialog.getByText('mcp__playwright__browser_navigate')).toBeVisible();
+      await expect(dialog.getByText('playwright.browser_snapshot')).toBeVisible();
+      await expect(dialog.getByText('playwright_browser_network_requests')).toBeVisible();
       await expect(dialog.getByText('· $0.14')).toBeVisible();
       await expect(dialog.locator('.chat-msg--user')).toHaveCount(1);
       await expect(dialog.getByText('how many offers?', { exact: true })).toHaveCount(1);

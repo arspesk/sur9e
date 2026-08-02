@@ -23,7 +23,19 @@ describe('claude.buildChatArgs', () => {
     expect(line).toContain('--verbose');
     expect(line).toContain("--session-id '11111111-2222-3333-4444-555555555555'");
     expect(line).not.toContain('--resume');
-    expect(line).toContain('--allowedTools "Read,Glob,Grep,WebFetch,WebSearch,mcp__sur9e-app__*"');
+    expect(line).toContain('mcp__sur9e-app__*');
+    for (const tool of [
+      'browser_navigate',
+      'browser_snapshot',
+      'browser_wait_for',
+      'browser_tabs',
+      'browser_console_messages',
+      'browser_network_requests',
+    ]) {
+      expect(line).toContain(`mcp__playwright__${tool}`);
+    }
+    expect(line).not.toContain('mcp__playwright__browser_click');
+    expect(line).not.toContain('mcp__playwright__browser_type');
     expect(line).toContain('--disallowedTools "Bash,Write,Edit,NotebookEdit,Task"');
     expect(line).not.toContain('--dangerously-skip-permissions');
     // Prompt fed on stdin (not a positional `$(cat …)` arg) to avoid a race
@@ -187,6 +199,17 @@ describe('codex chat surface', () => {
     // emit a confirm card (x-sur9e-turn header) instead of terminal fallback.
     expect(line).toContain(`-c 'mcp_servers.sur9e-app.env.SUR9E_CHAT_TURN_ID="turn-codex-1"'`);
     expect(line).toContain(`-c 'mcp_servers.sur9e-app.env.SUR9E_APP_URL="http://localhost:3000"'`);
+    expect(line).toContain(`mcp_servers.sur9e-app.command="node"`);
+    expect(line).toContain(`mcp_servers.sur9e-app.args=["/repo/root/cli/mcp-app-server.mjs"]`);
+    expect(line).toContain(`mcp_servers.sur9e-app.env.SUR9E_ROOT="/repo/root"`);
+    expect(line).toContain(`mcp_servers.playwright.command="npx"`);
+    expect(line).toContain(
+      `mcp_servers.playwright.args=["-y","@playwright/mcp@latest","--headless","--isolated"]`,
+    );
+    expect(line).toContain(`mcp_servers.playwright.default_tools_approval_mode="approve"`);
+    expect(line).toContain(
+      `mcp_servers.playwright.enabled_tools=["browser_navigate","browser_snapshot","browser_wait_for","browser_tabs","browser_console_messages","browser_network_requests"]`,
+    );
     unlinkSync(mcpConfigPath);
   });
 
@@ -287,6 +310,15 @@ describe('opencode chat surface', () => {
     // confirm card (x-sur9e-turn header) instead of terminal fallback.
     expect(server.environment.SUR9E_CHAT_TURN_ID).toBe('turn-oc-1');
     expect(server.environment.SUR9E_APP_URL).toBe('http://localhost:3000');
+    expect(written.mcp.playwright).toEqual({
+      type: 'local',
+      command: ['npx', '-y', '@playwright/mcp@latest', '--headless', '--isolated'],
+      enabled: true,
+    });
+    expect(written.permission['playwright_*']).toBe('deny');
+    expect(written.permission.playwright_browser_navigate).toBe('allow');
+    expect(written.permission.playwright_browser_snapshot).toBe('allow');
+    expect(written.permission.playwright_browser_click).toBeUndefined();
     // The read-only permission block is preserved alongside the mcp block.
     expect(written.permission.edit).toBe('deny');
     expect(written.permission.bash).toBe('deny');

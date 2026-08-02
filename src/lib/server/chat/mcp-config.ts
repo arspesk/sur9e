@@ -1,14 +1,29 @@
 // src/lib/server/chat/mcp-config.ts
 //
 // Per-turn MCP config generation. The chat turn runner passes the
-// returned path to the spawned provider CLI as --mcp-config, wiring the
-// sur9e-app MCP server (cli/mcp-app-server.mjs) into the turn with the
-// turn id, app URL, and repo root in env.
+// returned path to the spawned provider CLI, wiring a read-only Playwright
+// reader plus the sur9e-app MCP server (cli/mcp-app-server.mjs) into the turn
+// with the turn id, app URL, and repo root in env.
 
 import 'server-only';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+export const PLAYWRIGHT_CHAT_TOOLS = Object.freeze([
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_wait_for',
+  'browser_tabs',
+  'browser_console_messages',
+  'browser_network_requests',
+] as const);
+
+const PLAYWRIGHT_SERVER: TurnMcpServer = {
+  command: 'npx',
+  args: ['-y', '@playwright/mcp@latest', '--headless', '--isolated'],
+  env: {},
+};
 
 /** Base URL of the running web app for this process. */
 export function detectAppUrl(): string {
@@ -32,6 +47,10 @@ export function writeMcpConfigForTurn(root: string, opts: McpConfigOptions): str
   const path = join(dir, `turn-${safeTurnId}.json`);
   const config = {
     mcpServers: {
+      playwright: {
+        command: PLAYWRIGHT_SERVER.command,
+        args: PLAYWRIGHT_SERVER.args,
+      },
       'sur9e-app': {
         command: 'node',
         args: [join(root, 'cli/mcp-app-server.mjs')],
@@ -49,12 +68,35 @@ export function writeMcpConfigForTurn(root: string, opts: McpConfigOptions): str
 
 /** The sur9e-app server block, lifted back out of a turn's MCP config file. */
 export interface TurnMcpServer {
-  /** Executable (always `node`). */
+  /** Server executable (`node`, `npx`, etc.). */
   command: string;
-  /** argv for the executable — the absolute path to cli/mcp-app-server.mjs. */
+  /** argv for the executable. */
   args: string[];
-  /** SUR9E_APP_URL / SUR9E_CHAT_TURN_ID / SUR9E_ROOT — the env that carries the turn id. */
+  /** Per-server environment; the app server uses it to carry the turn id. */
   env: Record<string, string>;
+}
+
+/** Read every known server from the generated per-turn config. */
+export function readTurnMcpServers(path: string): Record<string, TurnMcpServer> {
+  try {
+    const cfg = JSON.parse(readFileSync(path, 'utf-8')) as {
+      mcpServers?: Record<string, { command?: unknown; args?: unknown; env?: unknown }>;
+    };
+    const servers: Record<string, TurnMcpServer> = {};
+    for (const name of ['playwright', 'sur9e-app']) {
+      const server = cfg.mcpServers?.[name];
+      if (!server || typeof server.command !== 'string' || !Array.isArray(server.args)) continue;
+      const rawEnv = server.env;
+      const env =
+        rawEnv && typeof rawEnv === 'object'
+          ? Object.fromEntries(Object.entries(rawEnv).map(([key, value]) => [key, String(value)]))
+          : {};
+      servers[name] = { command: server.command, args: server.args.map(String), env };
+    }
+    return servers;
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -74,16 +116,6 @@ export interface TurnMcpServer {
  * (a config with no turn id is a terminal-mode config — nothing to wire).
  */
 export function readTurnMcpConfig(path: string): TurnMcpServer | null {
-  try {
-    const cfg = JSON.parse(readFileSync(path, 'utf-8')) as {
-      mcpServers?: Record<string, { command?: unknown; args?: unknown; env?: unknown }>;
-    };
-    const server = cfg.mcpServers?.['sur9e-app'];
-    if (!server || typeof server.command !== 'string' || !Array.isArray(server.args)) return null;
-    const env = (server.env ?? {}) as Record<string, string>;
-    if (!env.SUR9E_CHAT_TURN_ID) return null;
-    return { command: server.command, args: server.args.map(String), env };
-  } catch {
-    return null;
-  }
+  const server = readTurnMcpServers(path)['sur9e-app'];
+  return server?.env.SUR9E_CHAT_TURN_ID ? server : null;
 }

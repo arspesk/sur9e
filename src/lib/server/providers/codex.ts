@@ -77,7 +77,7 @@ import 'server-only';
 import { execFileSync } from 'node:child_process';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
-import { readTurnMcpConfig } from '../chat/mcp-config';
+import { PLAYWRIGHT_CHAT_TOOLS, readTurnMcpServers } from '../chat/mcp-config';
 import { escapeForBash } from './shell';
 import type { ExitClassification, Provider } from './types';
 
@@ -92,6 +92,10 @@ import type { ExitClassification, Provider } from './types';
  */
 function tomlBasicString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function tomlStringArray(values: readonly string[]): string {
+  return `[${values.map(tomlBasicString).join(',')}]`;
 }
 
 /**
@@ -285,39 +289,30 @@ const codex: Provider = {
       '--sandbox read-only',
       '-c project_doc_max_bytes=0',
       `-c ${escapeForBash(`mcp_servers.sur9e-app.default_tools_approval_mode=${tomlBasicString('approve')}`)}`,
+      `-c ${escapeForBash(`mcp_servers.playwright.default_tools_approval_mode=${tomlBasicString('approve')}`)}`,
+      `-c ${escapeForBash(`mcp_servers.playwright.enabled_tools=${tomlStringArray(PLAYWRIGHT_CHAT_TOOLS)}`)}`,
       '--disable shell_tool',
       '--disable unified_exec',
       '--disable skill_search',
     ];
 
     // Turn-scoped MCP wiring — the codex analogue of claude's `--mcp-config
-    // --strict-mcp-config`. codex has no "point at this MCP config file" flag,
-    // but `-c dotted.path=value` overrides a config leaf (value parsed as TOML)
-    // on top of the config loaded from `.codex/config.toml`. When codex runs
-    // with cwd=repo-root (every chat turn does), it loads the project
-    // `.codex/config.toml`, which already registers the `sur9e-app` server
-    // (command + args + SUR9E_APP_URL). We inject this turn's id (and app url)
-    // INTO that server's `env` table — verified against codex 0.142 that a
-    // dotted `mcp_servers.sur9e-app.env.<KEY>` override deep-merges into the
-    // existing env rather than replacing it, so both SUR9E_APP_URL and
-    // SUR9E_CHAT_TURN_ID reach the spawned mcp-app-server. That turn id is what
-    // makes the action routes emit a confirm card (see cli/mcp-app-server.mjs
-    // appFetch → x-sur9e-turn header → confirms.ts) instead of falling back to
-    // terminal-mode model-adjudicated approval with no card.
-    //
-    // No separate "strict" flag is needed (unlike claude): there is a single
-    // sur9e-app registration — the project one — and we amend it in place, so
-    // there is no second turn-id-less server that could win a merge race.
+    // --strict-mcp-config`. Codex has no "point at this MCP config file" flag,
+    // so re-express both generated server blocks as `-c` TOML overrides. This
+    // keeps chat self-contained instead of depending on the project config and
+    // carries SUR9E_CHAT_TURN_ID into the app server so mutations still reach
+    // the in-chat confirmation card.
     if (mcpConfigPath) {
-      const turn = readTurnMcpConfig(mcpConfigPath);
-      if (turn) {
-        for (const key of ['SUR9E_CHAT_TURN_ID', 'SUR9E_APP_URL'] as const) {
-          const value = turn.env[key];
-          if (value) {
-            parts.push(
-              `-c ${escapeForBash(`mcp_servers.sur9e-app.env.${key}=${tomlBasicString(value)}`)}`,
-            );
-          }
+      const servers = readTurnMcpServers(mcpConfigPath);
+      for (const [name, server] of Object.entries(servers)) {
+        parts.push(
+          `-c ${escapeForBash(`mcp_servers.${name}.command=${tomlBasicString(server.command)}`)}`,
+          `-c ${escapeForBash(`mcp_servers.${name}.args=${tomlStringArray(server.args)}`)}`,
+        );
+        for (const [key, value] of Object.entries(server.env)) {
+          parts.push(
+            `-c ${escapeForBash(`mcp_servers.${name}.env.${key}=${tomlBasicString(value)}`)}`,
+          );
         }
       }
     }

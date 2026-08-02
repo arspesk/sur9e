@@ -12,6 +12,11 @@ import { join } from 'node:path';
 
 export const SERVER_PATH = join(process.cwd(), 'cli/mcp-app-server.mjs');
 
+export interface McpProcessSpec {
+  command: string;
+  args: string[];
+}
+
 export class McpTestClient {
   private child: ChildProcessWithoutNullStreams;
   private buffer = '';
@@ -19,10 +24,13 @@ export class McpTestClient {
   private waiters: Array<(msg: unknown) => void> = [];
   readonly stderr: string[] = [];
 
-  constructor(env: Record<string, string | undefined> = {}) {
+  constructor(
+    env: Record<string, string | undefined> = {},
+    processSpec: McpProcessSpec = { command: process.execPath, args: [SERVER_PATH] },
+  ) {
     // Undefined values drop the key from the child env (spawn skips them),
     // so `SUR9E_CHAT_TURN_ID: undefined` guarantees terminal-mode runs.
-    this.child = spawn(process.execPath, [SERVER_PATH], {
+    this.child = spawn(processSpec.command, processSpec.args, {
       env: { ...process.env, SUR9E_CHAT_TURN_ID: undefined, ...env } as NodeJS.ProcessEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
