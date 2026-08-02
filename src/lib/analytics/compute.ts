@@ -224,11 +224,10 @@ export function fmtDelta(curr: number, prev: number | null | undefined): DeltaRe
   if (prev === 0) return { text: `+${curr} added`, kind: '' };
   const diff = curr - prev;
   const pct = (diff / prev) * 100;
-  const arrow = diff >= 0 ? '▲' : '▼';
   const sign = diff >= 0 ? '+' : '';
   const pctClamped = Math.max(-999, Math.min(999, pct));
   return {
-    text: `${arrow} ${sign}${diff} (${sign}${pctClamped.toFixed(1)}%)`,
+    text: `${sign}${diff} (${sign}${pctClamped.toFixed(1)}%)`,
     kind: diff >= 0 ? 'up' : 'dn',
   };
 }
@@ -237,13 +236,12 @@ export function fmtMoneyDelta(curr: number, prev: number | null | undefined): De
   if (prev === null || prev === undefined || prev === 0) return { text: '', kind: '' };
   const diff = curr - prev;
   const pct = (diff / prev) * 100;
-  const arrow = diff >= 0 ? '▲' : '▼';
   const sign = diff >= 0 ? '+' : '';
-  // Format the absolute value (the arrow + sign already convey direction) —
+  // Format the absolute value (the Lucide trend icon + sign convey direction) —
   // slicing the minus off fmtMoney(diff) is locale-dependent and stripped the
   // currency symbol from positive deltas instead.
   return {
-    text: `${arrow} ${sign}${fmtMoney(Math.abs(diff))} (${sign}${pct.toFixed(1)}%)`,
+    text: `${sign}${fmtMoney(Math.abs(diff))} (${sign}${pct.toFixed(1)}%)`,
     kind: diff >= 0 ? 'up' : 'dn',
   };
 }

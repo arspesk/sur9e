@@ -9,10 +9,10 @@ tracks every application — all on your machine.
 **Mission:** quality over quantity. AI gives the job-seeker velocity and
 clarity, never shortcuts — sur9e will never auto-submit an application.
 
-This file is both the **operating manual for the AI agent** (the agent IS the
-CLI — read this on every session) and the **orientation doc for contributors**.
-The same content lives in `AGENTS.md` for non-Claude agents; keep the two files
-in sync when editing either.
+This file is the **operating manual for the AI agent** (the agent IS the CLI —
+read this on every session). The detailed human-and-agent contribution workflow
+lives in [`CONTRIBUTING.md`](CONTRIBUTING.md). This operating manual is stored as
+both `CLAUDE.md` and `AGENTS.md`; keep those files byte-identical.
 
 **Honesty rule:** never hallucinate. If unsure, state uncertainty. Say "I don't
 know" rather than guess.
@@ -26,6 +26,7 @@ know" rather than guess.
 | Architecture (system flow)     | [`docs/architecture.md`](docs/architecture.md)                    |
 | Setup & prerequisites          | [`docs/setup.md`](docs/setup.md)                                  |
 | Personalization guide          | [`docs/customization.md`](docs/customization.md)                  |
+| Contribution workflow          | [`CONTRIBUTING.md`](CONTRIBUTING.md)                              |
 | Releases & repo automation     | [`docs/releasing.md`](docs/releasing.md)                          |
 | Bugs / feature requests        | GitHub Issues in this repo                                        |
 | Your CV                        | `inputs/personalization/cv.md` (gitignored)                       |
@@ -91,6 +92,7 @@ Dev server: `npm run web` → http://localhost:3000
 - **Offer verification = Playwright, not WebFetch.** WebFetch can be spoofed by stale caches and bot-detection redirects; only Playwright (real headless browser) gives a faithful read of the live page.
 - **Don't edit `content/modes/_shared.md` for user-specific content.** Customizations go in `inputs/personalization/narrative.md` or `inputs/personalization/profile.yml`. See [`docs/data-contract.md`](docs/data-contract.md).
 - **Frontend visual changes require 3-width screenshot verification.** Capture desktop (1280×800), tablet (768×1024), and mobile (375×667) before claiming UI work is done. Every surface must work at all three widths.
+- **Interface icons use Lucide.** Use the closest `lucide-react` icon through an existing shared primitive when one exists; do not hand-draw replacement SVGs, use Unicode/emoji glyphs as controls, or add a parallel icon library. Brand marks, company logos, data visualizations, and progress geometry are the only exceptions. Size and stroke icons through shared CSS/design tokens, mark decorative icons `aria-hidden`, and label icon-only controls.
 - **Server library logic lives in `src/lib/server/`.** Don't grow Next API route handlers or server actions with business logic — extract into a `src/lib/server/<concern>.ts` module instead. Routes + actions are thin glue that parse zod schemas and call into the server library.
 - **Server Actions handle mutations.** Each lives in `src/server/actions/<resource>.ts` and calls `revalidatePath(...)` (via the typed wrapper in `src/server/revalidate.ts`) for every surface the change affects. JSON endpoints under `src/app/api/*` stay as a compat surface for scripts.
 - **Reads use the right cache layer.** RSC pages call `loadX(ROOT)` directly (wrapped in React `cache()` per request). Client components use TanStack Query hooks in `src/hooks/use-*`. Cross-component UI state goes in a Zustand store in `src/stores/`.
@@ -134,13 +136,14 @@ weekly npm and GitHub Actions PRs; never auto-merge them. See
 
 ## Development and release lifecycle
 
-Treat each pull request as the unit of history because this repository squash-merges.
-Split independent features and fixes into separate, logically scoped PRs; keep one
-behavior's implementation, tests, and documentation together. Avoid both catch-all
-PRs that hide multiple changes behind one title and noisy micro-PRs that separate
-tightly coupled work. Publish each completed, independently reviewable PR as soon as
-it is ready instead of stockpiling finished PRs for a bulk push. A dependent PR may
-wait only until its base change is merged.
+Before implementing, committing, pushing, or opening a PR for a repository
+change, read [`CONTRIBUTING.md`](CONTRIBUTING.md) in full. Treat each pull request
+as the unit of history because this repository
+squash-merges: one independently reviewable outcome per PR, with its required
+implementation, tests, documentation, and tightly coupled refactoring together.
+After explicit authorization to push and open PRs, publish each completed
+independent PR promptly. `CONTRIBUTING.md` is the source of truth for scope
+decisions, split examples, commit style, and review expectations.
 
 1. **Branch from current `main`.** Fetch first, then use a short-lived branch or
    isolated worktree. Never commit or push implementation work directly to
@@ -207,40 +210,11 @@ wait only until its base change is merged.
 
 ## Contributing (humans and AI agents)
 
-sur9e is built largely with AI coding agents, and AI-assisted contributions
-are welcome. The rules:
-
-- **You own what you submit.** Review and understand every AI-generated line
-  before opening a PR. "The agent wrote it" is not a review.
-- **Run the gates.** `npm run test:quick` and `npm run build` must pass before a
-  PR. New behavior needs tests; behavior-preserving refactors must prove nothing
-  changed (existing tests pass unmodified).
-- **Protect the user-data boundary.** `src/lib/repo-path-policy.mjs` is the
-  executable source of truth shared by updates and CI. Protected paths must
-  never be tracked or used as test fixtures; only its enumerated scaffolding is
-  exempt. Keep the policy, [`docs/data-contract.md`](docs/data-contract.md), and
-  their tests aligned.
-- **Use Conventional Commit PR titles.** Format:
-  `<type>(<optional-scope>)!?: <description>`; allowed types are `feat`, `fix`,
-  `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, and `revert`.
-- **Use squash merges only.** The validated PR title must become the squash
-  commit's Conventional header; only GitHub's ` (#<number>)` suffix is allowed.
-  Keep the squash body blank so internal commit messages cannot affect Release
-  Please. Remote enforcement is a maintainer prerequisite; do not assume it is
-  enabled until the GitHub settings are verified.
-- **Leave releases to Release Please.** Ordinary PRs must not manually edit
-  generated release metadata. Maintainers follow
-  [`docs/releasing.md`](docs/releasing.md).
-- **Match the existing patterns** (see Critical rules above) instead of
-  introducing parallel ones. One source of truth per concern.
-- **No auto-submit features, ever.** PRs that automate the final
-  Submit/Send/Apply step of a job application will be rejected — this is a
-  product principle, not a style preference.
-- **Accessibility is part of done.** Keyboard navigation, labels, and focus
-  management ship with the feature, not after it.
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full workflow and
-[`SECURITY.md`](SECURITY.md) for the security posture.
+Humans and AI agents follow [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributor
+ownership, PR scope, commit and PR style, validation, review, and AI-disclosure
+requirements. The Critical rules and lifecycle gates in this manual remain
+mandatory. Release work additionally follows [`docs/releasing.md`](docs/releasing.md),
+and security-sensitive work follows [`SECURITY.md`](SECURITY.md).
 
 ## Update check protocol
 

@@ -9,6 +9,9 @@ are the most valuable thing you can send.
 - Read [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) (same content,
   different agent runtimes). They are the operating manual: architecture,
   critical rules, and the patterns your change must follow.
+- If you use an AI coding agent, explicitly tell it to read this file before it
+  implements, commits, pushes, or opens a PR. Humans and agents follow the same
+  contribution workflow.
 - Check existing [GitHub Issues](https://github.com/arspesk/sur9e/issues)
   before opening a new one or starting a large change. For anything bigger
   than a bugfix, open an issue first so we can agree on the approach.
@@ -89,7 +92,45 @@ welcome — under these rules:
 - **No telemetry.** Sur9e collects nothing.
 - **English only** in code, comments, and docs.
 
+## Design and accessibility
+
+- Use the closest `lucide-react` icon through an existing shared primitive when
+  one exists. Do not hand-draw replacement SVGs, use Unicode/emoji glyphs as
+  controls, or add a parallel icon library. Brand marks, company logos, data
+  visualizations, and progress geometry are the only exceptions.
+- Size and stroke icons through shared CSS and the tokens in
+  `src/app/styles/tokens.css`. Decorative icons need `aria-hidden`; icon-only
+  controls need an accessible label.
+- Verify frontend changes at desktop (1280×800), tablet (768×1024), and mobile
+  (375×667), including focus, overflow, and icon alignment.
+
 ## Commit & PR style
+
+### Scope each PR around one outcome
+
+A pull request is the unit of permanent history because Sur9e squash-merges.
+Each PR must deliver one independently reviewable and revertible outcome:
+
+- Keep that outcome's implementation, tests, documentation, and required
+  refactoring together.
+- Move unrelated features, opportunistic refactors, and bug fixes to separate
+  PRs. A feature plus a refactor or fix belongs together only when separating
+  them would leave the feature incomplete or unsafe.
+- Group fixes that share a root cause or component; do not create a micro-PR for
+  every line. Avoid both catch-all PRs and artificial fragmentation.
+- AI agents must obtain explicit authorization before pushing or opening a PR.
+  Once authorized, open each completed, independent PR promptly instead of
+  stockpiling finished changes for one bulk push. Base dependent work on updated
+  `main` after its prerequisite merges rather than opening a stack where practical.
+- If a branch already mixes independent work, split it before detailed review.
+  For example, submit an independent feature, an unrelated refactor, and
+  unrelated fixes as separate PRs.
+
+The PR description must state the primary outcome and explain why any secondary
+changes are necessary for it. Maintainers may ask for an oversized or mixed PR
+to be split before reviewing the implementation in detail.
+
+### Titles, commits, and merge history
 
 - PR titles must follow
   `<type>(<optional-scope>)!?: <description>`. Allowed types are `feat`, `fix`,
@@ -102,9 +143,14 @@ welcome — under these rules:
   messages cannot affect Release Please. Remote enforcement is a maintainer
   prerequisite and must not be assumed active until the GitHub settings are
   verified.
-- Logically grouped commits; one concern per PR.
+- Working commits may capture review iterations, but keep them logically grouped,
+  well-described, and understandable enough to inspect while the PR is open. They
+  are not the permanent project history; the validated PR title becomes the single
+  squash commit on `main`.
 - Frontend changes: include desktop (1280×800), tablet (768×1024), and mobile
   (375×667) screenshots in the PR.
+- Accessibility is part of done: keyboard navigation, labels, and focus
+  management ship with the change.
 
 ## Maintainer-only tools
 

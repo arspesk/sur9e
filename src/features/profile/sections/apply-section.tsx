@@ -8,6 +8,7 @@
 // rest of the profile. The schema preprocess (normalizeApplyAnswers) drops
 // both-blank rows on save, so no trim logic is needed here.
 
+import { Plus, X } from 'lucide-react';
 import type { Control } from 'react-hook-form';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 import { Input } from '@/components/primitives';
@@ -79,7 +80,7 @@ export function ApplySection() {
               aria-label={`Remove answer ${i + 1}`}
               onClick={() => remove(i)}
             >
-              ×
+              <X aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -95,10 +96,10 @@ export function ApplySection() {
           type="button"
           onClick={() => append({ question: '', answer: '' })}
         >
-          + Add answer
+          <Plus aria-hidden="true" /> Add answer
         </button>
         <button className="form-row__add" type="button" onClick={addCommonQuestions}>
-          + Add common questions
+          <Plus aria-hidden="true" /> Add common questions
         </button>
       </div>
     </section>

@@ -50,7 +50,7 @@ describe('ConfirmCard', () => {
     // resolves OPTIMISTICALLY from the POST response instead of waiting. A 200
     // with no explicit outcome means 'approved': the Start/Cancel buttons are
     // swapped for the resolved label rather than left disabled.
-    await findByText('✓ Confirmed');
+    await findByText('Confirmed');
     expect(queryByRole('button')).toBeNull();
   });
 
@@ -106,7 +106,7 @@ describe('ConfirmCard', () => {
         action="start-job"
       />,
     );
-    expect(getByText('✓ Started — running in the jobs strip')).toBeTruthy();
+    expect(getByText('Started — running in the jobs strip')).toBeTruthy();
     expect(queryByRole('button')).toBeNull();
   });
 
@@ -297,7 +297,7 @@ describe('ConfirmCard', () => {
 
     fireEvent.click(getByRole('button', { name: 'Edit report #12' }));
 
-    await findByText('✕ Action failed');
+    await findByText('Action failed');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({
         tone: 'danger',
@@ -342,7 +342,7 @@ describe('ConfirmCard', () => {
 
     fireEvent.click(getByRole('button', { name: 'Create offer and cover letter' }));
 
-    await findByText('✓ Offer ready');
+    await findByText('Offer ready');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({
         tone: 'warning',
@@ -362,7 +362,7 @@ describe('ConfirmCard', () => {
         action="set-status"
       />,
     );
-    expect(status.getByText('✓ Status updated')).toBeTruthy();
+    expect(status.getByText('Status updated')).toBeTruthy();
 
     const report = render(
       <ConfirmCard
@@ -373,14 +373,14 @@ describe('ConfirmCard', () => {
         action="edit-report"
       />,
     );
-    expect(report.getByText('✓ Report updated')).toBeTruthy();
+    expect(report.getByText('Report updated')).toBeTruthy();
   });
 
   it('an approved card with no action kind falls back to a generic Confirmed label', () => {
     const { getByText, queryByRole } = render(
       <ConfirmCard token="tok1" summary="Start evaluation for #12" meta="" outcome="approved" />,
     );
-    expect(getByText('✓ Confirmed')).toBeTruthy();
+    expect(getByText('Confirmed')).toBeTruthy();
     expect(queryByRole('button')).toBeNull();
   });
 
@@ -388,7 +388,7 @@ describe('ConfirmCard', () => {
     const { getByText, queryByRole } = render(
       <ConfirmCard token="tok1" summary="Start evaluation for #12" meta="" outcome="cancelled" />,
     );
-    expect(getByText('✕ Cancelled')).toBeTruthy();
+    expect(getByText('Cancelled')).toBeTruthy();
     expect(queryByRole('button')).toBeNull();
   });
 
@@ -396,8 +396,8 @@ describe('ConfirmCard', () => {
     const { getByText, queryByText, queryByRole } = render(
       <ConfirmCard token="tok1" summary="Start evaluation for #12" meta="" outcome="expired" />,
     );
-    expect(getByText('⃠ Expired')).toBeTruthy();
-    expect(queryByText('✕ Cancelled')).toBeNull();
+    expect(getByText('Expired')).toBeTruthy();
+    expect(queryByText('Cancelled')).toBeNull();
     expect(queryByRole('button')).toBeNull();
   });
 });

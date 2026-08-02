@@ -6,6 +6,7 @@
 // (Notion-style line stack on desktop ≥1025px) + bottom-sheet section
 // nav (≤1024px) are provided by ReportTocRail and useSectionSheet.
 
+import { Menu } from 'lucide-react';
 import { useEffect } from 'react';
 import { SaveStateText } from '@/components/save-state-text';
 import { Topbar } from '@/components/shell/topbar';
@@ -97,19 +98,7 @@ export function ProfilePage({ initialData, loadError }: ProfilePageProps = {}) {
           aria-haspopup="dialog"
           aria-controls="tocSheet"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
+          <Menu aria-hidden="true" />
           <span>Sections</span>
         </button>
       </aside>

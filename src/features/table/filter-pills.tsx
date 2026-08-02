@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Chip } from '@/components/primitives';
 import type { TableFilterState } from './table-filtering';
@@ -35,7 +36,7 @@ export function FilterPills({ filters, onChange }: FilterPillsProps) {
         >
           {pill.label}
           <span aria-hidden="true" className="x">
-            ×
+            <X />
           </span>
         </Chip>
       ))}
