@@ -19,6 +19,15 @@
   margin: 0 auto;
   width: 100%;
 }
+/* Chromium exposes its native number-stepper as an internal control whose
+   default chevrons are visually larger than Sur9e's compact form icons.
+   Keep the native behavior, but reduce only the painted control so numeric
+   fields retain their full input hit area and keyboard semantics. */
+.settings-content .form-input[type="number"]::-webkit-inner-spin-button {
+  transform: scale(0.75);
+  transform-origin: center right;
+  opacity: 0.72;
+}
 .settings-head {
   display: flex;
   justify-content: space-between;
@@ -615,8 +624,13 @@
     transform var(--dur-quick) var(--ease-firm);
 }
 .portal-row__expand svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+  stroke-width: var(--icon-stroke-default);
+}
+.portal-row__meta .form-row__remove svg {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
 }
 .portal-row__expand:hover {
   color: var(--text);

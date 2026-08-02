@@ -1,17 +1,11 @@
 'use client';
 
 // Context shape (passed via useModalStore.open('evaluate', context)):
-//   { num?: number }            — single-row evaluate (default copy)
-//   { count: number }           — batch evaluate (count > 1 switches title)
-//   { patchToEvaluated?: bool } — set by the report-page flow to PATCH
-//                                 the status to 'evaluated' before spawning.
-//   { onStatusOnly?: fn }       — set by the batch bar's "Change status →
-//                                 Evaluated" pick: renders an extra
-//                                 "Set status only" button that closes and
-//                                 applies the plain bulk PATCH without
-//                                 spawning jobs. Cancel/Escape/overlay-click
-//                                 stay a full abort (an accidental dismiss
-//                                 must never write).
+//   { num?: number }             — single-row evaluate (default copy)
+//   { count: number }            — batch evaluate (count > 1 switches title)
+//   { statusFollowup?: boolean } — the status was already persisted as
+//                                  Evaluated; this modal only offers the
+//                                  optional evaluation job.
 //
 // On submit:
 //   - Single-row → useJobAction('evaluate').run({ num, generate_pdf? })
@@ -29,7 +23,6 @@ import { Button } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
 import { useJobAction } from '@/hooks/use-job-action';
 import { formatEstimate, JOB_TYPES_BY_TYPE, jobEstimateLabel } from '@/lib/job-types';
-import { updateApplicationStatusAction } from '@/server/actions/applications';
 import { useModalStore } from '@/stores/modal-store';
 import { useSelectionStore } from '@/stores/selection-store';
 import { runForNums } from './batch-run';
@@ -47,13 +40,10 @@ export function EvaluateModal() {
   const num = (context?.num as number | undefined) ?? undefined;
   const count = (context?.count as number | undefined) ?? undefined;
   const nums = (context?.nums as number[] | undefined) ?? undefined;
-  const patchToEvaluated = (context?.patchToEvaluated as boolean | undefined) ?? false;
+  const statusFollowup = (context?.statusFollowup as boolean | undefined) ?? false;
   // R2-5: insert the runningMode placeholder only on confirm. Undefined on
   // the batch path, where calling it is a no-op.
   const onConfirm = context?.onConfirm as (() => void) | undefined;
-  // Batch "Change status → Evaluated" pick: skip the jobs, just PATCH.
-  const onStatusOnly = context?.onStatusOnly as (() => void) | undefined;
-  const statusTriggered = patchToEvaluated || onStatusOnly != null;
   const isBatch = Number.isInteger(count) && (count as number) > 1;
 
   // Legacy `evaluate-modal.js` line 70-75: accept either confirm(num)
@@ -65,10 +55,8 @@ export function EvaluateModal() {
     title = `Run full evaluation for #${num}?`;
   }
 
-  // Run the job after the user confirms. For the report flow (single-row,
-  // patchToEvaluated=true) we PATCH the application status first so the
-  // status pill updates immediately, then spawn the eval job. Legacy did
-  // both in run-evaluate.js lines 49-58.
+  // Run the job after the user confirms. Status-triggered flows persist the
+  // Evaluated status before opening this optional follow-up.
   const handleSubmit = useCallback(async () => {
     close();
     onConfirm?.();
@@ -98,14 +86,6 @@ export function EvaluateModal() {
       return;
     }
     if (num == null) return;
-    if (patchToEvaluated) {
-      try {
-        await updateApplicationStatusAction({ num, status: 'evaluated' });
-      } catch (err) {
-        // Non-fatal — proceed with the spawn anyway.
-        console.warn('[evaluate-modal] status→evaluated failed:', err);
-      }
-    }
     await run({
       num,
       ...(generatePdf ? { generate_pdf: true } : {}),
@@ -116,7 +96,6 @@ export function EvaluateModal() {
     onConfirm,
     nums,
     num,
-    patchToEvaluated,
     generatePdf,
     generateCoverLetter,
     run,
@@ -148,7 +127,9 @@ export function EvaluateModal() {
             <li>
               <strong>Result:</strong>{' '}
               {[
-                'Status → Evaluated, full report',
+                statusFollowup
+                  ? 'Full evaluation report (status already Evaluated)'
+                  : 'Status → Evaluated, full report',
                 ...(generatePdf ? ['tailored CV PDF'] : []),
                 ...(generateCoverLetter ? ['cover letter PDF'] : []),
               ].join(' + ')}
@@ -179,20 +160,8 @@ export function EvaluateModal() {
         </div>
         <footer className="evaluate-modal__foot">
           <Button variant="secondary" className="evaluate-modal__cancel" onClick={close}>
-            {statusTriggered ? 'Not now' : 'Cancel'}
+            {statusFollowup ? 'Not now' : 'Cancel'}
           </Button>
-          {onStatusOnly ? (
-            <Button
-              variant="secondary"
-              className="evaluate-modal__status-only"
-              onClick={() => {
-                close();
-                onStatusOnly();
-              }}
-            >
-              Set status only
-            </Button>
-          ) : null}
           <Button variant="primary" className="evaluate-modal__submit" onClick={handleSubmit}>
             Run evaluation
           </Button>

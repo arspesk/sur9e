@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle } from 'lucide-react';
+import { Check, LoaderCircle, X } from 'lucide-react';
 
 /** Collapsed tool chip: spinner while running → ✓ / ✕ terminal glyphs;
  * consecutive same-name calls arrive pre-grouped (count) from foldEvents. */
@@ -22,12 +22,12 @@ export function ToolCard({
       )}
       {status === 'done' && (
         <span className="chat-tool__glyph chat-tool__glyph--ok" aria-hidden="true">
-          ✓
+          <Check />
         </span>
       )}
       {status === 'error' && (
         <span className="chat-tool__glyph chat-tool__glyph--err" aria-hidden="true">
-          ✕
+          <X />
         </span>
       )}
       <span className="chat-tool__name">

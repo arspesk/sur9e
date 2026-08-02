@@ -34,3 +34,39 @@ test('/settings loads with all section landmarks', async ({ page }) => {
   await expect(page.locator('#checkUpdates')).toBeVisible();
   await expect(page.locator('#rollback')).toBeVisible();
 });
+
+test('settings numeric controls remain consistent at all supported widths', async ({ page }) => {
+  const viewports = [
+    { name: 'desktop', width: 1280, height: 800 },
+    { name: 'tablet', width: 768, height: 1024 },
+    { name: 'mobile', width: 375, height: 667 },
+  ];
+  await page.addInitScript(() => localStorage.setItem('sur9e.hifi.t', 'dark'));
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.goto('/settings#jobspy');
+
+    const numericInputs = page.locator('.settings-content .form-input[type="number"]');
+    await expect(numericInputs).toHaveCount(6);
+    await expect(page.locator('#settings-jobspy-hours')).toBeVisible();
+    await expect(page.locator('#settings-jobspy-results')).toBeVisible();
+    const jobspySection = page.locator('section#jobspy');
+    await expect
+      .poll(() => jobspySection.evaluate(element => getComputedStyle(element).opacity))
+      .toBe('1');
+    await jobspySection.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect
+      .poll(async () => {
+        const box = await jobspySection.boundingBox();
+        return box != null && box.y >= 55 && box.y < viewport.height;
+      })
+      .toBe(true);
+
+    if (process.env.VISUAL_QA_DIR) {
+      await page.screenshot({
+        path: `${process.env.VISUAL_QA_DIR}/settings-number-steppers-${viewport.name}.png`,
+      });
+    }
+  }
+});

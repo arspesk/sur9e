@@ -1,5 +1,6 @@
 'use client';
 
+import { Maximize2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chat-store';
 import { ChatJobsSlot } from './chat-jobs-slot';
@@ -29,25 +30,7 @@ export function ChatHeader() {
             router.push('/chat');
           }}
         >
-          {/* Lucide maximize-2 glyph (inline SVG — no icon dep, matches close). */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="lucide lucide-maximize-2"
-            aria-hidden="true"
-          >
-            <path d="M15 3h6v6" />
-            <path d="m21 3-7 7" />
-            <path d="m3 21 7-7" />
-            <path d="M9 21H3v-6" />
-          </svg>
+          <Maximize2 aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -55,23 +38,7 @@ export function ChatHeader() {
           aria-label="Close chat"
           onClick={closeChat}
         >
-          {/* Lucide X glyph (inline SVG — no icon dep). */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="lucide lucide-x"
-            aria-hidden="true"
-          >
-            <path d="M18 6 6 18" />
-            <path d="m6 6 12 12" />
-          </svg>
+          <X aria-hidden="true" />
         </button>
       </div>
       {/* Jobs strip lands here (Plan 4) — renders nothing until then. */}

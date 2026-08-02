@@ -3,6 +3,7 @@
 // Pure widget: takes string[] values + add/remove callbacks. Sections
 // wire it through rhf via Controller (or the ControlledChipList wrapper).
 
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { HelperText, Input } from '@/components/primitives';
 
@@ -39,7 +40,7 @@ export function ChipList({
               aria-label={`Remove ${v}`}
               onClick={() => onRemove(i)}
             >
-              ×
+              <X aria-hidden="true" />
             </button>
           </span>
         ))}

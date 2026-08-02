@@ -1,6 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { Ban, Check, Minus, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
@@ -17,16 +18,16 @@ export type ConfirmOutcome = 'pending' | 'approved' | 'cancelled' | 'expired';
 
 // Approval reads as an actual outcome, per action kind: a start-job says the
 // job kicked off (and where to watch it), a set-status/edit-report confirm
-// its write. The generic '✓ Confirmed' covers confirm events persisted before
+// its write. The generic "Confirmed" covers confirm events persisted before
 // the kind field existed (foldEvents leaves `action` undefined there).
 const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
-  'start-job': '✓ Started — running in the jobs strip',
-  'start-workflow': '✓ Workflow started — child jobs are running',
-  'cancel-job': '✓ Job cancelled',
-  'cancel-workflow': '✓ Workflow cancelled',
-  'create-offer-from-text': '✓ Offer ready',
-  'set-status': '✓ Status updated',
-  'edit-report': '✓ Report updated',
+  'start-job': 'Started — running in the jobs strip',
+  'start-workflow': 'Workflow started — child jobs are running',
+  'cancel-job': 'Job cancelled',
+  'cancel-workflow': 'Workflow cancelled',
+  'create-offer-from-text': 'Offer ready',
+  'set-status': 'Status updated',
+  'edit-report': 'Report updated',
 };
 
 function resolvedLabel(
@@ -34,16 +35,29 @@ function resolvedLabel(
   action: ConfirmActionKind | undefined,
   execution: ConfirmExecution | undefined,
 ): string {
-  if (outcome === 'cancelled') return '✕ Cancelled';
-  if (outcome === 'expired') return '⃠ Expired';
-  if (execution === 'failed') return '✕ Action failed';
+  if (outcome === 'cancelled') return 'Cancelled';
+  if (outcome === 'expired') return 'Expired';
+  if (execution === 'failed') return 'Action failed';
   if (execution === 'unchanged') {
     if (action === 'cancel-job') return 'Job already finished';
     if (action === 'cancel-workflow') return 'Workflow already finished';
     if (action === 'start-job') return 'Job not started';
     return 'No changes made';
   }
-  return (action && APPROVED_LABEL_BY_ACTION[action]) || '✓ Confirmed';
+  return (action && APPROVED_LABEL_BY_ACTION[action]) || 'Confirmed';
+}
+
+function ResolvedIcon({
+  outcome,
+  execution,
+}: {
+  outcome: Exclude<ConfirmOutcome, 'pending'>;
+  execution: ConfirmExecution | undefined;
+}) {
+  if (outcome === 'cancelled' || execution === 'failed') return <X aria-hidden="true" />;
+  if (outcome === 'expired') return <Ban aria-hidden="true" />;
+  if (execution === 'unchanged') return <Minus aria-hidden="true" />;
+  return <Check aria-hidden="true" />;
 }
 
 type ConfirmExecution = 'succeeded' | 'failed' | 'unchanged';
@@ -193,6 +207,7 @@ export function ConfirmCard({
       <div className="chat-confirm" data-outcome={effectiveOutcome}>
         <p className="chat-confirm__summary">{summary}</p>
         <p className="chat-confirm__resolved">
+          <ResolvedIcon outcome={effectiveOutcome} execution={effectiveExecution} />
           {resolvedLabel(effectiveOutcome, action, effectiveExecution)}
         </p>
         {effectiveMessage && <p className="chat-confirm__result">{effectiveMessage}</p>}

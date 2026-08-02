@@ -1,18 +1,11 @@
 'use client';
 
-import {
-  Archive,
-  ArchiveRestore,
-  ChevronDown,
-  EllipsisVertical,
-  Pencil,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/behavior/popover';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
+import { OverflowMenuButton } from '@/components/primitives';
 import {
   useArchiveSession,
   useChatSessions,
@@ -49,18 +42,15 @@ function SessionRowKebab({ label, items }: { label: string; items: KebabItem[] }
   const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button
+      <OverflowMenuButton
         ref={triggerRef}
-        type="button"
         className="chat-session-menu__kebab"
-        aria-label={`Actions for ${label}`}
+        label={`Actions for ${label}`}
         aria-haspopup="menu"
         aria-expanded={open}
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
-      >
-        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
-      </button>
+      />
       {open && (
         <KebabActionsMenu
           items={items}

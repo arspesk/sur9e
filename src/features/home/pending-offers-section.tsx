@@ -11,7 +11,7 @@
 // confirm modal, which PATCHes status→evaluated and spawns the evaluation
 // job; evaluated rows get the terminal picks, Mark applied / Discard.
 
-import { BadgeCheck, EllipsisVertical, Sparkles, Trash2 } from 'lucide-react';
+import { BadgeCheck, Sparkles, Trash2 } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ import { useRef, useState } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
 import { StatusPill } from '@/components/domain/status-pill';
+import { OverflowMenuButton } from '@/components/primitives';
 import type { PendingOffer } from '@/features/home/pending-offers-select';
 import { useUpdateApplicationStatus } from '@/hooks/use-applications';
 import { scoreLevel } from '@/lib/scoring';
@@ -35,18 +36,15 @@ function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button
+      <OverflowMenuButton
         ref={triggerRef}
-        type="button"
         className="home-row__kebab"
-        aria-label={`Actions for ${label}`}
+        label={`Actions for ${label}`}
         aria-haspopup="menu"
         aria-expanded={open}
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
-      >
-        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
-      </button>
+      />
       {open && (
         <KebabActionsMenu
           items={items}
@@ -77,15 +75,15 @@ export function PendingOffersSection({ offers }: { offers: PendingOffer[] }) {
   const updateStatus = useUpdateApplicationStatus();
 
   function evaluate(o: PendingOffer) {
-    openModal('evaluate', {
-      num: o.num,
-      patchToEvaluated: true,
-      // EvaluateModal fires onConfirm *before* its own status PATCH, and
-      // the action only revalidates /offers, /pipeline and /report — Home
-      // isn't in that list, so refresh from here. The pill may lag by one
-      // frame; the next refresh settles it.
-      onConfirm: () => router.refresh(),
-    });
+    updateStatus.mutate(
+      { num: o.num, status: 'evaluated' },
+      {
+        onSuccess: () => {
+          router.refresh();
+          openModal('evaluate', { num: o.num, statusFollowup: true });
+        },
+      },
+    );
   }
 
   function setStatus(o: PendingOffer, status: 'applied' | 'discarded') {

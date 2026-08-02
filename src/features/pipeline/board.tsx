@@ -150,20 +150,22 @@ export function Board({
       const prevStatus = (row.status || '').toLowerCase();
       if (prevStatus === newStatus) return;
 
-      // Optimistic PATCH with revert-on-failure — shared by the plain-pick
-      // path and the evaluate modal's "Set status only" choice.
+      // Optimistic PATCH with revert-on-failure — shared by plain picks and
+      // the Evaluated transition that precedes its optional follow-up.
       const patchStatus = async (status: ColumnKey) => {
         setOptimisticStatus(m => new Map(m).set(num, status));
         try {
           const result = await updateApplicationStatusAction({ num, status });
-          openStatusFollowup(result.followup);
+          if (result.followup) openStatusFollowup(result.followup);
           // Refetch — drops our optimistic entry on next render. Invalidate
           // both 'applications' (table/board) and 'report' (open report
           // page) so neither surface keeps a stale status.
           await queryClient.invalidateQueries({ queryKey: ['applications'] });
           await queryClient.invalidateQueries({ queryKey: ['report'] });
+          return true;
         } catch (err) {
           push('danger', err instanceof Error ? err.message : 'Failed to update status');
+          return false;
         } finally {
           setOptimisticStatus(m => {
             const next = new Map(m);
@@ -175,26 +177,22 @@ export function Board({
 
       // Shared per-offer transition rules (same module drives the status
       // pill popovers in the table / drawer / report hero): any → evaluated
-      // opens the evaluate confirm modal, which offers "Run evaluation"
-      // (flip + spawn the eval job) and "Set status only" (plain flip, no
-      // job). Return early — the PATCH below would race the modal's own.
+      // persists first, then opens the optional evaluation follow-up.
       const intercept = interceptStatusPick(prevStatus, newStatus);
       if (intercept.kind === 'blocked') {
         push('info', `#${num} ${intercept.message}`);
         return;
       }
       if (intercept.kind === 'evaluate-modal') {
-        openModal('evaluate', {
-          num,
-          patchToEvaluated: true,
-          onStatusOnly: () => void patchStatus(newStatus),
-        });
+        if (await patchStatus(newStatus)) {
+          openModal('evaluate', { num, statusFollowup: true });
+        }
         return;
       }
 
       await patchStatus(newStatus);
     },
-    [effectiveRows, push, queryClient],
+    [effectiveRows, openModal, openStatusFollowup, push, queryClient],
   );
 
   // Card click delegates to parent (the page wires the drawer + dblclick → /report).

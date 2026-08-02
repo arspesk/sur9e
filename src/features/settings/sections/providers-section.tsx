@@ -45,6 +45,7 @@
 // CSS lives in chrome.css under the `.providers-section` namespace.
 
 import * as Popover from '@radix-ui/react-popover';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import {
@@ -328,7 +329,7 @@ export function ProvidersSection() {
                     className="providers-cli-row__mark"
                     aria-label={installed ? 'Installed' : 'Not installed'}
                   >
-                    {installed ? '✓' : '✗'}
+                    {installed ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
                   </span>
                   <span className="providers-cli-row__name">{p.displayName}</span>
                   <span className="providers-cli-row__detail">
@@ -785,26 +786,7 @@ function ModeOverrideRow({
               data-mode-fallback={modeId}
             >
               <span className="providers-fallback-trigger__value">{fallbackTriggerLabel}</span>
-              {/* Same 10×6 chevron as the Select trigger so the cell reads as
-                  a dropdown rather than a dead label. */}
-              <svg
-                aria-hidden="true"
-                className="providers-fallback-trigger__icon"
-                width="10"
-                height="6"
-                viewBox="0 0 10 6"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <title>Chevron down</title>
-                <path
-                  d="M1 1l4 4 4-4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <ChevronDown aria-hidden="true" className="providers-fallback-trigger__icon" />
             </button>
           </Popover.Trigger>
           <Popover.Portal>

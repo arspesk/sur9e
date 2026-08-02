@@ -1,9 +1,9 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, ChevronsRight, Ellipsis, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsRight, Maximize2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { IconButton } from '@/components/primitives';
+import { IconButton, OverflowMenuButton } from '@/components/primitives';
 import { ReportBodyEditor } from '@/features/report/components/report-body-editor';
 import { type ApplicationEntry, mapEntryToR } from '@/features/report/report-types';
 import { ReportAttachments } from '@/features/report/sections/report-attachments';
@@ -292,14 +292,14 @@ function DrawerNavRow({
       </div>
       {/* Right: ⋯ meatball. */}
       <div className="cd-nav-actions">
-        <IconButton
+        <OverflowMenuButton
           ref={kebabRef}
           size="sm"
+          orientation="horizontal"
           label="Drawer actions"
           title="More actions"
           aria-haspopup="menu"
           onClick={onKebab}
-          icon={<Ellipsis className="menu-dots-icon" aria-hidden="true" />}
         />
       </div>
     </div>
