@@ -67,6 +67,29 @@ async function stubReadOnlySystemEndpoints(page: Page) {
   });
 }
 
+test('checks for updates on Settings entry before the update section is viewed', async ({
+  page,
+}) => {
+  const checkRequests: string[] = [];
+  page.on('request', request => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/update/check') {
+      checkRequests.push(request.url());
+    }
+  });
+  await stubReadOnlySystemEndpoints(page);
+
+  await page.goto('/settings');
+  const section = page.locator('section#system');
+
+  await expect(section).not.toBeInViewport();
+  await expect.poll(() => checkRequests.length).toBe(1);
+  await expect(section.getByText('v0.4.0 available')).toBeAttached();
+
+  await section.scrollIntoViewIfNeeded();
+  await expect(section.getByText('v0.4.0 available')).toBeVisible();
+});
+
 test('runs the one-click update flow through restart downtime and restores the exact URL', async ({
   page,
 }) => {
@@ -105,7 +128,15 @@ test('runs the one-click update flow through restart downtime and restores the e
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(availableCheck),
+        body: JSON.stringify(
+          installedVersion === availableCheck.remote
+            ? {
+                status: 'up-to-date',
+                local: installedVersion,
+                remote: installedVersion,
+              }
+            : availableCheck,
+        ),
       });
     }
     if (pathname === '/api/update/apply' && request.method() === 'POST') {
@@ -147,13 +178,10 @@ test('runs the one-click update flow through restart downtime and restores the e
   await page.goto(SETTINGS_HREF);
   await page.waitForLoadState('networkidle');
   const section = page.locator('section#system');
-  await expect(section.getByText('Not checked yet')).toBeVisible();
-  await expect(section.getByRole('button', { name: 'Update now' })).toHaveCount(0);
-
-  await section.getByRole('button', { name: 'Check for updates' }).click();
   await expect(section.getByText('v0.4.0 available')).toBeVisible();
   await expect(section.getByText(availableCheck.changelog)).toBeVisible();
   await expect(section.getByRole('button', { name: 'Update now' })).toBeVisible();
+  expect(checkCalls).toBe(1);
 
   await section.getByRole('button', { name: 'Update now' }).click();
   const dialog = page.getByRole('dialog', {
@@ -200,7 +228,7 @@ test('runs the one-click update flow through restart downtime and restores the e
       timeout: 10_000,
     },
   );
-  expect(checkCalls).toBe(1);
+  expect(checkCalls).toBeGreaterThanOrEqual(2);
   expect(applyCalls).toBe(1);
   expect(rollbackCalls).toBe(0);
   expect(statusCalls).toBeGreaterThanOrEqual(6);
@@ -208,7 +236,7 @@ test('runs the one-click update flow through restart downtime and restores the e
 
   await page.reload();
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('section#system').getByText('Not checked yet')).toBeVisible();
+  await expect(page.locator('section#system').getByText('Up to date')).toBeVisible();
   await expect(page.locator('section#system').getByText('Update complete')).toHaveCount(0);
   await expect(page.locator('#aboutVersion')).toHaveText('v0.4.0');
 });
@@ -235,7 +263,7 @@ test('consumes an automatic rollback notice for one load', async ({ page }) => {
 
   await page.reload();
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('section#system').getByText('Not checked yet')).toBeVisible();
+  await expect(page.locator('section#system').getByText('v0.4.0 available')).toBeVisible();
   await expect(page.getByText(/automatically recovered v0\.3\.2/i)).toHaveCount(0);
 });
 
@@ -254,7 +282,7 @@ for (const viewport of [
 
     const section = page.locator('section#system');
     await section.scrollIntoViewIfNeeded();
-    const check = section.getByRole('button', { name: 'Check for updates' });
+    const check = section.getByRole('button', { name: 'Check again' });
     const edit = section.locator('button[aria-controls="system-update-source-fields"]');
     const rollback = section.getByRole('button', { name: 'Roll back' });
     await expect(check).toBeVisible();

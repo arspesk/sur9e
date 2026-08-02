@@ -4,7 +4,15 @@
 // per card is brand accent at 10% opacity, rotated -10deg, bleeding past the
 // card edge (styled by .agenda-card__wm in home-inline.css).
 
-import { Activity, ArrowRight, BadgeCheck, Clock, type LucideIcon, Mailbox } from 'lucide-react';
+import {
+  Activity,
+  ArrowDown,
+  ArrowRight,
+  BadgeCheck,
+  Clock,
+  type LucideIcon,
+  Mailbox,
+} from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/primitives';
 import { useChatJobsStore } from '@/features/chat/chat-jobs-store';
@@ -56,13 +64,21 @@ export function AgendaCards({
         icon={Clock}
         count={followupsDue}
         label={followupsDue === 1 ? 'follow-up due' : 'follow-ups due'}
-        cta={<a href="#followups">Review ↓</a>}
+        cta={
+          <a href="#followups">
+            Review <ArrowDown aria-hidden="true" />
+          </a>
+        }
       />
       <AgendaCard
         icon={Mailbox}
         count={waitingOnYou}
         label="waiting on you"
-        cta={<a href="#pending">Decide ↓</a>}
+        cta={
+          <a href="#pending">
+            Decide <ArrowDown aria-hidden="true" />
+          </a>
+        }
       />
       <AgendaCard
         icon={BadgeCheck}

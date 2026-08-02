@@ -178,7 +178,7 @@ describe('confirm resolution persists to the owning message', () => {
         links={confirm.links}
       />,
     );
-    expect(getByText('✓ Started — running in the jobs strip')).toBeTruthy();
+    expect(getByText('Started — running in the jobs strip')).toBeTruthy();
     expect(getByText('Evaluation started for offer #1001.')).toBeTruthy();
     expect(getByRole('link', { name: 'Offer #1001' })).toHaveAttribute('href', '/report/1001');
     expect(queryByRole('button')).toBeNull();
@@ -208,7 +208,7 @@ describe('confirm resolution persists to the owning message', () => {
         action={confirm.action}
       />,
     );
-    expect(getByText('✕ Cancelled')).toBeTruthy();
+    expect(getByText('Cancelled')).toBeTruthy();
     expect(queryByRole('button')).toBeNull();
   });
 

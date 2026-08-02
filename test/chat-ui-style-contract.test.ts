@@ -41,4 +41,12 @@ describe('chat UI style contract', () => {
       /\.chat-jobs__cancel:hover\s*\{[\s\S]*?background:\s*var\(--surface-danger-hover\)/,
     );
   });
+
+  it('hides the floating launcher while the offers filter panel is open', () => {
+    const chatCss = readFileSync(join(root, 'src/app/styles/chat.css'), 'utf8');
+
+    expect(chatCss).toMatch(
+      /body:has\(\.filter-panel\.open\) \.chat-bubble\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?pointer-events:\s*none/,
+    );
+  });
 });

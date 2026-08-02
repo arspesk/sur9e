@@ -10,13 +10,14 @@
 // each section.
 
 import { useMutation } from '@tanstack/react-query';
-import { BadgeCheck, EllipsisVertical, Send } from 'lucide-react';
+import { BadgeCheck, Send } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { CompanyAvatar } from '@/components/domain/company-avatar';
 import { KebabActionsMenu, type KebabItem } from '@/components/domain/kebab-actions-menu';
+import { OverflowMenuButton } from '@/components/primitives';
 import { useToastStore } from '@/components/toast/toast-store';
 import { isPhoneViewport } from '@/features/chat/use-mobile-chat-redirect';
 import type { FollowupEntry } from '@/lib/server/followups';
@@ -38,18 +39,15 @@ function RowKebab({ label, items }: { label: string; items: KebabItem[] }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button
+      <OverflowMenuButton
         ref={triggerRef}
-        type="button"
         className="home-row__kebab"
-        aria-label={`Actions for ${label}`}
+        label={`Actions for ${label}`}
         aria-haspopup="menu"
         aria-expanded={open}
         data-open={open || undefined}
         onClick={() => setOpen(o => !o)}
-      >
-        <EllipsisVertical className="menu-dots-icon" aria-hidden="true" />
-      </button>
+      />
       {open && (
         <KebabActionsMenu
           items={items}

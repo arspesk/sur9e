@@ -10,9 +10,8 @@
  * locked-row affordances move in with the job-runner wiring.
  */
 
-import { EllipsisVertical } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { IconButton } from '@/components/primitives';
+import { OverflowMenuButton } from '@/components/primitives';
 import { RowActionsMenu } from './row-actions-menu';
 import type { ApplicationRow } from './table-types';
 
@@ -31,7 +30,7 @@ export function TableRowActions({ row, lockedNums: _lockedNums }: TableRowAction
 
   return (
     <>
-      <IconButton
+      <OverflowMenuButton
         ref={kebabRef}
         label={`Row actions for ${row.company}`}
         title="Row actions"
@@ -42,7 +41,6 @@ export function TableRowActions({ row, lockedNums: _lockedNums }: TableRowAction
           e.stopPropagation();
           setMenuOpen(v => !v);
         }}
-        icon={<EllipsisVertical className="menu-dots-icon" aria-hidden="true" />}
       />
       <RowActionsMenu open={menuOpen} anchorRef={kebabRef} row={row} onClose={closeMenu} />
     </>

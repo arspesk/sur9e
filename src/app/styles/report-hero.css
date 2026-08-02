@@ -295,11 +295,11 @@ a.company-mark--link:focus-visible {
   color: var(--score-low);
 }
 .legit-pill svg {
-  width: 11px;
-  height: 11px;
+  width: var(--icon-size-micro);
+  height: var(--icon-size-micro);
   stroke: currentColor;
   fill: none;
-  stroke-width: 2;
+  stroke-width: var(--icon-stroke-default);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -562,8 +562,8 @@ a.company-mark--link:focus-visible {
     gap: 5px;
   }
   .legit-pill svg {
-    width: 11px;
-    height: 11px;
+    width: var(--icon-size-micro);
+    height: var(--icon-size-micro);
   }
   .archetype-tag {
     font-size: 10px;

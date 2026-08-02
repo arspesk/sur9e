@@ -34,9 +34,7 @@ import { type ScanConfirmJobType, ScanConfirmModal } from '@/components/modals/s
 import { useDismissOnScroll } from '@/hooks/use-floating-anchor';
 import { JOB_TYPES } from '@/lib/job-types';
 
-// Lucide icons for the global Add menu, keyed by job type. Overrides the plain
-// glyph in JOB_TYPES.menuIcon (kept there as a data-only fallback) so the menu
-// renders crisp vector icons:
+// Lucide icons for the global Add menu, keyed by job type:
 //   scan           → file-search-corner (scan + basic screening)
 //   batch-evaluate → folder-search      (scan + full evaluation)
 //   screen         → file-plus-corner   (add a single new offer)
@@ -197,7 +195,7 @@ export function ActionsMenu({ open, anchorRef, scope, onClose, onSelect }: Actio
                 }}
               >
                 {(() => {
-                  const icon = MENU_ICONS[j.type] ?? j.menuIcon;
+                  const icon = MENU_ICONS[j.type];
                   return icon ? (
                     <span className="actions-menu__icon" aria-hidden="true">
                       {icon}

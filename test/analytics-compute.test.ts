@@ -106,10 +106,10 @@ describe('analytics compute — formatters', () => {
     expect(fmtDelta(3, 0).text).toBe('+3 added');
     const up = fmtDelta(12, 10);
     expect(up.kind).toBe('up');
-    expect(up.text).toContain('▲');
+    expect(up.text).toBe('+2 (+20.0%)');
     const dn = fmtDelta(8, 10);
     expect(dn.kind).toBe('dn');
-    expect(dn.text).toContain('▼');
+    expect(dn.text).toBe('-2 (-20.0%)');
   });
 
   it('fmtMoneyDelta is empty when prev=0 or missing', () => {
@@ -117,15 +117,15 @@ describe('analytics compute — formatters', () => {
     expect(fmtMoneyDelta(10, null).text).toBe('');
     const up = fmtMoneyDelta(15, 10);
     expect(up.kind).toBe('up');
-    expect(up.text).toMatch(/▲/);
+    expect(up.text).toMatch(/^\+/);
   });
 
   it('fmtMoneyDelta keeps the currency formatting on both directions (locale-safe)', () => {
     // Regression: `fmtMoney(diff).slice(1)` stripped the currency symbol on
     // positive deltas (and chopped a digit on symbol-suffix locales). Both
     // directions must render the full fmtMoney of the absolute diff.
-    expect(fmtMoneyDelta(9, 6).text).toBe(`▲ +${fmtMoney(3)} (+50.0%)`);
-    expect(fmtMoneyDelta(3, 6).text).toBe(`▼ ${fmtMoney(3)} (-50.0%)`);
+    expect(fmtMoneyDelta(9, 6).text).toBe(`+${fmtMoney(3)} (+50.0%)`);
+    expect(fmtMoneyDelta(3, 6).text).toBe(`${fmtMoney(3)} (-50.0%)`);
   });
 
   it('modeLabel uses MODE_LABELS, falls back to title-case', () => {

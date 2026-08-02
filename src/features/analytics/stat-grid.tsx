@@ -8,6 +8,7 @@
 // and Applied) or the previous calendar month (Month spend). All-time
 // spend has no delta per spec.
 
+import { TrendingDown, TrendingUp } from 'lucide-react';
 import { Card } from '@/components/primitives';
 import type { DeltaResult } from '@/lib/analytics/compute';
 
@@ -25,6 +26,11 @@ function StatCard({ label, value, delta }: StatCardProps) {
       <div className="stat-val">{value}</div>
       {delta !== undefined && (
         <div className={deltaCls} title="vs the previous period of the same length">
+          {delta.kind === 'up' ? (
+            <TrendingUp aria-hidden="true" />
+          ) : delta.kind === 'dn' ? (
+            <TrendingDown aria-hidden="true" />
+          ) : null}
           {delta.text}
         </div>
       )}
