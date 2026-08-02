@@ -1348,6 +1348,15 @@
    mobile .chat-bubble rule above) is set on .chat-bubble / .chat-card
    above — these layer additional lifts on top of it. ── */
 
+/* The Offers filter drawer/sheet already owns the active `.open` state in
+   both table and kanban views. Hide the floating launcher while that modal
+   surface is open so it cannot overlap or compete with the filter controls. */
+body:has(.filter-panel.open) .chat-bubble {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Pages with a floating .action-bar (report etc.) need the chat lifted
    above it. Action-bar default bottom: 28px, height ~50px → top ~78px.
    Lift to 90px. Scoped >640px: the ≤640px card is full-screen and the
