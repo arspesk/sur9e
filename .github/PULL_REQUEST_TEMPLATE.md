@@ -2,6 +2,14 @@
 
 <!-- Describe the user-facing or technical change and why it is needed. -->
 
+## PR scope
+
+<!-- State the one primary outcome. Explain why any secondary changes must ship with it. -->
+
+- [ ] This PR has one independently reviewable and revertible outcome
+- [ ] Included refactoring is required for that outcome
+- [ ] Unrelated features, refactors, and fixes were moved to separate PRs
+
 ## Validation checklist
 
 - [ ] `npm run test:quick`
