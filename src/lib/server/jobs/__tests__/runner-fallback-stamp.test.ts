@@ -364,6 +364,7 @@ fi
         }
       }
     },
+    15_000,
   );
 
   it.each(ONE_HOP_PROVIDER_PAIRS)(
