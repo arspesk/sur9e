@@ -43,6 +43,7 @@ npm run lint         # Biome (TS/JS/CSS/JSON) + Prettier (MD/YAML)
 npm run typecheck    # tsc over src/**
 npm run test:unit    # vitest
 npm run test:e2e     # Playwright (needs the dev server running)
+npm run test:e2e:ci  # Playwright, self-contained (starts and stops the dev server)
 npm run test:quick   # the full pre-commit/CI gate
 npm run build        # production build
 ```
