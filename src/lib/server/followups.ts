@@ -21,7 +21,12 @@ export const CADENCE = {
   interview_thankyou: 1,
 } as const;
 
-const ACTIONABLE_STATUSES = new Set(['applied', 'responded', 'interview']);
+// Only earlier-funnel stages get follow-up nudges. Once an offer reaches
+// Interview (or later: offer/rejected/closed) the ball is no longer in the
+// user's court for a cadence push, so those rows are excluded from the tracker
+// counts and lists (#69). computeUrgency/computeNextFollowupDate keep their
+// `interview` branch for CLI parity + direct unit tests; this set is the gate.
+const ACTIONABLE_STATUSES = new Set(['applied', 'responded']);
 
 export type Urgency = 'urgent' | 'overdue' | 'waiting' | 'cold';
 
