@@ -9,6 +9,15 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.{test,spec}.{ts,tsx,mjs}'],
     exclude: ['node_modules', 'test/e2e/**'],
+    // The jsdom + ProseMirror editor suites are memory-heavy. Vitest's default
+    // one-fork-per-CPU parallelism OOM-kills a worker non-deterministically on
+    // CI's memory-constrained runners — a killed worker surfaces as a spurious
+    // "Quick quality gate" failure that truncates mid-test with no assertion.
+    // Cap the fork pool to keep peak memory bounded and CI deterministic.
+    pool: 'forks',
+    poolOptions: {
+      forks: { minForks: 1, maxForks: 2 },
+    },
   },
   resolve: {
     alias: {
