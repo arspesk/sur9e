@@ -97,6 +97,7 @@
     "js-yaml": "^4.1.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.17.0",
+    "mammoth": "^1.12.1",
     "marked": "^14.1.4",
     "mime-types": "^3.0.2",
     "next": "^16.2.6",

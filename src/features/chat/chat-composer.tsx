@@ -3,7 +3,13 @@
 import { ArrowUp, FileText, Plus, Square, TextQuote, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Textarea } from '@/components/primitives';
+import { useToastStore } from '@/components/toast/toast-store';
 import { useApplications } from '@/hooks/use-applications';
+import {
+  CHAT_UPLOAD_ACCEPT,
+  CHAT_UPLOAD_MAX_FILES,
+  validateChatFiles,
+} from '@/lib/chat/upload-allowlist';
 import { conversationKey, useChatStore } from '@/stores/chat-store';
 import {
   filterMentionItems,
@@ -17,11 +23,6 @@ import { filterSlashItems, SlashPopover, slashOptionId } from './slash-popover';
 const LINE_HEIGHT_PX = 20;
 const MAX_ROWS = 6;
 const VERTICAL_PADDING_PX = 16;
-
-// NOT imported from @/lib/server/chat/uploads — that module is server-only
-// and would crash the client bundle. Deliberate duplication; keep in sync
-// with CHAT_UPLOAD_EXTENSIONS.
-const UPLOAD_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md';
 
 /** Stable empty-array identity for the queued-attachments selector — a fresh
  * `[]` per render would defeat zustand's Object.is equality and re-render
@@ -54,6 +55,7 @@ export function ChatComposer({
   onStop: () => void;
 }) {
   const [value, setValue] = useState('');
+  const pushToast = useToastStore(s => s.push);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const activeConversationId = useChatStore(s => s.activeConversationId);
@@ -112,10 +114,11 @@ export function ChatComposer({
   ]);
 
   function addFiles(list: FileList | File[]) {
-    const incoming = Array.from(list).filter(f =>
-      UPLOAD_ACCEPT.split(',').some(ext => f.name.toLowerCase().endsWith(ext)),
-    );
-    if (incoming.length > 0) onFilesChange([...files, ...incoming].slice(0, 8));
+    const { accepted, message } = validateChatFiles(Array.from(list), files.length);
+    if (message) pushToast('warning', message);
+    if (accepted.length > 0) {
+      onFilesChange([...files, ...accepted].slice(0, CHAT_UPLOAD_MAX_FILES));
+    }
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -333,7 +336,7 @@ export function ChatComposer({
           type="file"
           hidden
           multiple
-          accept={UPLOAD_ACCEPT}
+          accept={CHAT_UPLOAD_ACCEPT}
           onChange={e => {
             if (e.target.files) addFiles(e.target.files);
             e.target.value = '';
