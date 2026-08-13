@@ -866,9 +866,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Keep it a perfect circle: equal sides that the flex parent can't stretch,
+     with a 50% radius. */
+  flex: none;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-pill);
+  aspect-ratio: 1;
+  border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-2);
