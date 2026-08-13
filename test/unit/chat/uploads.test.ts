@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -30,6 +30,19 @@ describe('saveChatUpload', () => {
   it('rejects a file over 10MB', async () => {
     const big = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
     await expect(saveChatUpload(root, CONV, big)).rejects.toThrow(/too large/i);
+  });
+
+  it('converts a .docx to readable text so the agent can consume it', async () => {
+    const bytes = readFileSync(join(process.cwd(), 'test/fixtures/sample.docx'));
+    const file = new File([bytes], 'Customer_Solutions_Engineer_JD.docx');
+    const att = await saveChatUpload(root, CONV, file);
+    // Chip keeps the original name; the stored artifact is text the CLI reads.
+    expect(att.name).toBe('Customer_Solutions_Engineer_JD.docx');
+    expect(att.mime).toBe('text/markdown');
+    expect(att.path).toMatch(new RegExp(`^${CONV}/[0-9a-f-]{36}\\.md$`));
+    const stored = readFileSync(join(root, 'data', 'chat', 'uploads', att.path), 'utf-8');
+    expect(stored).toContain('Customer Solutions Engineer JD');
+    expect(stored).not.toContain('<w:');
   });
 });
 

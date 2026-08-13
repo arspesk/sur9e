@@ -26,7 +26,7 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
   // when the bubble takes over on a phone.
   const redirectingToBubble = useMobileChatRedirect();
   const convo = useConversation({ consumeAutoSend: true });
-  const fileDrop = useChatFileDrop(convo.setDraftFiles);
+  const fileDrop = useChatFileDrop(convo.draftFiles, convo.setDraftFiles);
   // Snapshot at mount so the value can't change under an in-flight animation.
   // The store copy is cleared on a timer (below) rather than here: a first
   // message rewrites /chat → /chat/[id], which remounts this page, and the
