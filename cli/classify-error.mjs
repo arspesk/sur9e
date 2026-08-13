@@ -33,7 +33,7 @@ const SHARED = {
 const PROVIDER_SIGNATURES = {
   claude: {
     install: [],
-    quota: ['session limit', 'credit balance is too low'],
+    quota: ['session limit', 'credit balance is too low', 'monthly spend limit', 'usage-credits'],
     auth: ['oauth token revoked', 'not logged in', 'authentication_error'],
     model_not_found: [
       'issue with the selected model',
