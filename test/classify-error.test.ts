@@ -15,6 +15,12 @@ describe('classifyProviderError', () => {
     ['{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', 'overloaded'],
     ["You've hit your session limit. It resets at 3pm", 'quota'],
     ['Credit balance is too low', 'quota'],
+    [
+      // Org monthly spend limit (observed on claude-code 2.1.226) — must
+      // fall back to Codex, not classify as unknown. Exact provider wording.
+      "You've hit your org's monthly spend limit · run /usage-credits to ask your admin for a higher limit",
+      'quota',
+    ],
     ['OAuth token revoked. Please run /login', 'auth'],
     ['Not logged in. Please run `claude login`', 'auth'],
     ['claude: command not found', 'install'],
