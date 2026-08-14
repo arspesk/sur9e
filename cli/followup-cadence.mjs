@@ -53,7 +53,10 @@ const ALIASES = {
   'geo blocker': 'skip',
 };
 
-const ACTIONABLE_STATUSES = ['applied', 'responded', 'interview'];
+// Interview and later stages are past the point of a meaningful follow-up
+// push, so they're excluded from the cadence tracker (#69). Kept in sync with
+// src/lib/server/followups.ts (the web port).
+const ACTIONABLE_STATUSES = ['applied', 'responded'];
 
 function normalizeStatus(raw) {
   const clean = raw

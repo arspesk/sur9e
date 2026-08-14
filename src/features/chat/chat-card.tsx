@@ -23,7 +23,7 @@ export function ChatCard() {
   // /chat, so the two surfaces are never mounted at once and only one can win
   // the read-and-clear.
   const convo = useConversation({ consumeAutoSend: true });
-  const fileDrop = useChatFileDrop(convo.setDraftFiles);
+  const fileDrop = useChatFileDrop(convo.draftFiles, convo.setDraftFiles);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
