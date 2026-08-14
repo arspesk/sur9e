@@ -136,7 +136,8 @@ const PRE_APPLICATION_STATES = new Set(['screened', 'evaluated', 'discarded']);
  * Funnel-aware status resolution for duplicate-row updates: the addition's
  * status only wins while the existing row is still pre-application; once the
  * user has applied (or further), the row keeps its current status. Score,
- * report path, PDF, and date still update either way.
+ * report path, and PDF still update either way; the original Added date is
+ * always preserved (a re-eval must not overwrite the scan/add timestamp).
  */
 function resolveStatus(additionStatus, currentStatus) {
   if (!additionStatus) return currentStatus;
@@ -450,6 +451,9 @@ for (const file of tsvFiles) {
         const updatedLine = formatAppRow({
           ...addition,
           num: duplicate.num,
+          // Preserve the original Added date on re-eval/update — the addition
+          // TSV's `date` is always the eval run date and must not clobber it (#64).
+          date: duplicate.date,
           status: resolveStatus(addition.status, duplicate.status),
           // A re-eval TSV is written before any PDF exists, so addition.pdf is
           // always "❌" (truthy) — `addition.pdf || duplicate.pdf` would short-
@@ -496,6 +500,9 @@ for (const file of tsvFiles) {
         const updatedLine = formatAppRow({
           ...addition,
           num: duplicate.num,
+          // Preserve the original Added date on re-eval/update — the addition
+          // TSV's `date` is always the eval run date and must not clobber it (#64).
+          date: duplicate.date,
           status: resolveStatus(addition.status, duplicate.status),
           pdf: duplicate.pdf,
           notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,

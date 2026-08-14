@@ -10,28 +10,24 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
+import {
+  CHAT_UPLOAD_EXTENSIONS,
+  CHAT_UPLOAD_MAX_BYTES,
+  extensionOf,
+  isAllowedUploadFile,
+} from '../../chat/upload-allowlist';
 import type { ChatAttachment } from '../../schemas/chat';
+import { extractDocxText } from './docx';
 
-/** Extension allowlist → served/declared MIME. Mime derives from the
- * extension, never from the client-supplied File.type. */
-export const CHAT_UPLOAD_EXTENSIONS: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  gif: 'image/gif',
-  pdf: 'application/pdf',
-  txt: 'text/plain',
-  md: 'text/markdown',
-};
-
-export const CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-export const CHAT_UPLOAD_MAX_FILES = 8;
-
-/** input[accept] / drag-filter string for the client. */
-export const CHAT_UPLOAD_ACCEPT = Object.keys(CHAT_UPLOAD_EXTENSIONS)
-  .map(e => `.${e}`)
-  .join(',');
+// The extension allowlist / limits live in the client-safe shared module so
+// the composer's picker/paste/drop paths validate identically to this route
+// (issue #73). Re-export them to preserve this module's original public surface.
+export {
+  CHAT_UPLOAD_ACCEPT,
+  CHAT_UPLOAD_EXTENSIONS,
+  CHAT_UPLOAD_MAX_BYTES,
+  CHAT_UPLOAD_MAX_FILES,
+} from '../../chat/upload-allowlist';
 
 export function uploadsDir(root: string): string {
   return join(root, 'data', 'chat', 'uploads');
@@ -42,15 +38,35 @@ export async function saveChatUpload(
   conversationId: string,
   file: File,
 ): Promise<ChatAttachment> {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const mime = CHAT_UPLOAD_EXTENSIONS[ext];
-  if (!mime) throw new Error(`file type not allowed: ${file.name}`);
+  if (!isAllowedUploadFile(file.name)) throw new Error(`file type not allowed: ${file.name}`);
   if (file.size > CHAT_UPLOAD_MAX_BYTES) throw new Error(`file too large (max 10MB): ${file.name}`);
+  const ext = extensionOf(file.name);
   const dir = join(uploadsDir(root), conversationId);
   mkdirSync(dir, { recursive: true });
+
+  // Word docs can't be read by the provider's file tool, so convert to text at
+  // rest and store as .md; the attachment chip keeps the original .docx name.
+  if (ext === 'docx') {
+    const text = await extractDocxText(Buffer.from(await file.arrayBuffer()));
+    const stored = `${randomUUID()}.md`;
+    const body = `${text}\n`;
+    writeFileSync(join(dir, stored), body);
+    return {
+      path: `${conversationId}/${stored}`,
+      name: file.name,
+      mime: 'text/markdown',
+      size: Buffer.byteLength(body),
+    };
+  }
+
   const stored = `${randomUUID()}.${ext}`;
   writeFileSync(join(dir, stored), Buffer.from(await file.arrayBuffer()));
-  return { path: `${conversationId}/${stored}`, name: file.name, mime, size: file.size };
+  return {
+    path: `${conversationId}/${stored}`,
+    name: file.name,
+    mime: CHAT_UPLOAD_EXTENSIONS[ext],
+    size: file.size,
+  };
 }
 
 // <conversation uuid>/<stored uuid>.<allowlisted ext> — nothing else resolves.
