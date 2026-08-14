@@ -79,18 +79,26 @@ export const SetStatusActionRequest = z.object({
 });
 export type SetStatusActionRequest = z.infer<typeof SetStatusActionRequest>;
 
-// Surgical find/replace edit of a generated report's body. camelCase over the
-// wire (oldText/newText); the sur9e-app MCP tool maps old_text→oldText. newText
-// may be '' (a pure deletion); oldText must be non-empty so the match is
-// meaningful.
-export const EditReportActionRequest = z.object({
-  num: z.number().int().positive(),
-  oldText: z.string().min(1),
-  newText: z.string(),
-  summary: z.string().optional(),
-  terminalApproved: z.boolean().optional(),
-});
-export type EditReportActionRequest = z.infer<typeof EditReportActionRequest>;
+// Combined confirm-gated offer edit: structured metadata fields and/or
+// sequential body find/replace edits, all behind ONE confirmation card.
+// camelCase over the wire; the sur9e-app MCP tool maps body_edits/old_text/
+// new_text. Field-level validation (allowlist, per-field rules) lives in
+// src/lib/server/offer-update.ts — this schema only shapes the envelope.
+export const OfferBodyEditInput = z
+  .object({ oldText: z.string().min(1), newText: z.string() })
+  .strict();
+export const UpdateOfferActionRequest = z
+  .object({
+    num: z.number().int().positive(),
+    fields: z.record(z.string(), z.unknown()).optional(),
+    bodyEdits: z.array(OfferBodyEditInput).min(1).max(20).optional(),
+    summary: z.string().optional(),
+    terminalApproved: z.boolean().optional(),
+  })
+  .refine(i => (i.fields && Object.keys(i.fields).length > 0) || (i.bodyEdits?.length ?? 0) > 0, {
+    message: 'provide fields and/or bodyEdits',
+  });
+export type UpdateOfferActionRequest = z.infer<typeof UpdateOfferActionRequest>;
 
 // App-internal routes only (e.g. /table, /report/1023) — never external URLs.
 export const NavigateActionRequest = z.object({

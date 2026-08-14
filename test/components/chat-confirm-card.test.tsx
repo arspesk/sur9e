@@ -288,14 +288,14 @@ describe('ConfirmCard', () => {
     const { getByRole, findByText } = render(
       <ConfirmCard
         token="tok-failed"
-        summary="Edit report #12"
+        summary="Update offer #12"
         meta=""
         outcome="pending"
-        action="edit-report"
+        action="update-offer"
       />,
     );
 
-    fireEvent.click(getByRole('button', { name: 'Edit report #12' }));
+    fireEvent.click(getByRole('button', { name: 'Update offer #12' }));
 
     await findByText('Action failed');
     expect(useToastStore.getState().toasts).toEqual([
@@ -352,7 +352,7 @@ describe('ConfirmCard', () => {
     expect(useChatJobsStore.getState().order).toHaveLength(0);
   });
 
-  it('varies the approved label by action kind (set-status / edit-report)', () => {
+  it('varies the approved label by action kind (set-status / update-offer)', () => {
     const status = render(
       <ConfirmCard
         token="s"
@@ -364,16 +364,16 @@ describe('ConfirmCard', () => {
     );
     expect(status.getByText('Status updated')).toBeTruthy();
 
-    const report = render(
+    const offer = render(
       <ConfirmCard
         token="r"
-        summary="Edit report #12"
+        summary="Update offer #12"
         meta=""
         outcome="approved"
-        action="edit-report"
+        action="update-offer"
       />,
     );
-    expect(report.getByText('Report updated')).toBeTruthy();
+    expect(offer.getByText('Offer updated')).toBeTruthy();
   });
 
   it('an approved card with no action kind falls back to a generic Confirmed label', () => {

@@ -57,7 +57,7 @@ The canonical catalog below is authoritative. Inline modes run as chat conversat
 ${MODE_ROUTING}
 
 ## Editing & regenerating reports
-- Small change to an existing report → edit_report (a surgical find/replace on the report BODY; frontmatter is never touched, no AI spend). Read the report first with get_report and copy the exact text to change; old_text must match uniquely. A confirmation card gates the write.
+- Small change to an existing offer → update_offer (structured metadata fields like url/company/role/location and/or a surgical find/replace on the report body, combined in one write, no AI spend). Protected fields (status, score, date, and other pipeline-derived fields) are rejected — use set_status or re-run the mode instead. Read the report first with get_report and copy the exact text for any body edit; old_text must match uniquely. A confirmation card gates the write.
 - Full regeneration → re-run the underlying mode as a background job via start_job (evaluate or research with the offer number). When the user wants that re-run steered ("redo this with X in mind"), pass their steer as params.guidance on start_job — it is honored as extra instructions for that run.
 
 ## Style

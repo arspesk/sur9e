@@ -14,6 +14,9 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadApplications } from '@/lib/server/applications';
+import { validateOfferUpdate } from '@/lib/server/offer-update';
+import { parseFrontmatter } from '@/lib/server/reports';
 
 const emitTurnEventMock = vi.fn();
 const getTurnMock = vi.fn();
@@ -807,5 +810,131 @@ describe('chat confirms store', () => {
     const d = confirms.describeSetStatus(1001, 'applied');
     expect(d.summary).toBe('Set offer #1001 status to "applied"');
     expect(d.meta).toBe('tracker write · no AI spend');
+  });
+});
+
+describe('update-offer confirms', () => {
+  // Same fixture shape as src/lib/server/__tests__/offer-update.test.ts —
+  // report #42/Acme with an empty url and a "Worth applying." verdict line,
+  // plus a reportless #43 row. This describe block owns its own root/module
+  // pair (Pattern B, mirroring the outer describe above) so it never shares
+  // mutable fixture state with the tracker-status tests.
+  const TRACKER = `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes | Posted |
+|---|------|---------|------|-------|--------|-----|--------|-------|--------|
+| 42 | 2026-08-01 | Acme | Platform Engineer | 3.8/5 | Evaluated | ❌ | [42](artifacts/reports/042-acme-2026-08-01.md) | - |  |
+| 43 | 2026-08-02 | NoReport Inc | SRE | N/A | Screened | ❌ | - | - |  |
+`;
+
+  const REPORT = `---
+num: 42
+company: Acme
+role: Platform Engineer
+date: '2026-08-01'
+status: Evaluated
+state: evaluated
+score: 3.8
+archetype: Platform
+tldr: Solid platform role.
+---
+
+## Summary
+
+Acme builds infrastructure. The role is hands-on. Based on the comp and the growth trajectory, this is attractive.
+
+## Verdict
+
+Worth applying.
+`;
+
+  let root: string;
+  let confirms: ConfirmsModule;
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'chat-confirms-update-offer-'));
+    mkdirSync(join(root, 'data'), { recursive: true });
+    mkdirSync(join(root, 'artifacts/reports'), { recursive: true });
+    writeFileSync(join(root, 'data/applications.md'), TRACKER);
+    writeFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), REPORT);
+    vi.resetModules();
+    confirms = await import('@/lib/server/chat/confirms');
+    emitTurnEventMock.mockReset();
+    getTurnMock.mockReset();
+    spawnJobMock.mockReset();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('approve applies field + body edits and both readers see them', async () => {
+    const validated = validateOfferUpdate(root, 42, { url: 'https://acme.dev/jobs/1' }, [
+      { oldText: 'Worth applying.', newText: 'Apply this week.' },
+    ]);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const { summary, meta } = confirms.describeUpdateOffer(validated.changeSet);
+    expect(summary).toBe('Update offer #42 — Acme');
+    expect(meta).toContain('url:');
+    expect(meta).toContain('no AI spend');
+
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-test',
+      kind: 'update-offer',
+      payload: {
+        num: 42,
+        fields: { url: 'https://acme.dev/jobs/1' },
+        bodyEdits: [{ oldText: 'Worth applying.', newText: 'Apply this week.' }],
+      },
+      summary,
+      meta,
+    });
+
+    const resolved = await confirms.resolveConfirm(root, token, true);
+    expect(resolved.outcome).toBe('approved');
+    expect(resolved.result?.ok).toBe(true);
+    if (resolved.result?.ok !== true) return;
+    expect('offerUpdate' in resolved.result && resolved.result.offerUpdate).toEqual({
+      num: 42,
+      changed: ['url'],
+      bodyEditCount: 1,
+    });
+
+    // Issue #74 acceptance: read back from BOTH surfaces.
+    const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
+    expect(parseFrontmatter(report).frontmatter.url).toBe('https://acme.dev/jobs/1');
+    expect(parseFrontmatter(report).body).toContain('Apply this week.');
+    expect(loadApplications(root).find(r => r.num === 42)).toBeTruthy();
+  });
+
+  it('cancel executes nothing', async () => {
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-test',
+      kind: 'update-offer',
+      payload: { num: 42, fields: { url: 'https://acme.dev/jobs/1' } },
+      summary: 's',
+      meta: 'm',
+    });
+    const resolved = await confirms.resolveConfirm(root, token, false);
+    expect(resolved.outcome).toBe('cancelled');
+    const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
+    expect(report).not.toContain('acme.dev');
+  });
+
+  it('stale body edit fails at approve time with ok:false (no clobber)', async () => {
+    const { token } = confirms.createConfirm(root, {
+      turnId: 'turn-test',
+      kind: 'update-offer',
+      payload: { num: 42, bodyEdits: [{ oldText: 'Worth applying.', newText: 'x' }] },
+      summary: 's',
+      meta: 'm',
+    });
+    // Simulate the file changing while the card sat open:
+    const p = join(root, 'artifacts/reports/042-acme-2026-08-01.md');
+    writeFileSync(p, readFileSync(p, 'utf-8').replace('Worth applying.', 'Gone now.'));
+    const resolved = await confirms.resolveConfirm(root, token, true);
+    expect(resolved.outcome).toBe('approved');
+    expect(resolved.result?.ok).toBe(false);
   });
 });

@@ -16,7 +16,7 @@ export type ConfirmActionKind =
   | 'cancel-workflow'
   | 'create-offer-from-text'
   | 'set-status'
-  | 'edit-report';
+  | 'update-offer';
 
 export type FoldedItem =
   | { kind: 'text'; markdown: string }

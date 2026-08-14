@@ -17,7 +17,7 @@ import type { ConfirmActionKind } from './fold-events';
 export type ConfirmOutcome = 'pending' | 'approved' | 'cancelled' | 'expired';
 
 // Approval reads as an actual outcome, per action kind: a start-job says the
-// job kicked off (and where to watch it), a set-status/edit-report confirm
+// job kicked off (and where to watch it), a set-status/update-offer confirm
 // its write. The generic "Confirmed" covers confirm events persisted before
 // the kind field existed (foldEvents leaves `action` undefined there).
 const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
@@ -27,7 +27,7 @@ const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
   'cancel-workflow': 'Workflow cancelled',
   'create-offer-from-text': 'Offer ready',
   'set-status': 'Status updated',
-  'edit-report': 'Report updated',
+  'update-offer': 'Offer updated',
 };
 
 function resolvedLabel(
