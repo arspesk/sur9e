@@ -164,6 +164,9 @@ function coreJobPolicyViolations(jobName, job) {
         {
           name: 'Run quick quality gate',
           run: 'npm run test:quick',
+          // Explicit heap headroom: the jsdom + ProseMirror suites can OOM-kill
+          // a vitest fork on the runner's default heap (see vitest.config.ts).
+          env: { NODE_OPTIONS: '--max-old-space-size=6144' },
         },
       ],
     },
