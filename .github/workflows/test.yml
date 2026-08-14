@@ -31,6 +31,13 @@ jobs:
 
       - name: Run quick quality gate
         run: npm run test:quick
+        env:
+          # The jsdom + ProseMirror vitest suites intermittently OOM-kill a
+          # fork on the default heap even with the fork pool capped at 2
+          # (vitest.config.ts) — the killed worker surfaces as a gate failure
+          # whose log truncates mid-test with no assertion. Give each fork
+          # explicit headroom (runner has 16 GB; 2 forks × 6 GB fits).
+          NODE_OPTIONS: --max-old-space-size=6144
 
   build:
     name: Production build
