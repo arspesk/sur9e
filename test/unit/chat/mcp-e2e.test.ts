@@ -61,7 +61,7 @@ describe('mcp-app-server — full session', () => {
     const names = list.result.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual(
       [
-        'edit_report',
+        'update_offer',
         'cancel_job',
         'cancel_workflow',
         'create_offer_from_text',

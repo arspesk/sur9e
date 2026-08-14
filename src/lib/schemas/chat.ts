@@ -112,7 +112,7 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
     meta: z.string(),
     // Which gated action this card confirms — lets the resolved card render an
     // action-specific done message (start-job → "running in the jobs strip",
-    // set-status → "Status updated", edit-report → "Report updated"). Optional
+    // set-status → "Status updated", update-offer → "Offer updated"). Optional
     // so confirm events persisted before this field existed still parse; the
     // card falls back to a generic "Confirmed" label when it's absent.
     kind: z
@@ -123,6 +123,14 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
         'cancel-workflow',
         'create-offer-from-text',
         'set-status',
+        'update-offer',
+        // Legacy, read-only: v0.4.x emitted 'edit-report' for this same gated
+        // write (issue #74 renamed it to 'update-offer' pre-0.5). Updates
+        // never touch data/, so existing users' data/chat.db still holds
+        // persisted confirm/confirm-resolved events with this literal — kept
+        // here so they still parse instead of vanishing from the transcript
+        // on reload. Never emitted anew; createConfirm only ever sets
+        // 'update-offer'.
         'edit-report',
       ])
       .optional(),

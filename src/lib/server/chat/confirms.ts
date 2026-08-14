@@ -12,7 +12,6 @@
 
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { jobEstimateLabel } from '../../job-types';
 import type { ApplicationRow } from '../../schemas/applications';
 import { ApplicationStatus } from '../../schemas/applications';
@@ -21,8 +20,8 @@ import type { JobType } from '../../schemas/jobs';
 import type { WorkflowRecord } from '../../schemas/workflows';
 import { type JobConflictPayload, type JobRecord, type JobSetupRequiredPayload } from '../jobs';
 import { type CancelJobResult, cancelJob } from '../jobs/lifecycle';
+import { applyOfferUpdate, type OfferBodyEdit, type OfferUpdateChangeSet } from '../offer-update';
 import { resolveModeRuntime } from '../providers/registry';
-import { applyReportBodyEdit, parseFrontmatter, saveReport } from '../reports';
 import { updateStatusWithFollowup } from '../status-transition-followup';
 import { createOrReuseTextOffer, type TextOfferResult } from '../text-offers';
 import { cancelWorkflow, createWorkflow, type WorkflowPlan, workflowChildJobs } from '../workflows';
@@ -39,7 +38,7 @@ export type ConfirmKind =
   | 'cancel-workflow'
   | 'create-offer-from-text'
   | 'set-status'
-  | 'edit-report';
+  | 'update-offer';
 
 export interface StartJobPayload {
   kind: JobType;
@@ -75,13 +74,10 @@ export interface CreateOfferFromTextPayload {
   reservedNum?: number;
 }
 
-export interface EditReportPayload {
+export interface UpdateOfferPayload {
   num: number;
-  /** Resolved on-disk report path — the route resolves it before parking so
-   * the resolver never re-derives it (and can't drift if the file is renamed). */
-  filePath: string;
-  oldText: string;
-  newText: string;
+  fields?: Record<string, unknown>;
+  bodyEdits?: OfferBodyEdit[];
 }
 
 type ConfirmPayload =
@@ -91,7 +87,7 @@ type ConfirmPayload =
   | CancelWorkflowPayload
   | CreateOfferFromTextPayload
   | SetStatusPayload
-  | EditReportPayload;
+  | UpdateOfferPayload;
 
 interface ConfirmRecord {
   token: string;
@@ -172,7 +168,7 @@ type ConfirmExecutionPayload =
   | { workflow: WorkflowRecord; jobs: JobRecord[] }
   | { workflow: WorkflowRecord; cancelledWorkflow: boolean }
   | { updated: ApplicationRow | undefined }
-  | { report: { num: number } }
+  | { offerUpdate: { num: number; changed: string[]; bodyEditCount: number } }
   | { cancellation: CancelJobResult }
   | {
       textOffer: TextOfferResult;
@@ -352,20 +348,25 @@ export async function resolveConfirm(
           ...(workflow ? { workflow, jobs } : {}),
           ...describeTextOfferResult(textOffer, p.startKind, job, workflow),
         };
-      } else if (rec.kind === 'edit-report') {
-        const p = rec.payload as EditReportPayload;
-        // RE-READ at resolve time: the card may have sat open while the user
-        // (or another editor save) changed the file. applyReportBodyEdit
-        // re-validates the unique match against the CURRENT bytes, so a
-        // vanished old_text throws here → { ok:false, error } instead of a
-        // silent clobber. Frontmatter is preserved (re-parsed from the edited
-        // markdown, which applyReportBodyEdit never touches).
-        const current = readFileSync(p.filePath, 'utf-8');
-        const edited = applyReportBodyEdit(current, p.oldText, p.newText);
-        if ('error' in edited) throw new Error(edited.error);
-        const { frontmatter, body } = parseFrontmatter(edited.markdown);
-        saveReport({ filePath: p.filePath, frontmatter, body });
-        result = { ok: true, report: { num: p.num } };
+      } else if (rec.kind === 'update-offer') {
+        const p = rec.payload as UpdateOfferPayload;
+        // applyOfferUpdate RE-VALIDATES against fresh reads — a stale oldText or
+        // vanished row throws here → { ok:false, error } instead of a clobber.
+        const offerUpdate = applyOfferUpdate(root, p.num, p.fields, p.bodyEdits);
+        const parts = [
+          ...offerUpdate.changed,
+          ...(offerUpdate.bodyEditCount > 0
+            ? [
+                `${offerUpdate.bodyEditCount} body edit${offerUpdate.bodyEditCount === 1 ? '' : 's'}`,
+              ]
+            : []),
+        ];
+        result = {
+          ok: true,
+          offerUpdate,
+          message: `Offer #${p.num} updated: ${parts.join(', ')}.`,
+          links: offerLink(p.num),
+        };
       } else {
         const p = rec.payload as SetStatusPayload;
         const status = ApplicationStatus.parse(p.status);
@@ -677,18 +678,25 @@ function editPreview(text: string): string {
 }
 
 /**
- * Confirm-card copy for a surgical report body edit (a local file write — no
- * AI spend). Summary is the user's optional description, else `Edit report
- * #<num>`; meta previews the find/replace so the card shows what changes.
+ * Confirm-card copy for a combined offer update (local file writes — no AI
+ * spend). One meta segment per change so the card shows exactly what will be
+ * written: `field: "old" → "new"` for metadata, clipped find/replace previews
+ * for body edits.
  */
-export function describeEditReport(
-  num: number,
-  oldText: string,
-  newText: string,
+export function describeUpdateOffer(
+  changeSet: OfferUpdateChangeSet,
   summary?: string,
 ): { summary: string; meta: string } {
+  const segments = [
+    ...changeSet.fieldChanges.map(
+      c => `${c.field}: "${editPreview(c.from)}" → "${editPreview(c.to)}"`,
+    ),
+    ...(changeSet.bodyEditCount > 0
+      ? [`${changeSet.bodyEditCount} body edit${changeSet.bodyEditCount === 1 ? '' : 's'}`]
+      : []),
+  ];
   return {
-    summary: summary?.trim() || `Edit report #${num}`,
-    meta: `report write · "${editPreview(oldText)}" → "${editPreview(newText)}" · no AI spend`,
+    summary: summary?.trim() || `Update offer #${changeSet.num} — ${changeSet.company}`,
+    meta: `${segments.join(' · ')} · no AI spend`,
   };
 }

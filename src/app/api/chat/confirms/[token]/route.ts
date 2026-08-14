@@ -20,16 +20,17 @@ export async function POST(request: Request, { params }: Params) {
     return jsonError('body must be { approve: boolean }', 400);
   }
   const resolved = await resolveConfirm(ROOT, token, parsed.data.approve);
-  // An approved report edit wrote a new body to disk — revalidate the report
-  // page (whole dynamic segment) and the offers view that renders its summary,
-  // mirroring the editor save route (api/reports/[filename]/body).
+  // An approved offer update may have touched the report (url/body/etc.), the
+  // tracker row (company/role/posted), and every surface projecting them.
   if (
     resolved.outcome === 'approved' &&
     resolved.result?.ok === true &&
-    'report' in resolved.result
+    'offerUpdate' in resolved.result
   ) {
-    revalidatePath('/report/[filename]', 'page');
+    revalidatePath('/');
     revalidatePath('/offers');
+    revalidatePath('/pipeline');
+    revalidatePath('/report/[filename]', 'page');
   }
   if (
     resolved.outcome === 'approved' &&

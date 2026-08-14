@@ -17,7 +17,7 @@ import type { ConfirmActionKind } from './fold-events';
 export type ConfirmOutcome = 'pending' | 'approved' | 'cancelled' | 'expired';
 
 // Approval reads as an actual outcome, per action kind: a start-job says the
-// job kicked off (and where to watch it), a set-status/edit-report confirm
+// job kicked off (and where to watch it), a set-status/update-offer confirm
 // its write. The generic "Confirmed" covers confirm events persisted before
 // the kind field existed (foldEvents leaves `action` undefined there).
 const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
@@ -27,6 +27,9 @@ const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
   'cancel-workflow': 'Workflow cancelled',
   'create-offer-from-text': 'Offer ready',
   'set-status': 'Status updated',
+  'update-offer': 'Offer updated',
+  // Legacy, read-only: renders the original label for confirm cards persisted
+  // before issue #74 renamed this action from 'edit-report' to 'update-offer'.
   'edit-report': 'Report updated',
 };
 
@@ -85,6 +88,8 @@ interface ConfirmResponseResult {
   workflow?: { id?: string; status?: string };
   jobs?: ConfirmResponseJob[];
   textOffer?: { offer?: { num?: number } };
+  offerUpdate?: { num?: number; changed?: string[]; bodyEditCount?: number };
+  updated?: { num?: number } | null;
   cancellation?: { job?: ConfirmResponseJob };
   message?: string;
   links?: ChatActionLink[];
@@ -152,6 +157,19 @@ export function ConfirmCard({
       if (data?.result?.ok === true) {
         if (data.result.textOffer) {
           void queryClient.invalidateQueries({ queryKey: ['applications'] });
+        }
+        // update_offer (structured field/body edits) and set_status's
+        // 'updated' payload both mutate an already-tracked row in place.
+        // Invalidate every cache that holds it — table (['applications']),
+        // drawer (['application', num]), and any open full report
+        // (['report'] prefix) — so the edit is visible everywhere without a
+        // manual refetch. Mirrors useUpdateApplicationStatus /
+        // useUpdateReportField in src/hooks/use-applications.ts.
+        const editedNum = data.result.offerUpdate?.num ?? data.result.updated?.num;
+        if (editedNum != null) {
+          void queryClient.invalidateQueries({ queryKey: ['applications'] });
+          void queryClient.invalidateQueries({ queryKey: ['application', editedNum] });
+          void queryClient.invalidateQueries({ queryKey: ['report'] });
         }
         const started = data.result.job;
         if (started?.conflict && started.message) {

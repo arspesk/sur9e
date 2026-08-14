@@ -290,30 +290,58 @@ const ACTION_TOOLS = [
     },
   },
   {
-    name: 'edit_report',
+    name: 'update_offer',
     description:
-      'Apply ONE surgical find/replace edit to an already-generated report body (never the frontmatter). ' +
-      'FIRST read the report with get_report and copy the exact text to change — old_text must match the ' +
-      'report body EXACTLY and UNIQUELY (0 matches or >1 matches both fail; add surrounding context to ' +
-      'disambiguate). To fully REGENERATE a report instead, re-run its mode via start_job (evaluate/research) ' +
-      'with { num }. ALWAYS requires user approval: a confirmation card gates the write — after it shows, do ' +
-      'NOT call this tool again; tell the user to approve or cancel it.',
+      'Update a tracked offer in ONE confirm-gated action: structured metadata fields and/or multiple ' +
+      'surgical body edits, applied atomically. `fields` accepts ONLY: url, company, role, archetype, ' +
+      'seniority (Junior/Mid/Senior/Staff/Principal), work_mode (Remote/Hybrid/On-site), location, comp, ' +
+      'legitimacy, locations, remote, tldr, posted (YYYY-MM-DD). Status is owned by set_status; score/date ' +
+      'are pipeline-owned. For body edits, FIRST read the report with get_report and copy exact text — ' +
+      'each old_text must match the (progressively edited) body EXACTLY and UNIQUELY; edits apply in order. ' +
+      'Max 20 body edits per call. ' +
+      'To fully REGENERATE a report, re-run its mode via start_job instead. ALWAYS requires user approval: ' +
+      'one confirmation card lists every change — after it shows, do NOT call this tool again; tell the ' +
+      'user to approve or cancel it.',
     inputSchema: {
       type: 'object',
       properties: {
-        num: { type: 'integer', minimum: 1, description: 'Tracker number of the report to edit' },
-        old_text: {
-          type: 'string',
-          description: 'Exact, unique snippet of the current report body to replace',
+        num: { type: 'integer', minimum: 1, description: 'Tracker number of the offer to update' },
+        fields: {
+          type: 'object',
+          description: 'Metadata fields to set (see allowed keys in the tool description)',
+          minProperties: 1,
+          additionalProperties: true,
         },
-        new_text: { type: 'string', description: 'Replacement text (may be empty to delete)' },
+        body_edits: {
+          type: 'array',
+          description: 'Sequential find/replace edits to the report body',
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: 'object',
+            properties: {
+              old_text: {
+                type: 'string',
+                minLength: 1,
+                description: 'Exact, unique snippet of the current body',
+              },
+              new_text: {
+                type: 'string',
+                description: 'Replacement text (may be empty to delete)',
+              },
+            },
+            required: ['old_text', 'new_text'],
+            additionalProperties: false,
+          },
+        },
         summary: {
           type: 'string',
           description: 'Optional human description of the change, shown on the confirmation card',
         },
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },
-      required: ['num', 'old_text', 'new_text'],
+      required: ['num'],
+      anyOf: [{ required: ['fields'] }, { required: ['body_edits'] }],
       additionalProperties: false,
     },
   },
@@ -545,13 +573,15 @@ async function callTool(name, args) {
         status: args?.status,
         terminalApproved: args?.terminalApproved === true,
       });
-    case 'edit_report':
-      // Wire-shape is camelCase (oldText/newText); the tool takes snake_case
-      // to match the model-facing input schema, so map here.
-      return confirmGatedCall('/api/chat/actions/edit-report', {
+    case 'update_offer':
+      // fields keys are already snake_case (frontmatter keys) — pass verbatim.
+      // body_edits items map snake→camel to match the wire schema.
+      return confirmGatedCall('/api/chat/actions/update-offer', {
         num: args?.num,
-        oldText: args?.old_text,
-        newText: args?.new_text,
+        fields: args?.fields,
+        bodyEdits: Array.isArray(args?.body_edits)
+          ? args.body_edits.map(e => ({ oldText: e?.old_text, newText: e?.new_text }))
+          : undefined,
         summary: args?.summary,
         terminalApproved: args?.terminalApproved === true,
       });
