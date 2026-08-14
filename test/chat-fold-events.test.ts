@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { foldEvents } from '@/features/chat/fold-events';
-import type { ChatTurnEvent } from '@/lib/schemas/chat';
+import { ChatTurnEvent } from '@/lib/schemas/chat';
 
 // Plain `Omit<ChatTurnEvent, 'seq'>` doesn't distribute over the
 // discriminated union (Pick/Omit key sets collapse to the members common to
@@ -207,6 +207,43 @@ describe('foldEvents', () => {
         summary: 'Send outreach message',
         meta: 'claude·sonnet · ~$0.05',
         outcome: 'expired',
+      },
+    ]);
+  });
+
+  it('accepts a legacy edit-report confirm kind (pre-0.5 persisted events) and folds its resolved label', () => {
+    // v0.4.x emitted 'edit-report' for this write before issue #74 renamed it
+    // to 'update-offer'; updates never touch data/, so existing users' chat.db
+    // still holds these persisted events. ChatTurnEvent.parse (the same call
+    // store.ts/message-view.tsx use at the read boundary) must keep accepting
+    // the literal, or these old cards would fail to parse and silently vanish
+    // from the transcript on reload instead of rendering their resolved
+    // 'Report updated' label (src/features/chat/confirm-card.tsx).
+    const persisted = [
+      ChatTurnEvent.parse({
+        seq: 1,
+        type: 'confirm',
+        token: 'tok-legacy',
+        summary: 'Edit report #12',
+        meta: 'report write · no AI spend',
+        kind: 'edit-report',
+      }),
+      ChatTurnEvent.parse({
+        seq: 2,
+        type: 'confirm-resolved',
+        token: 'tok-legacy',
+        outcome: 'approved',
+      }),
+    ];
+    const items = foldEvents(persisted);
+    expect(items).toEqual([
+      {
+        kind: 'confirm',
+        token: 'tok-legacy',
+        summary: 'Edit report #12',
+        meta: 'report write · no AI spend',
+        outcome: 'approved',
+        action: 'edit-report',
       },
     ]);
   });

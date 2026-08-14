@@ -16,7 +16,12 @@ export type ConfirmActionKind =
   | 'cancel-workflow'
   | 'create-offer-from-text'
   | 'set-status'
-  | 'update-offer';
+  | 'update-offer'
+  // Legacy, read-only: v0.4.x persisted confirm events with this kind before
+  // issue #74 renamed the action to 'update-offer'. Never emitted anew — kept
+  // so old data/chat.db rows still fold to a rendered (resolved) card instead
+  // of failing ChatTurnEvent.safeParse and vanishing from the transcript.
+  | 'edit-report';
 
 export type FoldedItem =
   | { kind: 'text'; markdown: string }

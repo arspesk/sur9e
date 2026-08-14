@@ -28,6 +28,9 @@ const APPROVED_LABEL_BY_ACTION: Record<ConfirmActionKind, string> = {
   'create-offer-from-text': 'Offer ready',
   'set-status': 'Status updated',
   'update-offer': 'Offer updated',
+  // Legacy, read-only: renders the original label for confirm cards persisted
+  // before issue #74 renamed this action from 'edit-report' to 'update-offer'.
+  'edit-report': 'Report updated',
 };
 
 function resolvedLabel(

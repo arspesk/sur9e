@@ -29,6 +29,7 @@ const TRACKER = `# Applications Tracker
 | # | Date | Company | Role | Score | Status | PDF | Report | Notes | Posted |
 |---|------|---------|------|-------|--------|-----|--------|-------|--------|
 | 42 | 2026-08-01 | Acme | Platform Engineer | 3.8/5 | Evaluated | ❌ | [42](artifacts/reports/042-acme-2026-08-01.md) | - |  |
+| 99 | 2026-08-02 | NoReport Inc | SRE | N/A | Screened | ❌ | - | - |  |
 `;
 
 const REPORT = `---
@@ -81,19 +82,21 @@ describe('POST /api/chat/actions/update-offer', () => {
     const body = await res.json();
     expect(body.needsConfirm).toBe(true);
     expect(typeof body.token).toBe('string');
-    expect(body.summary).toContain('Update');
-    expect(body.meta).toBeDefined();
+    expect(body.summary).toBe('Update offer #42 — Acme');
+    expect(body.meta).toContain('url:');
     // The card is parked — nothing is written yet.
     const report = readFileSync(join(testRoot, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf8');
     expect(report).toBe(REPORT);
   });
 
   it('returns 400 when no report exists for the offer', async () => {
+    // #99 is tracked (so this exercises validateOfferUpdate's "no report on
+    // disk" branch specifically, not the earlier "not in the tracker" one).
     const res = await POST(
       req({ num: 99, fields: { url: 'https://example.com' } }, { 'x-sur9e-turn': 'turn-1' }),
     );
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain('99');
+    expect((await res.json()).error).toBe('no report on disk for offer #99');
   });
 
   it('returns 400 when a body edit oldText is not found', async () => {
