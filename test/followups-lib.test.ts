@@ -120,6 +120,25 @@ describe('loadFollowupState', () => {
     expect(state.entries[1].daysSinceApplication).toBe(2);
   });
 
+  it('excludes Interview-stage and later rows from follow-up counts and lists', () => {
+    // Once an offer reaches Interview (or Offer/Rejected/etc.) it's past the
+    // point where a follow-up push is meaningful — it must not appear in the
+    // "follow-up due" counts or the FOLLOW-UPS DUE list (#69).
+    const root = makeRoot(
+      [
+        `| 1 | ${isoDaysAgo(40)} | ZipRecruiter | Sales Engineer | 4.1/5 | Applied | ✅ | - | - |`,
+        `| 2 | ${isoDaysAgo(40)} | Customer.io | Technical Operations Manager | 4.0/5 | Interview | ✅ | - | - |`,
+        `| 3 | ${isoDaysAgo(40)} | Acme | SE | 3.9/5 | Offer | ✅ | - | - |`,
+      ],
+      undefined,
+      [transition(1, 'applied', 9), transition(2, 'interview', 3), transition(3, 'offer', 1)],
+    );
+    const state = loadFollowupState(root);
+    expect(state.actionable).toBe(1); // only the Applied row
+    expect(state.entries.map(e => e.company)).toEqual(['ZipRecruiter']);
+    expect(state.entries.some(e => e.status === 'interview')).toBe(false);
+  });
+
   it('leaves a row waiting when nothing recorded when it was applied', () => {
     const root = makeRoot([
       `| 1 | ${isoDaysAgo(40)} | ZipRecruiter | Sales Engineer | 4.1/5 | Applied | ✅ | - | - |`,

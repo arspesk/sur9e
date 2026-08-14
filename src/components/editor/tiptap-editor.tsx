@@ -38,6 +38,7 @@ import { useEffect, useImperativeHandle, useRef } from 'react';
 import { Markdown } from 'tiptap-markdown';
 import { makeBubbleColorButton } from './bubble-color-popover';
 import { type CalloutPopoverHandle, mountCalloutPopover } from './callout-popover';
+import { cleanClipboardHtml } from './clean-clipboard-html';
 import { CalloutNode } from './extensions/callout-node';
 import { CodeBlockWithChrome } from './extensions/code-block-view';
 import { DetailsBlock } from './extensions/details-block';
@@ -480,6 +481,30 @@ export function TipTapEditor({
       dom.removeEventListener('error', onError, true);
       dom.removeEventListener('load', onLoad, true);
       clearTimeout(t);
+    };
+  }, [editor]);
+
+  // Clean the text/html ProseMirror writes on copy/cut so pasting a report
+  // table (or any block) into Gmail/Docs/Notion yields semantic HTML instead
+  // of editor internals (<colgroup>, resize handles, data-node ids…) (#67).
+  // ProseMirror's own copy handler runs first (registered at view creation);
+  // this listener runs after and rewrites clipboardData in place.
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom as HTMLElement;
+    const onCopyOrCut = (e: Event) => {
+      const dt = (e as ClipboardEvent).clipboardData;
+      if (!dt) return;
+      const html = dt.getData('text/html');
+      if (!html) return;
+      const cleaned = cleanClipboardHtml(html);
+      if (cleaned && cleaned !== html) dt.setData('text/html', cleaned);
+    };
+    dom.addEventListener('copy', onCopyOrCut);
+    dom.addEventListener('cut', onCopyOrCut);
+    return () => {
+      dom.removeEventListener('copy', onCopyOrCut);
+      dom.removeEventListener('cut', onCopyOrCut);
     };
   }, [editor]);
 
