@@ -211,4 +211,35 @@ describe('applyOfferUpdate', () => {
       'set_status',
     );
   });
+
+  it('handles legacy 9-column tracker rows by inserting Posted cell (posted field)', () => {
+    // Rewrite tracker with a 9-column row (no Posted column in header, 11 split parts)
+    const legacyTracker = `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|-----|--------|-------|
+| 42 | 2026-08-01 | Acme | Platform Engineer | 3.8/5 | Evaluated | ❌ | [42](artifacts/reports/042-acme-2026-08-01.md) | - |
+`;
+    writeFileSync(join(root, 'data/applications.md'), legacyTracker);
+
+    const result = applyOfferUpdate(root, 42, { posted: '2026-07-15' }, undefined);
+    expect(result).toEqual({ num: 42, changed: ['posted'], bodyEditCount: 0 });
+
+    // Verify the tracker row now has Posted at split-index 10 (12 split parts, ends with |)
+    const tracker = readFileSync(join(root, 'data/applications.md'), 'utf-8');
+    const row = tracker.split('\n').find(l => l.trim().startsWith('| 42 |'));
+    expect(row).toBeDefined();
+    const cols = row!.split('|');
+    expect(cols).toHaveLength(12); // Now 12 parts (was 11)
+    expect(cols[10].trim()).toBe('2026-07-15'); // Posted at index 10
+    // Other cells unchanged
+    expect(cols[3].trim()).toBe('Acme'); // company
+    expect(cols[4].trim()).toBe('Platform Engineer'); // role
+    expect(cols[5].trim()).toBe('3.8/5'); // score
+    expect(cols[6].trim()).toBe('Evaluated'); // status
+
+    // Verify report frontmatter
+    const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
+    expect(report).toContain("posted: '2026-07-15'");
+  });
 });
