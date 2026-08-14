@@ -45,7 +45,7 @@ describe('mcp-app-server — action tools', () => {
         'start_job',
         'cancel_job',
         'set_status',
-        'edit_report',
+        'update_offer',
         'navigate',
       ]),
     );
@@ -381,31 +381,35 @@ describe('mcp-app-server — action tools', () => {
     expect(app.requests[0].body).toEqual({ jobId: '0123456789abcdef' });
   });
 
-  it('edit_report maps old_text→oldText / new_text→newText in the forwarded body', async () => {
+  it('update_offer maps body_edits snake_case and passes fields verbatim', async () => {
     app = await startMockApp({
-      'POST /api/chat/actions/edit-report': {
+      'POST /api/chat/actions/update-offer': {
         status: 200,
-        body: { needsConfirm: true, token: 'tok-edit', summary: 'Edit report #7', meta: 'm' },
+        body: { needsConfirm: true, token: 't' },
       },
     });
     client = new McpTestClient({ SUR9E_APP_URL: app.url, SUR9E_CHAT_TURN_ID: 'turn-42' });
     await client.initialize();
     const res = await client.request(2, 'tools/call', {
-      name: 'edit_report',
-      arguments: { num: 7, old_text: 'old snippet', new_text: 'new snippet', summary: 'tighten' },
+      name: 'update_offer',
+      arguments: {
+        num: 42,
+        fields: { url: 'https://acme.dev/jobs/1', work_mode: 'Remote' },
+        body_edits: [{ old_text: 'Worth applying.', new_text: 'Apply this week.' }],
+        summary: 'add source url',
+      },
     });
     const data = JSON.parse(res.result.content[0].text);
-    expect(data.token).toBe('tok-edit');
-    expect(data.instructions).toMatch(/confirmation card/i);
+    expect(data.token).toBe('t');
     expect(app.requests[0].headers['x-sur9e-turn']).toBe('turn-42');
-    expect(app.requests[0].body).toMatchObject({
-      num: 7,
-      oldText: 'old snippet',
-      newText: 'new snippet',
-      summary: 'tighten',
+    expect(app.requests[0].body).toEqual({
+      num: 42,
+      fields: { url: 'https://acme.dev/jobs/1', work_mode: 'Remote' },
+      bodyEdits: [{ oldText: 'Worth applying.', newText: 'Apply this week.' }],
+      summary: 'add source url',
     });
     // The snake_case wire keys must NOT leak through.
-    expect(app.requests[0].body).not.toHaveProperty('old_text');
+    expect(app.requests[0].body).not.toHaveProperty('body_edits');
   });
 
   it('start_job in chat context forwards the turn header and relays the confirm card', async () => {
