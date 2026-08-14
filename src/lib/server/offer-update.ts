@@ -127,10 +127,24 @@ const EDITABLE_FIELDS: Record<
   posted: {
     target: 'both',
     normalize: v => {
-      if (typeof v !== 'string' || !ISO_DATE_RE.test(v.trim())) {
+      const s = typeof v === 'string' ? v.trim() : '';
+      if (!ISO_DATE_RE.test(s)) {
         throw new Error(`posted must be an ISO date (YYYY-MM-DD): ${String(v)}`);
       }
-      return v.trim();
+      // ISO_DATE_RE only checks the shape (e.g. accepts 2026-13-45). Round-trip
+      // through Date.UTC and compare y/m/d so an impossible calendar date
+      // (which Date would otherwise silently roll over) is rejected instead of
+      // written to the report frontmatter and the tracker cell.
+      const [y, m, d] = s.split('-').map(Number);
+      const roundTrip = new Date(Date.UTC(y, m - 1, d));
+      if (
+        roundTrip.getUTCFullYear() !== y ||
+        roundTrip.getUTCMonth() !== m - 1 ||
+        roundTrip.getUTCDate() !== d
+      ) {
+        throw new Error(`posted must be a real calendar date: ${String(v)}`);
+      }
+      return s;
     },
   },
   archetype: { target: 'frontmatter', normalize: v => cleanText('archetype', v, 240) },
@@ -335,9 +349,17 @@ export function applyOfferUpdate(
       for (const [field, value] of cells) {
         const col = TRACKER_COL[field];
         if (field === 'posted' && cols.length < 12) {
-          // Legacy 9-column row (11 split parts): grow it by inserting the
-          // Posted cell before the trailing '' so the row stays well-formed.
-          cols.splice(cols.length - 1, 0, ` ${value} `);
+          // Legacy 9-column row: grow it by adding the Posted cell. Insert
+          // before the trailing '' only when the row actually ends with a
+          // pipe; otherwise cols.length - 1 points at the Notes cell, and
+          // splicing there would shift the date into Notes and corrupt the
+          // row. Appending instead keeps Notes in place and re-terminates
+          // the row with a trailing '' so it stays well-formed.
+          if (cols[cols.length - 1].trim() === '') {
+            cols.splice(cols.length - 1, 0, ` ${value} `);
+          } else {
+            cols.push(` ${value} `, '');
+          }
         } else {
           cols[col] = ` ${value} `;
         }
@@ -346,7 +368,18 @@ export function applyOfferUpdate(
       atomicWrite(trackerPath, lines.join('\n'));
     } catch (err) {
       // Compensate: never leave the report updated while the tracker isn't.
-      atomicWrite(changeSet.filePath, reportBefore);
+      // If the rollback write itself fails, don't let it mask the original
+      // tracker error — report both and say the files are now torn.
+      try {
+        atomicWrite(changeSet.filePath, reportBefore);
+      } catch (rollbackErr) {
+        const base = err instanceof Error ? err.message : String(err);
+        const roll = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+        throw new Error(
+          `tracker write failed (${base}) and the report rollback also failed (${roll}) — ` +
+            `${changeSet.filePath} and data/applications.md are out of sync`,
+        );
+      }
       throw err;
     }
   }

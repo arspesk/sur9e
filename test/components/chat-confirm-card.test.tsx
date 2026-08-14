@@ -19,6 +19,7 @@ function render(ui: ReactElement) {
 describe('ConfirmCard', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     const store = useChatJobsStore.getState();
     for (const id of [...store.order]) store.dismiss(id);
     useToastStore.setState({ toasts: [] });

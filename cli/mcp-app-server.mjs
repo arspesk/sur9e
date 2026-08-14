@@ -309,17 +309,20 @@ const ACTION_TOOLS = [
         fields: {
           type: 'object',
           description: 'Metadata fields to set (see allowed keys in the tool description)',
+          minProperties: 1,
           additionalProperties: true,
         },
         body_edits: {
           type: 'array',
           description: 'Sequential find/replace edits to the report body',
+          minItems: 1,
           maxItems: 20,
           items: {
             type: 'object',
             properties: {
               old_text: {
                 type: 'string',
+                minLength: 1,
                 description: 'Exact, unique snippet of the current body',
               },
               new_text: {
@@ -338,6 +341,7 @@ const ACTION_TOOLS = [
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },
       required: ['num'],
+      anyOf: [{ required: ['fields'] }, { required: ['body_edits'] }],
       additionalProperties: false,
     },
   },

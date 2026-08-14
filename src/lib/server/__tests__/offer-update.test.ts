@@ -216,11 +216,11 @@ describe('applyOfferUpdate', () => {
     const reportPath = join(root, 'artifacts/reports/042-acme-2026-08-01.md');
     const reportBefore = readFileSync(reportPath, 'utf-8');
     const real = atomicWriteModule.atomicWrite;
-    // First call (report) succeeds; second call (tracker) explodes.
-    let calls = 0;
+    // Fail on the tracker write specifically (by path, not call order) so a
+    // change in report-write internals can't make this pass for the wrong
+    // reason — it must be the TRACKER write that explodes.
     const spy = vi.spyOn(atomicWriteModule, 'atomicWrite').mockImplementation((path, content) => {
-      calls += 1;
-      if (calls === 2) throw new Error('disk full');
+      if (path.endsWith('data/applications.md')) throw new Error('disk full');
       return real(path, content);
     });
     try {
@@ -268,6 +268,39 @@ describe('applyOfferUpdate', () => {
     expect(cols[6].trim()).toBe('Evaluated'); // status
 
     // Verify report frontmatter
+    const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
+    expect(report).toContain("posted: '2026-07-15'");
+  });
+
+  it('handles a legacy 9-column row with NO trailing pipe without corrupting Notes', () => {
+    // Same legacy shape as above, but the row is hand-edited without the
+    // trailing '|' — split('|') yields 10 parts instead of 11, so the last
+    // element is the Notes cell itself, not ''. The insertion must append
+    // rather than splice before this cell (guards the fix for the finding
+    // that a naive `cols.splice(cols.length - 1, ...)` shifts the date into
+    // Notes on rows like this).
+    const legacyTrackerNoTrailingPipe = `# Applications Tracker
+
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|-----|--------|-------|
+| 42 | 2026-08-01 | Acme | Platform Engineer | 3.8/5 | Evaluated | ❌ | [42](artifacts/reports/042-acme-2026-08-01.md) | - `;
+    writeFileSync(join(root, 'data/applications.md'), legacyTrackerNoTrailingPipe);
+
+    const result = applyOfferUpdate(root, 42, { posted: '2026-07-15' }, undefined);
+    expect(result).toEqual({ num: 42, changed: ['posted'], bodyEditCount: 0 });
+
+    const tracker = readFileSync(join(root, 'data/applications.md'), 'utf-8');
+    const row = tracker.split('\n').find(l => l.trim().startsWith('| 42 |'));
+    expect(row).toBeDefined();
+    const cols = row!.split('|');
+    expect(cols).toHaveLength(12); // grown to 12 parts, re-terminated with a trailing '|'
+    expect(cols[10].trim()).toBe('2026-07-15'); // Posted at index 10
+    expect(cols[9].trim()).toBe('-'); // Notes stays put, NOT overwritten by the date
+    // Other cells unchanged
+    expect(cols[3].trim()).toBe('Acme');
+    expect(cols[4].trim()).toBe('Platform Engineer');
+    expect(cols[6].trim()).toBe('Evaluated');
+
     const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
     expect(report).toContain("posted: '2026-07-15'");
   });
