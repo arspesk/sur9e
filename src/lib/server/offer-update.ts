@@ -67,6 +67,23 @@ const PROTECTED_FIELD_HINTS: Record<string, string> = {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Long fields have derived "short" siblings (and comp's comp_range) that the
+// projections in src/lib/server/reports.ts (loc_short ?? loc, archetype_short
+// ?? archetype, seniority_short ?? shortSeniority(seniority), comp_range ??
+// comp) and src/features/report/report-types.ts (comp_short/seniority_short/
+// loc_short/archetype_short fallback chains) PREFER over the long value when
+// present. If we only overwrite the long field, those stale siblings keep
+// winning the fallback and the edit never becomes visible. Delete the
+// siblings here whenever their long source changes so the fallback chains
+// recompute from the fresh value.
+const DERIVED_SHORT_FIELDS: Record<string, readonly string[]> = {
+  seniority: ['seniority_short'],
+  location: ['loc_short'],
+  locations: ['loc_short'],
+  archetype: ['archetype_short'],
+  comp: ['comp_short', 'comp_range'],
+};
+
 /** Collapse whitespace; reject '|' (pipe-table cells) and overlong values. */
 function cleanCell(field: string, value: unknown, max: number): string {
   if (typeof value !== 'string') throw new Error(`${field} must be a string`);
@@ -193,11 +210,16 @@ export function validateOfferUpdate(
   const trackerCells: OfferUpdateChangeSet['trackerCells'] = {};
 
   for (const [field, rawValue] of Object.entries(fields ?? {})) {
-    if (field in PROTECTED_FIELD_HINTS) {
+    // Object.hasOwn (not `in` / bracket indexing) so a field name shadowing
+    // an inherited Object.prototype member (e.g. "toString", "constructor")
+    // can't walk the prototype chain and produce a nonsense hint or slip
+    // past the "unknown field" check.
+    if (Object.hasOwn(PROTECTED_FIELD_HINTS, field)) {
       return { ok: false, error: `field not editable: ${field} — ${PROTECTED_FIELD_HINTS[field]}` };
     }
+    if (!Object.hasOwn(EDITABLE_FIELDS, field))
+      return { ok: false, error: `unknown field: ${field}` };
     const def = EDITABLE_FIELDS[field];
-    if (!def) return { ok: false, error: `unknown field: ${field}` };
     let value: unknown;
     try {
       value = def.normalize(rawValue);
@@ -219,6 +241,9 @@ export function validateOfferUpdate(
     const isNoop = fmCurrent === to && (trackerCurrent === null || trackerCurrent === to);
     if (isNoop) continue;
     (nextFrontmatter as Record<string, unknown>)[field] = value;
+    for (const derived of DERIVED_SHORT_FIELDS[field] ?? []) {
+      delete (nextFrontmatter as Record<string, unknown>)[derived];
+    }
     if (def.target === 'both') {
       trackerCells[field as keyof OfferUpdateChangeSet['trackerCells']] = to;
     }

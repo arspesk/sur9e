@@ -13,6 +13,34 @@ const TRACKER = `# Applications Tracker
 |---|------|---------|------|-------|--------|-----|--------|-------|--------|
 | 42 | 2026-08-01 | Acme | Platform Engineer | 3.8/5 | Evaluated | ❌ | [42](artifacts/reports/042-acme-2026-08-01.md) | - |  |
 | 43 | 2026-08-02 | NoReport Inc | SRE | N/A | Screened | ❌ | - | - |  |
+| 44 | 2026-08-03 | Beta | Systems Engineer | 4.2/5 | Evaluated | ❌ | [44](artifacts/reports/044-beta-2026-08-03.md) | - |  |
+`;
+
+// Carries derived "short" siblings (I-1 fixture): seniority_short/comp_short/
+// comp_range/loc_short all sit alongside their long-field sources so a test
+// can assert that editing the long field clears the stale derived sibling
+// while an untouched one (loc_short — location is never edited below) survives.
+const REPORT_WITH_SHORTS = `---
+num: 44
+company: Beta
+role: Systems Engineer
+date: '2026-08-03'
+status: Evaluated
+state: evaluated
+score: 4.2
+archetype: Platform
+seniority: Mid
+seniority_short: Mid
+loc_short: NYC
+comp: $150k-$180k
+comp_short: $150-180k
+comp_range: $150k+
+tldr: Solid systems role.
+---
+
+## Summary
+
+Beta builds distributed systems.
 `;
 
 const REPORT = `---
@@ -42,6 +70,7 @@ beforeEach(() => {
   mkdirSync(join(root, 'artifacts/reports'), { recursive: true });
   writeFileSync(join(root, 'data/applications.md'), TRACKER);
   writeFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), REPORT);
+  writeFileSync(join(root, 'artifacts/reports/044-beta-2026-08-03.md'), REPORT_WITH_SHORTS);
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -241,5 +270,29 @@ describe('applyOfferUpdate', () => {
     // Verify report frontmatter
     const report = readFileSync(join(root, 'artifacts/reports/042-acme-2026-08-01.md'), 'utf-8');
     expect(report).toContain("posted: '2026-07-15'");
+  });
+
+  it('clears stale derived short siblings when their long source field changes (I-1)', () => {
+    const result = applyOfferUpdate(
+      root,
+      44,
+      { seniority: 'Senior', comp: '$200k-$240k' },
+      undefined,
+    );
+    expect(result.changed).toEqual(['seniority', 'comp']);
+    const report = readFileSync(join(root, 'artifacts/reports/044-beta-2026-08-03.md'), 'utf-8');
+    // Long fields land with their new values.
+    expect(report).toContain('seniority: Senior');
+    expect(report).toContain('comp:');
+    expect(report).toContain('$200k-$240k');
+    // Stale derived siblings of the EDITED fields are gone — otherwise the
+    // report projections (reports.ts / report-types.ts fallback chains)
+    // would keep preferring the pre-edit short value.
+    expect(report).not.toContain('seniority_short');
+    expect(report).not.toContain('comp_short');
+    expect(report).not.toContain('comp_range');
+    // A sibling of an UNTOUCHED long field (location was never edited here)
+    // survives untouched.
+    expect(report).toContain('loc_short: NYC');
   });
 });

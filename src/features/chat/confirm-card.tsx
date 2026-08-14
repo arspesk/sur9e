@@ -88,6 +88,8 @@ interface ConfirmResponseResult {
   workflow?: { id?: string; status?: string };
   jobs?: ConfirmResponseJob[];
   textOffer?: { offer?: { num?: number } };
+  offerUpdate?: { num?: number; changed?: string[]; bodyEditCount?: number };
+  updated?: { num?: number } | null;
   cancellation?: { job?: ConfirmResponseJob };
   message?: string;
   links?: ChatActionLink[];
@@ -155,6 +157,19 @@ export function ConfirmCard({
       if (data?.result?.ok === true) {
         if (data.result.textOffer) {
           void queryClient.invalidateQueries({ queryKey: ['applications'] });
+        }
+        // update_offer (structured field/body edits) and set_status's
+        // 'updated' payload both mutate an already-tracked row in place.
+        // Invalidate every cache that holds it — table (['applications']),
+        // drawer (['application', num]), and any open full report
+        // (['report'] prefix) — so the edit is visible everywhere without a
+        // manual refetch. Mirrors useUpdateApplicationStatus /
+        // useUpdateReportField in src/hooks/use-applications.ts.
+        const editedNum = data.result.offerUpdate?.num ?? data.result.updated?.num;
+        if (editedNum != null) {
+          void queryClient.invalidateQueries({ queryKey: ['applications'] });
+          void queryClient.invalidateQueries({ queryKey: ['application', editedNum] });
+          void queryClient.invalidateQueries({ queryKey: ['report'] });
         }
         const started = data.result.job;
         if (started?.conflict && started.message) {

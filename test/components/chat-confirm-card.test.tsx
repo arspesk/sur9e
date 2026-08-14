@@ -172,6 +172,85 @@ describe('ConfirmCard', () => {
     });
   });
 
+  it('invalidates applications/application/report caches after an approved offer update (I-2)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                offerUpdate: { num: 12, changed: ['seniority'], bodyEditCount: 0 },
+                message: 'Offer #12 updated: seniority.',
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const { getByRole } = render(
+      <ConfirmCard
+        token="tok-offer-update"
+        summary="Update offer #12"
+        meta=""
+        outcome="pending"
+        action="update-offer"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Update offer #12' }));
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['applications'] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['application', 12] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['report'] });
+    });
+  });
+
+  it('invalidates applications/application/report caches after an approved set-status update (I-2)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              outcome: 'approved',
+              execution: 'succeeded',
+              result: {
+                ok: true,
+                updated: { num: 12 },
+              },
+            }),
+          }) as Response,
+      ),
+    );
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const { getByRole } = render(
+      <ConfirmCard
+        token="tok-set-status"
+        summary="Set #12 to applied"
+        meta=""
+        outcome="pending"
+        action="set-status"
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Set #12 to applied' }));
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['applications'] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['application', 12] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['report'] });
+    });
+  });
+
   it('shows the completion message and durable offer hyperlink after approval', async () => {
     vi.stubGlobal(
       'fetch',

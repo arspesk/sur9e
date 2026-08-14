@@ -298,6 +298,7 @@ const ACTION_TOOLS = [
       'legitimacy, locations, remote, tldr, posted (YYYY-MM-DD). Status is owned by set_status; score/date ' +
       'are pipeline-owned. For body edits, FIRST read the report with get_report and copy exact text — ' +
       'each old_text must match the (progressively edited) body EXACTLY and UNIQUELY; edits apply in order. ' +
+      'Max 20 body edits per call. ' +
       'To fully REGENERATE a report, re-run its mode via start_job instead. ALWAYS requires user approval: ' +
       'one confirmation card lists every change — after it shows, do NOT call this tool again; tell the ' +
       'user to approve or cancel it.',
@@ -313,6 +314,7 @@ const ACTION_TOOLS = [
         body_edits: {
           type: 'array',
           description: 'Sequential find/replace edits to the report body',
+          maxItems: 20,
           items: {
             type: 'object',
             properties: {
