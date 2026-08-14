@@ -1,8 +1,8 @@
 // src/lib/server/__tests__/reports-edit.test.ts
 //
 // Unit tests for applyReportBodyEdit — the pure find/replace helper behind the
-// chat edit_report action. Mirrors the Edit-tool contract: exact + unique match
-// on the BODY only, frontmatter never touched.
+// body-edit half of the chat update_offer action (via src/lib/server/offer-update.ts).
+// Mirrors the Edit-tool contract: exact + unique match on the BODY only, frontmatter never touched.
 
 import { describe, expect, it } from 'vitest';
 import { applyReportBodyEdit, parseFrontmatter } from '../reports';
