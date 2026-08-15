@@ -238,21 +238,29 @@ describe('codex provider', () => {
     // The model list comes from `~/.codex/models_cache.json`, a file Codex
     // maintains itself. We stub HOME per-test to a tmpdir so a dev's real
     // cache doesn't bleed into assertions and tests can construct the
-    // exact cache shape they want to assert against.
+    // exact cache shape they want to assert against. CODEX_API_KEY is
+    // cleared too — it forces API-key auth mode, which changes which cache
+    // entries qualify (see the auth-mode tests below).
     let originalHome: string | undefined;
+    let originalCodexApiKey: string | undefined;
 
     beforeEach(() => {
       originalHome = process.env.HOME;
+      originalCodexApiKey = process.env.CODEX_API_KEY;
+      delete process.env.CODEX_API_KEY;
     });
     afterEach(() => {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
+      if (originalCodexApiKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = originalCodexApiKey;
     });
 
     it('reads models from ~/.codex/models_cache.json filtered to picker-visible + API-supported entries', async () => {
       // Mirrors the real cache file shape: a mix of picker-shown,
-      // hidden, and not-yet-API-available entries. Only the
-      // visibility=list + supported_in_api=true ones should surface.
+      // hidden, and not-yet-API-available entries. With no auth.json in
+      // the fake HOME the auth mode is unknown, so the strict filter
+      // applies: only visibility=list + supported_in_api=true surface.
       const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
       mkdirSync(join(fakeHome, '.codex'), { recursive: true });
       writeFileSync(
@@ -287,7 +295,9 @@ describe('codex provider', () => {
               supported_in_api: true,
             },
             {
-              // visibility=list but not API-supported — must be filtered out.
+              // visibility=list but not API-supported — filtered out in
+              // API-key/unknown auth mode (kept under ChatGPT auth; see
+              // the ChatGPT-auth test below).
               slug: 'preview-only-model',
               display_name: 'Preview Only',
               visibility: 'list',
@@ -304,6 +314,208 @@ describe('codex provider', () => {
         { id: 'gpt-5.4', label: 'GPT-5.4' },
         { id: 'gpt-5.4-mini', label: 'GPT-5.4-Mini' },
       ]);
+    });
+
+    it('keeps supported_in_api=false models under ChatGPT auth, matching the codex /model picker', async () => {
+      // Issue #89: `gpt-5.3-codex-spark` is `visibility: list` but
+      // `supported_in_api: false`. Codex's own picker filter
+      // (ModelPreset::filter_by_auth) only applies `supported_in_api` in
+      // API-key mode; under ChatGPT login (`codex login` → auth.json with
+      // `tokens`) all picker-visible models show and run fine.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({
+          OPENAI_API_KEY: null,
+          tokens: { id_token: 'x', access_token: 'y', refresh_token: 'z', account_id: 'a' },
+          last_refresh: '2026-08-14T00:00:00Z',
+        }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+            {
+              // Hidden entries stay excluded regardless of auth mode.
+              slug: 'codex-auto-review',
+              display_name: 'Codex Auto Review',
+              visibility: 'hide',
+              supported_in_api: true,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([
+        { id: 'gpt-5.5', label: 'GPT-5.5' },
+        { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+      ]);
+    });
+
+    it('honors an explicit auth_mode: "chatgpt" even when a stored API key is also present', async () => {
+      // AuthDotJson::resolved_mode gives the explicit `auth_mode` field top
+      // priority over stored credentials, so a leftover stored key must not
+      // flip a declared-ChatGPT auth.json into API-key mode.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({
+          auth_mode: 'chatgpt',
+          OPENAI_API_KEY: 'sk-stale-leftover',
+          tokens: { access_token: 'y' },
+        }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([
+        { id: 'gpt-5.5', label: 'GPT-5.5' },
+        { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+      ]);
+    });
+
+    it('honors an explicit auth_mode: "apikey" even when ChatGPT tokens are also present', async () => {
+      // The inverse mixed-credential state: declared API-key mode wins over
+      // leftover ChatGPT tokens, so the API-supported subset applies.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({
+          auth_mode: 'apikey',
+          OPENAI_API_KEY: null,
+          tokens: { access_token: 'y' },
+        }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([{ id: 'gpt-5.5', label: 'GPT-5.5' }]);
+    });
+
+    it('filters supported_in_api=false models when auth.json holds a stored API key', async () => {
+      // `codex login --api-key` stores the key in auth.json without ChatGPT
+      // tokens → API-key mode: `supported_in_api: false` models are genuinely
+      // not callable, so codex (and we) drop them from the picker. Would
+      // fail if the supported_in_api condition were removed outright.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({ OPENAI_API_KEY: 'sk-test-123', last_refresh: null }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([{ id: 'gpt-5.5', label: 'GPT-5.5' }]);
+    });
+
+    it('lets CODEX_API_KEY env force API-key mode even when ChatGPT tokens exist', async () => {
+      // Codex gives the CODEX_API_KEY env var top precedence over auth.json,
+      // so its presence flips the picker to the API-supported subset.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({ OPENAI_API_KEY: null, tokens: { access_token: 'y' } }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+      process.env.CODEX_API_KEY = 'sk-env-key';
+
+      const models = await codex.listModels();
+      expect(models).toEqual([{ id: 'gpt-5.5', label: 'GPT-5.5' }]);
     });
 
     it('uses the slug as the label when display_name is missing or empty', async () => {

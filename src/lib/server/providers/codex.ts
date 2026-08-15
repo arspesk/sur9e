@@ -25,9 +25,13 @@
 //     file that Codex itself maintains at `~/.codex/models_cache.json`
 //     (auto-fetched by the CLI via ETag against OpenAI's internal model
 //     metadata endpoint). We READ this file and filter to entries the
-//     `codex /model` picker actually shows — `visibility === "list"` AND
-//     `supported_in_api === true`. This is the SAME list users see when
-//     they run `codex /model` interactively. If the cache file is missing
+//     `codex /model` picker actually shows — `visibility === "list"`, plus
+//     `supported_in_api === true` only under API-key auth. That matches
+//     Codex's own ModelPreset::filter_by_auth: the ChatGPT backend runs
+//     models the public API doesn't expose (e.g. gpt-5.3-codex-spark), so
+//     under `codex login` (ChatGPT tokens) the API flag is ignored. This is
+//     the SAME list users see when they run `codex /model` interactively.
+//     If the cache file is missing
 //     (fresh install, never run `codex`) or yields zero qualifying entries,
 //     we fall back to FALLBACK_MODELS so the Settings picker never renders
 //     empty. The cache file is owned/refreshed by Codex itself; we treat
@@ -430,8 +434,8 @@ const codex: Provider = {
     // Source of truth: `~/.codex/models_cache.json`. Codex maintains this
     // file itself (auto-refreshes via ETag on each run) and uses it to power
     // its own `/model` interactive picker. Filtering to `visibility: "list"`
-    // + `supported_in_api: true` gives us the EXACT same list the picker
-    // displays — no guessing, no API mismatches.
+    // — plus `supported_in_api: true` only under API-key auth — gives us the
+    // EXACT same list the picker displays — no guessing, no API mismatches.
     //
     // The file is owned by Codex; we treat it as read-only. If it's missing
     // (fresh install before first `codex` invocation), malformed, or yields
@@ -445,11 +449,56 @@ const codex: Provider = {
       if (existsSync(cachePath)) {
         const cache = JSON.parse(readFileSync(cachePath, 'utf-8'));
         const models: any[] = Array.isArray(cache?.models) ? cache.models : [];
+        // Mirror of Codex's own picker filter (ModelPreset::filter_by_auth):
+        // `supported_in_api` only excludes a model under API-key auth — the
+        // ChatGPT backend runs `supported_in_api: false` slugs fine (e.g.
+        // gpt-5.3-codex-spark, issue #89). Auth mode follows codex's
+        // AuthDotJson::resolved_mode over ~/.codex/auth.json: an explicit
+        // `auth_mode` field wins, then stored credentials decide — except
+        // a CODEX_API_KEY env var beats stored auth entirely (top
+        // precedence in codex's load_auth). One deliberate divergence:
+        // with no explicit mode we require ChatGPT `tokens` to be present,
+        // where codex defaults to ChatGPT mode even without them —
+        // unknown/unreadable auth keeps the strict filter, whose shorter
+        // list is never wrong to RUN, just possibly shorter than the
+        // picker's.
+        let chatgptAuth = false;
+        if (!(process.env.CODEX_API_KEY ?? '').trim()) {
+          try {
+            const authPath = join(homedir(), '.codex/auth.json');
+            if (existsSync(authPath)) {
+              const auth = JSON.parse(readFileSync(authPath, 'utf-8'));
+              // AuthMode variants that ride the ChatGPT/codex backend
+              // (AuthMode::uses_codex_backend in codex-rs/protocol) —
+              // everything except `apikey` and `bedrockApiKey`.
+              const codexBackendModes = [
+                'chatgpt',
+                'chatgptAuthTokens',
+                'headers',
+                'agentIdentity',
+                'personalAccessToken',
+              ];
+              if (typeof auth?.auth_mode === 'string') {
+                chatgptAuth = codexBackendModes.includes(auth.auth_mode);
+              } else if (auth?.personal_access_token) {
+                chatgptAuth = true;
+              } else {
+                const hasStoredApiKey =
+                  typeof auth?.OPENAI_API_KEY === 'string' && auth.OPENAI_API_KEY.trim().length > 0;
+                chatgptAuth = !hasStoredApiKey && !auth?.bedrock_api_key && Boolean(auth?.tokens);
+              }
+            }
+          } catch {
+            // Corrupt/unreadable auth.json → treat as API-key mode. Must not
+            // bubble to the outer catch: a broken auth file shouldn't wipe
+            // out the whole cache-derived model list.
+          }
+        }
         const filtered = models
           .filter(
             m =>
               m?.visibility === 'list' &&
-              m?.supported_in_api === true &&
+              (chatgptAuth || m?.supported_in_api === true) &&
               typeof m?.slug === 'string' &&
               m.slug.length > 0,
           )
