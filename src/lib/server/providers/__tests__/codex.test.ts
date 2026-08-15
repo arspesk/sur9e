@@ -367,6 +367,86 @@ describe('codex provider', () => {
       ]);
     });
 
+    it('honors an explicit auth_mode: "chatgpt" even when a stored API key is also present', async () => {
+      // AuthDotJson::resolved_mode gives the explicit `auth_mode` field top
+      // priority over stored credentials, so a leftover stored key must not
+      // flip a declared-ChatGPT auth.json into API-key mode.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({
+          auth_mode: 'chatgpt',
+          OPENAI_API_KEY: 'sk-stale-leftover',
+          tokens: { access_token: 'y' },
+        }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([
+        { id: 'gpt-5.5', label: 'GPT-5.5' },
+        { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+      ]);
+    });
+
+    it('honors an explicit auth_mode: "apikey" even when ChatGPT tokens are also present', async () => {
+      // The inverse mixed-credential state: declared API-key mode wins over
+      // leftover ChatGPT tokens, so the API-supported subset applies.
+      const fakeHome = mkdtempSync(join(tmpdir(), 'sur9e-codex-cache-'));
+      mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+      writeFileSync(
+        join(fakeHome, '.codex/auth.json'),
+        JSON.stringify({
+          auth_mode: 'apikey',
+          OPENAI_API_KEY: null,
+          tokens: { access_token: 'y' },
+        }),
+      );
+      writeFileSync(
+        join(fakeHome, '.codex/models_cache.json'),
+        JSON.stringify({
+          models: [
+            {
+              slug: 'gpt-5.5',
+              display_name: 'GPT-5.5',
+              visibility: 'list',
+              supported_in_api: true,
+            },
+            {
+              slug: 'gpt-5.3-codex-spark',
+              display_name: 'GPT-5.3-Codex-Spark',
+              visibility: 'list',
+              supported_in_api: false,
+            },
+          ],
+        }),
+      );
+      process.env.HOME = fakeHome;
+
+      const models = await codex.listModels();
+      expect(models).toEqual([{ id: 'gpt-5.5', label: 'GPT-5.5' }]);
+    });
+
     it('filters supported_in_api=false models when auth.json holds a stored API key', async () => {
       // `codex login --api-key` stores the key in auth.json without ChatGPT
       // tokens → API-key mode: `supported_in_api: false` models are genuinely

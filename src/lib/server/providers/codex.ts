@@ -452,20 +452,41 @@ const codex: Provider = {
         // Mirror of Codex's own picker filter (ModelPreset::filter_by_auth):
         // `supported_in_api` only excludes a model under API-key auth — the
         // ChatGPT backend runs `supported_in_api: false` slugs fine (e.g.
-        // gpt-5.3-codex-spark, issue #89). ChatGPT mode = `codex login`
-        // tokens in ~/.codex/auth.json, no stored API key, and no
-        // CODEX_API_KEY env (which codex gives top precedence). Unknown /
-        // unreadable auth state keeps the strict filter — the conservative
-        // list is never wrong to RUN, just possibly shorter.
+        // gpt-5.3-codex-spark, issue #89). Auth mode follows codex's
+        // AuthDotJson::resolved_mode over ~/.codex/auth.json: an explicit
+        // `auth_mode` field wins, then stored credentials decide — except
+        // a CODEX_API_KEY env var beats stored auth entirely (top
+        // precedence in codex's load_auth). One deliberate divergence:
+        // with no explicit mode we require ChatGPT `tokens` to be present,
+        // where codex defaults to ChatGPT mode even without them —
+        // unknown/unreadable auth keeps the strict filter, whose shorter
+        // list is never wrong to RUN, just possibly shorter than the
+        // picker's.
         let chatgptAuth = false;
         if (!(process.env.CODEX_API_KEY ?? '').trim()) {
           try {
             const authPath = join(homedir(), '.codex/auth.json');
             if (existsSync(authPath)) {
               const auth = JSON.parse(readFileSync(authPath, 'utf-8'));
-              const hasStoredApiKey =
-                typeof auth?.OPENAI_API_KEY === 'string' && auth.OPENAI_API_KEY.trim().length > 0;
-              chatgptAuth = !hasStoredApiKey && Boolean(auth?.tokens);
+              // AuthMode variants that ride the ChatGPT/codex backend
+              // (AuthMode::uses_codex_backend in codex-rs/protocol) —
+              // everything except `apikey` and `bedrockApiKey`.
+              const codexBackendModes = [
+                'chatgpt',
+                'chatgptAuthTokens',
+                'headers',
+                'agentIdentity',
+                'personalAccessToken',
+              ];
+              if (typeof auth?.auth_mode === 'string') {
+                chatgptAuth = codexBackendModes.includes(auth.auth_mode);
+              } else if (auth?.personal_access_token) {
+                chatgptAuth = true;
+              } else {
+                const hasStoredApiKey =
+                  typeof auth?.OPENAI_API_KEY === 'string' && auth.OPENAI_API_KEY.trim().length > 0;
+                chatgptAuth = !hasStoredApiKey && !auth?.bedrock_api_key && Boolean(auth?.tokens);
+              }
             }
           } catch {
             // Corrupt/unreadable auth.json → treat as API-key mode. Must not
