@@ -157,6 +157,48 @@ describe('extractTrailingFence', () => {
   it('throws when there is no trailing fence', () => {
     expect(() => extractTrailingFence('nothing')).toThrow(/fenced/i);
   });
+
+  it('parses the fence when stream-formatter trailer lines follow it (issue #91)', () => {
+    // A claude-routed run pipes through cli/stream-claude-parser.mjs, whose
+    // re-emitted stdout ends with "✓ claude done — …" and "[USAGE] {…}" AFTER
+    // the model's fenced payload. A fallback run also prepends "[FALLBACK]".
+    const text = [
+      '[FALLBACK] {"from":{"provider":"opencode"},"to":{"provider":"claude"},"reason":"quota"}',
+      'Screening the posting now.',
+      '```json',
+      '{"readable": true, "company": "Acme", "score": 7.5}',
+      '```',
+      '✓ claude done — 1 turns, $0.02, 41s',
+      '[USAGE] {"cost_usd":0.02,"input_tokens":900,"output_tokens":80,"model":"claude-haiku-4-5-20251001"}',
+      '',
+    ].join('\n');
+    expect(extractTrailingFence(text)).toEqual({ readable: true, company: 'Acme', score: 7.5 });
+  });
+
+  it('still throws when only trailer lines exist and no fence at all', () => {
+    const text = [
+      'some chatter, no fenced block',
+      '✓ claude done — 2 turns, $0.10, 1m02s',
+      '[USAGE] {"cost_usd":0.1}',
+    ].join('\n');
+    expect(() => extractTrailingFence(text)).toThrow(/fenced/i);
+  });
+
+  it('does not strip trailer-shaped lines inside the fenced payload', () => {
+    // Only lines AFTER the closing fence are formatter noise; identical-looking
+    // content inside the payload must survive.
+    const text = [
+      '```yaml',
+      'company: Acme',
+      'note: "[USAGE] is a formatter marker"',
+      '```',
+      '✓ claude done — 1 turns, $0.01, 12s',
+    ].join('\n');
+    expect(extractTrailingFence(text)).toEqual({
+      company: 'Acme',
+      note: '[USAGE] is a formatter marker',
+    });
+  });
 });
 
 describe('stripTerminalNoise', () => {

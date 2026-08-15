@@ -137,8 +137,35 @@ export function extractSentinelPayload(responseText, options = {}) {
   throw new Error(`no ${END_MARK} sentinel after ${OUTPUT_MARK} (or payload empty)`);
 }
 
+// Stream-formatter trailer lines cli/stream-claude-parser.mjs emits AFTER the
+// model's final text on a successful claude-routed run: the human status line
+// ("✓ claude done — 1 turns, $0.02, 41s") and the structured usage marker
+// ("[USAGE] {…}"). They land in captured stdout because the claude spawn is
+// piped through that formatter (see buildSpawnArgsForMode), so a trailing-
+// fence contract can never match end-of-string on those runs (issue #91).
+const FORMATTER_TRAILER_RE = /^(?:✓ \S+ done — .*|\[USAGE\] .*)$/;
+
+// Drop formatter trailers (and blank lines) from the END of the text only —
+// identical-looking content INSIDE the model's payload is untouched, and a
+// trailer line anywhere before the final fence is irrelevant to matching.
+export function stripFormatterTrailers(text) {
+  const lines = String(text ?? "").split("\n");
+  let end = lines.length;
+  while (end > 0) {
+    const line = lines[end - 1].trim();
+    if (line !== "" && !FORMATTER_TRAILER_RE.test(line)) break;
+    end--;
+  }
+  return lines.slice(0, end).join("\n");
+}
+
 export function extractTrailingFence(responseText) {
-  const text = stripTerminalNoise(responseText);
+  const text = stripFormatterTrailers(stripTerminalNoise(responseText));
+  // Deliberately end-anchored (after trailer stripping) rather than "last
+  // fence anywhere": if the model echoes a fenced profile/JD from the prompt
+  // but never emits the contract block, matching an arbitrary earlier fence
+  // would record junk fields as a real screen. Throwing here keeps that case
+  // a loud "unreadable" instead.
   const fenceRe = /```[a-zA-Z]*\s*\n([\s\S]*?)\n```\s*$/;
   const m = text.match(fenceRe);
   if (!m) throw new Error("no trailing fenced block in response");

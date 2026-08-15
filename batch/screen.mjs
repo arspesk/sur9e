@@ -28,6 +28,7 @@ import { getUsageSummary } from '../cli/usage-tracker.mjs';
 import { buildScreeningPolicy, metadataPrefilter } from './screening-policy.mjs';
 import { fetchJobDescription } from './jd-fetcher.mjs';
 import { resolveRuntimeForMode, runModeLLM } from './lib/llm.mjs';
+import { extractTrailingFence } from './lib/output-parser.mjs';
 import { isValidIsoDate } from './lib/posted-date.mjs';
 import { stripFrontMatter } from './lib/report-file.mjs';
 import { trackModeUsage } from './lib/usage.mjs';
@@ -315,17 +316,12 @@ ${jdBlock}
 // of the response"; we tolerate trailing whitespace and any language
 // annotation on the fence ('```json', '```yaml', or bare '```'), and we
 // parse with yaml.load — a strict superset of JSON — so a model that
-// emits YAML keys instead of JSON still lands.
+// emits YAML keys instead of JSON still lands. Delegates to the shared
+// portable-contract parser, which also strips terminal noise and the
+// stream-formatter trailer lines ("✓ claude done — …", "[USAGE] {…}") that
+// claude-routed runs append after the fence (issue #91).
 export function parseScreenResponse(responseText) {
-  const text = String(responseText || '');
-  const fenceRe = /```[a-zA-Z]*\s*\n([\s\S]*?)\n```\s*$/;
-  const m = text.match(fenceRe);
-  if (!m) throw new Error('no trailing fenced block in response');
-  const parsed = yaml.load(m[1]);
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('trailing fenced block did not yield an object');
-  }
-  return parsed;
+  return extractTrailingFence(responseText);
 }
 
 // Deterministically assemble the markdown-native screener report + tracker TSV
