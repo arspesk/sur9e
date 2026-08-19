@@ -49,4 +49,20 @@ describe('chat UI style contract', () => {
       /body:has\(\.filter-panel\.open\) \.chat-bubble\s*\{[\s\S]*?visibility:\s*hidden;[\s\S]*?pointer-events:\s*none/,
     );
   });
+
+  it('lifts the expanded Thought toggle like the activity line does', () => {
+    const chatCss = readFileSync(join(root, 'src/app/styles/chat.css'), 'utf8');
+
+    expect(chatCss).toMatch(
+      /\.chat-activity__think-toggle\[aria-expanded="true"\]\s*\{[\s\S]*?color:\s*var\(--text-2\)/,
+    );
+  });
+
+  it('lifts the expanded thought bulb to the same tone as its label', () => {
+    const chatCss = readFileSync(join(root, 'src/app/styles/chat.css'), 'utf8');
+
+    expect(chatCss).toMatch(
+      /\.chat-activity__glyph\[data-open\] \.chat-activity__dot\s*\{[\s\S]*?color:\s*var\(--text-2\)/,
+    );
+  });
 });

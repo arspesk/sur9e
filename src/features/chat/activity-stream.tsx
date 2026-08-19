@@ -1,7 +1,16 @@
 'use client';
 
-import { ArrowRight, Check, Circle, ListChevronsUpDown, LoaderCircle, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  Circle,
+  Lightbulb,
+  ListChevronsUpDown,
+  LoaderCircle,
+  X,
+} from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { renderChatMarkdown } from './chat-markdown';
 import type { ActivityEntry, FoldedItem } from './fold-events';
 
 type Activity = Extract<FoldedItem, { kind: 'activity' }>;
@@ -87,8 +96,8 @@ function ThinkingRow({ entry, followTs }: { entry: ActivityEntry; followTs?: num
   const hasText = entry.text.trim().length > 0;
   return (
     <>
-      <span className="chat-activity__glyph" aria-hidden="true">
-        <Circle className="chat-activity__dot" />
+      <span className="chat-activity__glyph" aria-hidden="true" data-open={open || undefined}>
+        <Lightbulb className="chat-activity__dot" />
       </span>
       {hasText ? (
         <button
@@ -108,7 +117,15 @@ function ThinkingRow({ entry, followTs }: { entry: ActivityEntry; followTs?: num
       <span />
       {open && hasText && (
         <div className="chat-activity__think-body" id={bodyId}>
-          {entry.text}
+          {/* Same safety contract as ChatMarkdownView (message-view.tsx):
+              renderChatMarkdown escapes raw HTML tokens. Rendered here
+              directly (not via ChatMarkdownView) to avoid a module cycle
+              with message-view and the code-copy delegation it carries. */}
+          <div
+            className="chat-md"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: renderer escapes raw HTML
+            dangerouslySetInnerHTML={{ __html: renderChatMarkdown(entry.text) }}
+          />
         </div>
       )}
     </>

@@ -169,6 +169,15 @@ button.chat-activity__think-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Open state lifts the label tone — same signal as the activity line's
+   expanded caret. */
+.chat-activity__think-toggle[aria-expanded="true"] {
+  color: var(--text-2);
+}
+/* …and the bulb lifts with it — same tone as the expanded label. */
+.chat-activity__glyph[data-open] .chat-activity__dot {
+  color: var(--text-2);
+}
 .chat-activity__think-body {
   grid-column: 1 / 4;
   font-family: var(--font-sans);
@@ -176,8 +185,20 @@ button.chat-activity__think-toggle:focus-visible {
   color: var(--text-3);
   border-left: 2px solid var(--border);
   padding-left: var(--space-2);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* Thought bodies render through the shared chat markdown renderer — keep
+   them at timeline scale, not reply scale. */
+.chat-activity__think-body .chat-md {
+  font-size: 12px;
+  line-height: 1.5;
+  color: inherit;
+}
+.chat-activity__think-body .chat-md p {
+  margin: 0 0 var(--space-2);
+}
+.chat-activity__think-body .chat-md p:last-child {
+  margin-bottom: 0;
 }
 
 /* ── 8: confirm card ── */
