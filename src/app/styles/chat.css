@@ -174,9 +174,9 @@ button.chat-activity__think-toggle:focus-visible {
 .chat-activity__think-toggle[aria-expanded="true"] {
   color: var(--text-2);
 }
-/* …and the bulb literally lights up while its thought is open. */
+/* …and the bulb lifts with it — same tone as the expanded label. */
 .chat-activity__glyph[data-open] .chat-activity__dot {
-  color: var(--accent);
+  color: var(--text-2);
 }
 .chat-activity__think-body {
   grid-column: 1 / 4;

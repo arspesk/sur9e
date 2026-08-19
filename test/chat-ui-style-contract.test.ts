@@ -58,11 +58,11 @@ describe('chat UI style contract', () => {
     );
   });
 
-  it('lights the thought bulb in accent while expanded', () => {
+  it('lifts the expanded thought bulb to the same tone as its label', () => {
     const chatCss = readFileSync(join(root, 'src/app/styles/chat.css'), 'utf8');
 
     expect(chatCss).toMatch(
-      /\.chat-activity__glyph\[data-open\] \.chat-activity__dot\s*\{[\s\S]*?color:\s*var\(--accent\)/,
+      /\.chat-activity__glyph\[data-open\] \.chat-activity__dot\s*\{[\s\S]*?color:\s*var\(--text-2\)/,
     );
   });
 });
