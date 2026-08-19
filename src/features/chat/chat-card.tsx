@@ -77,6 +77,7 @@ export function ChatCard() {
         onFilesChange={convo.setDraftFiles}
         onSend={(text, refs) => void convo.send(text, refs)}
         onStop={() => void convo.stop()}
+        onSendNow={() => void convo.sendNow()}
       />
     </div>
   );

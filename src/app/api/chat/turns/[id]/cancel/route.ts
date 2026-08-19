@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { jsonError } from '@/lib/http-errors';
-import { cancelTurn, getTurn } from '@/lib/server/chat/turn-runner';
+import { cancelTurnAndWait, getTurn } from '@/lib/server/chat/turn-runner';
 import { rejectCrossOrigin } from '@/lib/server/same-origin';
 
 interface Params {
@@ -18,5 +18,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!UUID_RE.test(id)) return jsonError('Invalid turn id', 400);
   if (!getTurn(id)) return jsonError('Turn not found', 404);
   // false = the turn had already settled; still a 200 — cancel is idempotent.
-  return Response.json({ cancelled: cancelTurn(id) });
+  // The bounded wait means a 200 also guarantees the conversation lock is
+  // free (or the grace window elapsed), so a follow-up send won't bounce.
+  return Response.json({ cancelled: await cancelTurnAndWait(id) });
 }

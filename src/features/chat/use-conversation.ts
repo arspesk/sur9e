@@ -56,8 +56,12 @@ export interface ConversationApi {
   draftFiles: File[];
   setDraftFiles: React.Dispatch<React.SetStateAction<File[]>>;
   showEmpty: boolean;
-  send: (text: string, referencedOffers?: number[], files?: File[]) => Promise<void>;
+  /** Resolves true when the message actually went out — sendNow uses the
+   * flag to restore taken queue slots on failure. */
+  send: (text: string, referencedOffers?: number[], files?: File[]) => Promise<boolean>;
   stop: () => Promise<void>;
+  /** Stop the in-flight reply, then dispatch the queued content (issue #105). */
+  sendNow: () => Promise<void>;
   retry: () => void;
   retryConversation: () => void;
   regenerate: () => Promise<void>;
@@ -114,8 +118,8 @@ export function useConversation(opts?: {
   // not (accepted limitation; the mention text itself still tells the model
   // what to read).
   const sendRef = useRef<
-    (text: string, referencedOffers?: number[], files?: File[]) => Promise<void>
-  >(async () => {});
+    (text: string, referencedOffers?: number[], files?: File[]) => Promise<boolean>
+  >(async () => false);
 
   // opts is a fresh object literal on most renders — read the callback through
   // a ref so send()'s useCallback identity doesn't churn every render.
@@ -180,7 +184,13 @@ export function useConversation(opts?: {
   }
 
   const send = useCallback(
-    async (text: string, referencedOffers: number[] = [], filesOverride?: File[]) => {
+    // Returns whether the message actually went out — sendNow restores the
+    // taken queue slots on false so queued content is never lost.
+    async (
+      text: string,
+      referencedOffers: number[] = [],
+      filesOverride?: File[],
+    ): Promise<boolean> => {
       // filesOverride carries the queued-attachments slot on the post-'done'
       // flush; a normal send consumes the live draft chips instead.
       const files = filesOverride ?? draftFiles;
@@ -244,7 +254,7 @@ export function useConversation(opts?: {
             adoptDraftOverride(createdConversationId);
             queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_KEY });
           }
-          return;
+          return false;
         }
         setPendingUserMessageId(res.userMessageId);
         setStreamingTurnId(res.turnId);
@@ -289,14 +299,16 @@ export function useConversation(opts?: {
         // Host hook: Home navigates to /chat once the turn is live. Runs after
         // the turn exists so the destination reattaches to a real stream.
         onAfterSendRef.current?.();
+        return true;
       } catch (err) {
         setPendingUserMessage(null);
         setPendingUserMessageId(null);
         if (err instanceof ChatApiError && err.setupRequired) {
           setSetupRequired(true);
-          return;
+          return false;
         }
         setSendError(err instanceof Error ? err.message : 'Message failed to send.');
+        return false;
       }
     },
     [
@@ -444,16 +456,60 @@ export function useConversation(opts?: {
   const streaming = turn.status === 'streaming' && streamingTurnId != null;
 
   async function handleStop() {
-    const turnId = useChatStore.getState().streamingTurnId;
-    turn.detach();
-    setStreamingTurnId(null);
-    if (turnId) {
+    const store = useChatStore.getState();
+    const turnId = store.streamingTurnId;
+    const conversationId = store.activeConversationId;
+    if (!turnId) {
+      turn.detach();
+      setStreamingTurnId(null);
+      return;
+    }
+    // Stay ATTACHED while cancelling (issue #106): the server emits the
+    // terminal 'cancelled' event through the stream and persists the partial
+    // assistant message synchronously before this POST returns — detaching
+    // first (the old behavior) cut off the terminal event and left the
+    // transcript looking wiped.
+    try {
+      await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, { method: 'POST' });
+    } catch {
+      // Cancel unreachable (server down, or a race with a turn that already
+      // finished) — degrade to detach-only so the composer never sticks.
+      turn.detach();
+      setStreamingTurnId(null);
       clearActiveTurn(turnId);
-      try {
-        await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, { method: 'POST' });
-      } catch {
-        // the turn may already be finished — nothing to surface
-      }
+      return;
+    }
+    setStreamingTurnId(null);
+    clearActiveTurn(turnId); // idempotent with the hook's own error-path clear
+    if (conversationId) {
+      // The partial is provably persisted by now — pull it into the message
+      // list, then retire the live copy so it renders exactly once.
+      await queryClient.invalidateQueries({ queryKey: chatSessionKey(conversationId) });
+    }
+    setPendingUserMessage(null);
+    setPendingUserMessageId(null);
+    turn.reset();
+  }
+
+  /** "Send now" on a queued message (issue #105): consume the queue slots
+   * FIRST (the post-'done' auto-flush uses the same consume-once slots, so a
+   * racing natural finish can't double-send), stop the in-flight reply (the
+   * cancel POST returns only once the conversation lock is free — see
+   * cancelTurnAndWait), then dispatch. A failed dispatch puts the content
+   * back in the slots; the composer's restore effect (not streaming any
+   * more) turns it into an editable draft — never lost. */
+  async function handleSendNow() {
+    const store = useChatStore.getState();
+    const key = conversationKey(store.activeConversationId);
+    const queuedText = store.takeQueuedMessage(key);
+    const queuedFiles = store.takeQueuedAttachments(key);
+    if (queuedText == null && queuedFiles.length === 0) return;
+    await handleStop();
+    const ok = await send(queuedText ?? '', [], queuedFiles);
+    if (!ok) {
+      const s = useChatStore.getState();
+      if (queuedText != null) s.setQueuedMessage(key, queuedText);
+      if (queuedFiles.length > 0) s.setQueuedAttachments(key, queuedFiles);
     }
   }
 
@@ -536,6 +592,7 @@ export function useConversation(opts?: {
     showEmpty,
     send,
     stop: handleStop,
+    sendNow: handleSendNow,
     retry: handleRetry,
     retryConversation: () => {
       void sessionQuery.refetch();
