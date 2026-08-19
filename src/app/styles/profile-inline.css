@@ -17,17 +17,16 @@
   margin: 0 auto;
   width: 100%;
 }
-/* At desktop, leave a right gutter so the fixed .toc-indicator-host
-   (anchored to right:24px) doesn't overlap the form column or the
-   page-head. Rail is hidden ≤1024px so we restore default padding
-   there. */
+/* At desktop, reserve a SYMMETRIC gutter so the fixed .toc-indicator-host
+   (anchored to right:24px) never overlaps while the column stays truly
+   centered (#93 consistency). Rail is hidden ≤1024px so default padding
+   returns there. */
 @media (min-width: 1025px) {
   .profile-content {
-    padding-right: 88px;
-    padding-left: var(--space-6);
+    padding-inline: 88px;
   }
   body[data-screen-label="Profile"] .page-head {
-    padding-right: 88px;
+    padding-inline: 88px;
   }
 }
 /* On desktop the shared TOC rail (.toc-indicator-host, see toc-rail.css)

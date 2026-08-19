@@ -39,8 +39,8 @@ describe('page width tokens (#93 consistency)', () => {
       ],
       ['src/app/styles/chat-page.css', [/var\(--reading-w\)/]],
       ['src/app/styles/analytics-inline.css', [/var\(--page-w\)/]],
-      ['src/app/styles/settings-inline.css', [/var\(--page-w\)/]],
-      ['src/app/styles/profile-inline.css', [/var\(--page-w\)/]],
+      ['src/app/styles/settings-inline.css', [/var\(--page-w\)/, /padding-inline: 88px/]],
+      ['src/app/styles/profile-inline.css', [/var\(--page-w\)/, /padding-inline: 88px/]],
       ['src/app/styles/chrome.css', [/var\(--page-col,\s*var\(--page-w\)\)/]],
     ];
     for (const [file, patterns] of consumers) {
@@ -51,6 +51,9 @@ describe('page width tokens (#93 consistency)', () => {
       expect(css, `${file} still has a raw page cap`).not.toMatch(
         /max-width:\s*(?:820|880|960|1040|1140)px/,
       );
+      // TOC-rail gutters must be symmetric — a lone right gutter skews the
+      // centered column (the settings/profile 32-vs-88 bug).
+      expect(css, `${file} has an asymmetric rail gutter`).not.toMatch(/padding-right:\s*88px/);
     }
   });
 });
