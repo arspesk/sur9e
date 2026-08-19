@@ -65,6 +65,11 @@ export type TurnRecord = {
   startedAt: number;
   child: ChildProcess | null;
   subscribers: Set<(e: ChatTurnEvent) => void>;
+  /** Persists whatever assistant text has streamed so far (no-op when empty,
+   * self-guarded against double writes). Assigned by runAttempt so cancelTurn
+   * can persist the partial SYNCHRONOUSLY at cancel time — the client
+   * refetches on the terminal event, which must not race the child's exit. */
+  persistPartial?: () => void;
 };
 
 /** A ChatTurnEvent minus seq — emitTurnEvent assigns the seq. */
@@ -768,9 +773,12 @@ function runAttempt(ctx: AttemptCtx): void {
     }
   }, TURN_TIMEOUT_MS);
 
+  let partialPersisted = false;
   const persistPartial = (): void => {
+    if (partialPersisted) return;
     const partial = resultText ?? assistantText;
     if (partial.trim()) {
+      partialPersisted = true;
       appendMessage(root, {
         conversationId: opts.conversationId,
         role: 'assistant',
@@ -780,6 +788,9 @@ function runAttempt(ctx: AttemptCtx): void {
       });
     }
   };
+  // cancelTurn persists through this handle; a reseed's second runAttempt
+  // reassigns it so the freshest attempt's text is what gets saved.
+  turn.persistPartial = persistPartial;
 
   child.on('close', (code: number | null) => {
     clearTimeout(killTimer);
@@ -942,6 +953,11 @@ export function cancelTurn(turnId: string): boolean {
   const turn = turns.get(turnId);
   if (!turn || turn.status !== 'running') return false;
   const child = turn.child;
+  // Persist the partial BEFORE the terminal event goes out: the client
+  // refetches the session on that event, and the child may take up to
+  // CANCEL_GRACE_MS to die — persisting from its close handler would race
+  // the refetch and the partial would look wiped (issue #106).
+  turn.persistPartial?.();
   finishError(turn, 'cancelled', { releaseLock: !child });
   if (child) {
     try {
@@ -959,4 +975,25 @@ export function cancelTurn(turnId: string): boolean {
     child.once('close', () => clearTimeout(hardKill));
   }
   return true;
+}
+
+/**
+ * cancelTurn, then wait (bounded) for the cancelled child to truly exit —
+ * i.e. for the FR-5 conversation lock to be released. "Send now" (issue
+ * #105) stops the current reply and immediately starts a new turn; without
+ * this wait the new startTurn would bounce off the lock the dying child
+ * still holds. Waits only when THIS call did the cancelling: a false return
+ * means the turn already settled, whose terminal path released its own lock
+ * (and the lock may already belong to a newer turn we must not wait on).
+ * The cap is CANCEL_GRACE_MS plus a beat for the SIGKILL to land.
+ */
+export async function cancelTurnAndWait(turnId: string): Promise<boolean> {
+  const turn = turns.get(turnId);
+  const cancelled = cancelTurn(turnId);
+  if (!cancelled || !turn) return cancelled;
+  const deadline = Date.now() + CANCEL_GRACE_MS + 1000;
+  while (inFlightConversations.has(turn.conversationId) && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return cancelled;
 }

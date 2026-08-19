@@ -43,6 +43,7 @@ export function ChatComposer({
   onFilesChange,
   onSend,
   onStop,
+  onSendNow,
 }: {
   streaming: boolean;
   /** Keep the draft editable while preventing it from being sent to a thread
@@ -53,6 +54,9 @@ export function ChatComposer({
   onFilesChange: (files: File[]) => void;
   onSend: (text: string, referencedOffers: number[]) => void;
   onStop: () => void;
+  /** Stop the in-flight reply and dispatch the queued content immediately
+   * (issue #105). Only rendered while a reply is actually streaming. */
+  onSendNow?: () => void;
 }) {
   const [value, setValue] = useState('');
   const pushToast = useToastStore(s => s.push);
@@ -298,6 +302,17 @@ export function ChatComposer({
         <div className="chat-composer__queued">
           <div className="chat-composer__queued-row">
             <span>Queued — sends when the reply finishes</span>
+            {streaming && onSendNow && (
+              <button
+                type="button"
+                className="chat-composer__queued-send"
+                aria-label="Send now"
+                title="Stop the current reply and send this now"
+                onClick={onSendNow}
+              >
+                Send now
+              </button>
+            )}
             <button
               type="button"
               className="chat-composer__queued-clear"
