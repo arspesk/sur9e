@@ -96,7 +96,7 @@ function ThinkingRow({ entry, followTs }: { entry: ActivityEntry; followTs?: num
   const hasText = entry.text.trim().length > 0;
   return (
     <>
-      <span className="chat-activity__glyph" aria-hidden="true">
+      <span className="chat-activity__glyph" aria-hidden="true" data-open={open || undefined}>
         <Lightbulb className="chat-activity__dot" />
       </span>
       {hasText ? (

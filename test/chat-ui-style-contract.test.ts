@@ -57,4 +57,12 @@ describe('chat UI style contract', () => {
       /\.chat-activity__think-toggle\[aria-expanded="true"\]\s*\{[\s\S]*?color:\s*var\(--text-2\)/,
     );
   });
+
+  it('lights the thought bulb in accent while expanded', () => {
+    const chatCss = readFileSync(join(root, 'src/app/styles/chat.css'), 'utf8');
+
+    expect(chatCss).toMatch(
+      /\.chat-activity__glyph\[data-open\] \.chat-activity__dot\s*\{[\s\S]*?color:\s*var\(--accent\)/,
+    );
+  });
 });

@@ -186,6 +186,30 @@ describe('ActivityStream', () => {
     expect(container.querySelector('svg.lucide-lightbulb')).toBeTruthy();
   });
 
+  it('lights the bulb while its thought is expanded', () => {
+    const { container } = render(
+      <ActivityStream
+        streaming={false}
+        activity={activity({
+          status: 'done',
+          steps: 1,
+          entries: [
+            { type: 'thinking', text: 'reasoning' },
+            { type: 'tool', name: 'get_tracker', status: 'done' },
+          ],
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+    const lit = () =>
+      container.querySelector('.chat-activity__glyph[data-open] svg.lucide-lightbulb');
+    expect(lit()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Thought/ }));
+    expect(lit()).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Thought/ }));
+    expect(lit()).toBeNull();
+  });
+
   it('renders nothing for a settled burst with no steps and no thinking text', () => {
     const { container } = render(
       <ActivityStream
