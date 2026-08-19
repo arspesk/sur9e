@@ -7,6 +7,14 @@
      monitors. The route skeleton shares this container, so it tracks the
      loaded width automatically. */
   max-width: 1140px;
+  /* .main is a column flex container and the auto inline margins below
+     suppress flex stretch (same trap chat-page.css documents for the
+     transcript) — so this container shrink-wraps to its content. Loaded
+     content is intrinsically wide enough to mostly mask that; the route
+     skeleton's fixed-size bars are not, which collapsed it to ~440px
+     (issue #93). Pin the width so skeleton and loaded page are identical
+     by construction. */
+  width: 100%;
   margin-inline: auto;
   padding: var(--space-6) var(--space-4) var(--space-8);
 }
