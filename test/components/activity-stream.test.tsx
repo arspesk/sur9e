@@ -147,6 +147,45 @@ describe('ActivityStream', () => {
     expect(screen.getByText('the actual reasoning')).toBeTruthy();
   });
 
+  it('renders thinking text as markdown, not literal asterisks', () => {
+    const { container } = render(
+      <ActivityStream
+        streaming={false}
+        activity={activity({
+          status: 'done',
+          steps: 1,
+          entries: [
+            { type: 'thinking', text: '**2 active interviews** need prep' },
+            { type: 'tool', name: 'get_tracker', status: 'done' },
+          ],
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Thought/ }));
+    const strong = container.querySelector('.chat-activity__think-body strong');
+    expect(strong?.textContent).toBe('2 active interviews');
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+  });
+
+  it('marks thinking rows with the Lightbulb icon', () => {
+    const { container } = render(
+      <ActivityStream
+        streaming={false}
+        activity={activity({
+          status: 'done',
+          steps: 1,
+          entries: [
+            { type: 'thinking', text: 'reasoning' },
+            { type: 'tool', name: 'get_tracker', status: 'done' },
+          ],
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+    expect(container.querySelector('svg.lucide-lightbulb')).toBeTruthy();
+  });
+
   it('renders nothing for a settled burst with no steps and no thinking text', () => {
     const { container } = render(
       <ActivityStream
