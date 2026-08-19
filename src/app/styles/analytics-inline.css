@@ -7,17 +7,17 @@
  * this file is analytics-only.
  */
 
-/* Head shares the 960px column of .analytics-content so the h1's left
+/* Head shares the --page-w column of .analytics-content so the h1's left
    edge lines up with the KPI grid (see .page-head--constrained). */
 .analytics-head {
-  --page-col: 960px;
+  --page-col: var(--page-w);
 }
 .analytics-content {
   padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 960px;
+  max-width: var(--page-w);
   margin: 0 auto;
   width: 100%;
 }

@@ -98,6 +98,13 @@
   --space-9: 96px;
   --space-10: 128px;
 
+  /* ─── Page widths (issue #93) — every centered page column shares these,
+     so all routes read as one shell. Full-bleed surfaces (Offers table,
+     Pipeline board) and the report's typographic measures are exempt. ─── */
+  --page-w: 1040px; /* standard page column — home, analytics, settings, profile */
+  --reading-w: 768px; /* conversation column — chat body + composer */
+  --hero-w: 700px; /* home hero composer + starter chips */
+
   /* ─── Icons ─── */
   --icon-size-micro: 10px;
   --icon-size-compact: 12px;

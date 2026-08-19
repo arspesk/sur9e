@@ -77,7 +77,7 @@
 .chat-page__body > * {
   /* Reading column, widened for desktop (issue #93) — the loading shell's
      children share this cap, so skeleton and loaded content stay in step. */
-  max-width: 820px;
+  max-width: var(--reading-w);
   margin-inline: auto;
 }
 /* Capping the scroller itself is harmless, but the auto inline margins above
@@ -182,7 +182,7 @@
 }
 
 .chat-page__composer > * {
-  max-width: 820px; /* keep in step with .chat-page__body > * above */
+  max-width: var(--reading-w); /* keep in step with .chat-page__body > * above */
   margin-inline: auto;
 }
 

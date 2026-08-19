@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 880px;
+  max-width: var(--page-w);
   margin: 0 auto;
   width: 100%;
 }
@@ -82,16 +82,15 @@
 }
 /* At desktop, leave room on the right for the fixed .toc-indicator-host
    so it doesn't overlap the content. Rail lives at right:24px and is
-   ~48px wide, so we reserve ~80px of right gutter. Apply to both the
-   page-head (page title sits in here) and the form container. Below
-   1024px the rail is hidden, so we drop back to default padding. */
+   ~48px wide, so reserve the gutter SYMMETRICALLY (both sides) to keep the column
+   truly centered (#93 consistency). Applies to the page-head and the
+   form container; ≤1024px the rail is hidden and default padding returns. */
 @media (min-width: 1025px) {
   .settings-content {
-    padding-right: 88px;
-    padding-left: var(--space-6);
+    padding-inline: 88px;
   }
   body[data-screen-label="Settings"] .page-head {
-    padding-right: 88px;
+    padding-inline: 88px;
   }
 }
 .settings-content .form-section[id] {
@@ -123,7 +122,7 @@
     gap: var(--space-2);
     margin: 0 auto;
     width: 100%;
-    max-width: 880px;
+    max-width: var(--page-w);
     padding: 0 var(--space-4);
   }
   .settings-theme-row__label {
