@@ -210,6 +210,33 @@ describe('ActivityStream', () => {
     expect(lit()).toBeNull();
   });
 
+  it('keeps a tool detail hugging its name in one cell (no shared name column)', () => {
+    // A burst mixing a short and a long tool name: with a shared `auto` name
+    // column, `read`'s detail would be pushed to the long name's width. Name
+    // and detail must live in ONE cell so the detail always hugs the name.
+    const { container } = render(
+      <ActivityStream
+        streaming={false}
+        activity={activity({
+          status: 'done',
+          steps: 2,
+          entries: [
+            { type: 'tool', name: 'sur9e-app_get_tracker', status: 'done' },
+            { type: 'tool', name: 'read', status: 'done', detail: '/tmp/tool_output.json' },
+          ],
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Worked/ }));
+    const steps = container.querySelectorAll('.chat-activity__step');
+    expect(steps.length).toBe(2);
+    const readStep = steps[1];
+    expect(readStep.querySelector('.chat-activity__name')?.textContent).toBe('read');
+    expect(readStep.querySelector('.chat-activity__detail')?.textContent).toContain(
+      '/tmp/tool_output.json',
+    );
+  });
+
   it('renders nothing for a settled burst with no steps and no thinking text', () => {
     const { container } = render(
       <ActivityStream
