@@ -6,11 +6,11 @@
    when navigating between them. */
 /* Match settings.html — same max-width so both pages center the same way
    under the topbar/page-head and the form columns line up vertically when
-   navigating between them. 880px keeps 2-col form rows readable at desktop
+   navigating between them. --page-w keeps 2-col form rows readable at desktop
    without the markdown editors going edge-to-edge. */
 .profile-content {
   padding: var(--space-4) var(--space-6) var(--space-6);
-  max-width: 880px;
+  max-width: var(--page-w);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

@@ -6,7 +6,7 @@
   /* Desktop-first cap (issue #93): 960px read as a tablet shell on 1440px+
      monitors. The route skeleton shares this container, so it tracks the
      loaded width automatically. */
-  max-width: 1140px;
+  max-width: var(--page-w);
   /* .main is a column flex container and the auto inline margins below
      suppress flex stretch (same trap chat-page.css documents for the
      transcript) — so this container shrink-wraps to its content. Loaded
@@ -139,7 +139,7 @@
   text-wrap: balance;
 }
 .home-hero__composer {
-  max-width: 760px;
+  max-width: var(--hero-w);
   margin-inline: auto;
   text-align: left;
 }
@@ -169,7 +169,7 @@
 }
 
 .home-hero__chips {
-  max-width: 760px;
+  max-width: var(--hero-w);
   margin: var(--space-3) auto 0;
 }
 /* The bubble stacks its starters full-width in a narrow card; the hero has

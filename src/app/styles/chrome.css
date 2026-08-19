@@ -1360,12 +1360,12 @@ html:not(.boot-ready) .rail-scrim {
 }
 /* Pages whose content is a centered max-width column (Settings, Profile,
    Analytics) constrain the head to the same column so the h1's left edge
-   lines up with the container below it. --page-col defaults to the 880px
+   lines up with the container below it. --page-col defaults to the --page-w
    form column; pages with a wider column override it (see .analytics-head).
    Full-bleed pages (Offers table, Pipeline board) keep the plain .page-head. */
 .page-head--constrained {
   width: 100%;
-  max-width: var(--page-col, 880px);
+  max-width: var(--page-col, var(--page-w));
   margin: 0 auto;
 }
 

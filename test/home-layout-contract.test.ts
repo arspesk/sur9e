@@ -20,3 +20,37 @@ describe('home layout contract (#93)', () => {
     );
   });
 });
+
+describe('page width tokens (#93 consistency)', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf-8');
+
+  it('tokens.css owns the three shared page widths', () => {
+    const tokens = read('src/app/styles/tokens.css');
+    expect(tokens).toMatch(/--page-w:\s*1040px/);
+    expect(tokens).toMatch(/--reading-w:\s*768px/);
+    expect(tokens).toMatch(/--hero-w:\s*700px/);
+  });
+
+  it('every centered page column consumes the shared tokens, never a raw cap', () => {
+    const consumers: Array<[string, RegExp[]]> = [
+      [
+        'src/app/styles/home-inline.css',
+        [/\.home\s*\{[^}]*max-width:\s*var\(--page-w\)/, /var\(--hero-w\)/],
+      ],
+      ['src/app/styles/chat-page.css', [/var\(--reading-w\)/]],
+      ['src/app/styles/analytics-inline.css', [/var\(--page-w\)/]],
+      ['src/app/styles/settings-inline.css', [/var\(--page-w\)/]],
+      ['src/app/styles/profile-inline.css', [/var\(--page-w\)/]],
+      ['src/app/styles/chrome.css', [/var\(--page-col,\s*var\(--page-w\)\)/]],
+    ];
+    for (const [file, patterns] of consumers) {
+      const css = read(file);
+      for (const pattern of patterns)
+        expect(css, `${file} should match ${pattern}`).toMatch(pattern);
+      // No page-column magic numbers left behind in these files.
+      expect(css, `${file} still has a raw page cap`).not.toMatch(
+        /max-width:\s*(?:820|880|960|1040|1140)px/,
+      );
+    }
+  });
+});
