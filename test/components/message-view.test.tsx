@@ -92,11 +92,17 @@ describe('MessageView', () => {
       { seq: 5, type: 'confirm', token: 'tok1', summary: 'Approve X', meta: '~$0.10' },
       { seq: 6, type: 'usage', costUsd: 0.42, inputTokens: 1, outputTokens: 2, model: 'm' },
     ];
-    const { container, getByText } = render(<MessageView message={assistantMsg({ events })} />);
+    const { container, getByText, getByRole } = render(
+      <MessageView message={assistantMsg({ events })} />,
+    );
     expect(container.querySelector('.chat-md')?.textContent).toContain('Working on it.');
-    expect(container.querySelector('.chat-thinking')).toBeTruthy();
-    expect(container.querySelector('.chat-tool')?.textContent).toContain('Search');
+    // thinking + tool + stage fold into ONE activity: "Worked · 2 steps"
+    // (the tool call and the stage — thinking is not a counted step).
+    const summary = getByRole('button', { name: /Worked · 2 steps/ });
+    fireEvent.click(summary);
+    expect(getByText('Search')).toBeTruthy();
     expect(getByText('Evaluating')).toBeTruthy();
+    expect(getByText(/Thought/)).toBeTruthy();
     expect(container.querySelector('.chat-confirm')).toBeTruthy();
     expect(getByText('· $0.42')).toBeTruthy();
   });
@@ -185,16 +191,30 @@ describe('MessageView', () => {
 });
 
 describe('FoldedEventList', () => {
-  it('marks only the last item as streaming for the thinking block', () => {
+  it('shimmers only the still-running activity, never a settled one', () => {
     const items = [
-      { kind: 'thinking' as const, text: 'first' },
-      { kind: 'thinking' as const, text: 'second' },
+      {
+        kind: 'activity' as const,
+        status: 'done' as const,
+        steps: 1,
+        failed: 0,
+        entries: [{ type: 'tool' as const, name: 'get_tracker', status: 'done' as const }],
+      },
+      { kind: 'text' as const, markdown: 'so far…' },
+      {
+        kind: 'activity' as const,
+        status: 'running' as const,
+        steps: 1,
+        failed: 0,
+        entries: [{ type: 'tool' as const, name: 'get_report', status: 'running' as const }],
+      },
     ];
     const { container } = render(<FoldedEventList items={items} streaming={true} />);
-    const blocks = container.querySelectorAll('.chat-thinking');
+    const blocks = container.querySelectorAll('.chat-activity');
     expect(blocks.length).toBe(2);
-    // Streaming shimmer label only applies to the last block.
-    expect(blocks[0].querySelector('.chat-thinking__label--shimmer')).toBeNull();
-    expect(blocks[1].querySelector('.chat-thinking__label--shimmer')).toBeTruthy();
+    // The settled burst shows its quiet summary; only the running one shimmers.
+    expect(blocks[0].querySelector('.chat-activity__label--shimmer')).toBeNull();
+    expect(blocks[0].textContent).toContain('Worked · 1 step');
+    expect(blocks[1].querySelector('.chat-activity__label--shimmer')).toBeTruthy();
   });
 });

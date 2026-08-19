@@ -815,6 +815,34 @@ describe('cancelTurn', () => {
   });
 });
 
+describe('event ts stamping', () => {
+  it('stamps streamed tool events with a wall-clock ts (activity-stream duration)', async () => {
+    const toolLine = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'get_tracker', input: {} }] },
+    });
+    _setSpawnImpl(
+      () =>
+        fakeChild(c => {
+          c.stdout.emit(
+            'data',
+            Buffer.from(`${initLine('sess-1')}\n${toolLine}\n${resultLine('done')}\n`),
+          );
+          c.emit('close', 0);
+        }) as never,
+    );
+    const conv = createConversation(root);
+    const before = Date.now();
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hello' });
+    await waitForTerminal(turnId);
+    const tool = getTurn(turnId)!.events.find(e => e.type === 'tool');
+    expect(tool).toBeDefined();
+    const ts = (tool as { ts?: unknown }).ts;
+    expect(typeof ts).toBe('number');
+    expect(ts as number).toBeGreaterThanOrEqual(before);
+  });
+});
+
 describe('subscribeTurn', () => {
   it('replays only events with seq > afterSeq', async () => {
     _setSpawnImpl(() => fakeChild(c => happyStream(c, 'sess-1', 'hey')) as never);

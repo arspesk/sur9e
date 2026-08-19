@@ -119,12 +119,19 @@ export function ChatTranscript({
           <FoldedEventList items={liveItems} streaming={streaming ?? false} onRetry={onRetry} />
         </div>
       )}
-      {/* Keep the working indicator visible after the first output too: while the
-          model runs tool calls (e.g. fetching tracker/profile) between text
-          chunks it produces no visible content, so without this the reply looks
-          stalled mid-generation. Mutually exclusive with the pre-content one
-          above (length === 0 vs > 0). */}
-      {streaming && liveItems != null && liveItems.length > 0 && <ResponseIndicator />}
+      {/* Keep the working indicator visible after the first output too: while
+          the model streams text and pauses, nothing on screen says it's still
+          alive. Suppressed when the trailing item is a RUNNING activity — its
+          own live line is the liveness signal, and two shimmering lines would
+          fight (issue #103 rework). Mutually exclusive with the pre-content
+          indicator above (length === 0 vs > 0). */}
+      {streaming &&
+        liveItems != null &&
+        liveItems.length > 0 &&
+        !(() => {
+          const last = liveItems[liveItems.length - 1];
+          return last?.kind === 'activity' && last.status === 'running';
+        })() && <ResponseIndicator />}
       {!atBottom && (
         <button
           type="button"
@@ -155,9 +162,11 @@ const RESPONDING_WORDS = [
   'Lining things up',
 ];
 
-/** Dead-air filler between send and the first streamed event: animated
- * spinner + a rotating word from the pool. Purely visual (aria-hidden) —
- * the card's sr-only live region already announces "AI is replying". */
+/** Dead-air filler between send and the first streamed event: a rotating
+ * word from the pool, in the same shimmer treatment as the activity stream's
+ * live line (one "working" motion across the product — no spinner). Purely
+ * visual (aria-hidden) — the card's sr-only live region already announces
+ * "AI is replying". */
 function ResponseIndicator() {
   const [word, setWord] = useState(
     () => RESPONDING_WORDS[Math.floor(Math.random() * RESPONDING_WORDS.length)],
@@ -172,8 +181,7 @@ function ResponseIndicator() {
   }, []);
   return (
     <div className="chat-responding" aria-hidden="true">
-      <span className="chat-responding__spinner" />
-      <span className="chat-responding__word">{word}…</span>
+      <span className="chat-activity__label chat-activity__label--shimmer">{word}…</span>
     </div>
   );
 }

@@ -86,9 +86,14 @@ export const ChatActionLink = z.object({
 });
 export type ChatActionLink = z.infer<typeof ChatActionLink>;
 
+// Wall-clock ms, stamped by emitTurnEvent on thinking/tool/stage events so
+// the activity stream can show a real duration on settled turns. Optional so
+// events persisted before this field still parse (they fold with no span).
+const ts = z.number().optional();
+
 export const ChatTurnEvent = z.discriminatedUnion('type', [
   z.object({ seq, type: z.literal('text-delta'), text: z.string() }),
-  z.object({ seq, type: z.literal('thinking'), text: z.string() }),
+  z.object({ seq, type: z.literal('thinking'), text: z.string(), ts }),
   z.object({
     seq,
     type: z.literal('tool'),
@@ -98,11 +103,12 @@ export const ChatTurnEvent = z.discriminatedUnion('type', [
     // Provider call id (claude tool_use_id, codex item.id, opencode callID).
     // Optional so tool events persisted before this field still parse. When
     // present, foldEvents pairs a 'done'/'error' event to the exact 'start'
-    // it closes by id — so a tool chip resolves its spinner to ✓/✕ even if the
+    // it closes by id — so a running entry resolves to ✓/✕ even if the
     // close event carries no name (claude's tool_result lines don't).
     id: z.string().optional(),
+    ts,
   }),
-  z.object({ seq, type: z.literal('stage'), label: z.string() }),
+  z.object({ seq, type: z.literal('stage'), label: z.string(), ts }),
   z.object({ seq, type: z.literal('ui'), action: z.literal('navigate'), path: z.string() }),
   z.object({
     seq,

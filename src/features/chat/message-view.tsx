@@ -4,11 +4,10 @@ import { Check, Copy, FileText } from 'lucide-react';
 import { type Ref, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/primitives';
 import { type ChatMessage, ChatTurnEvent } from '@/lib/schemas/chat';
+import { ActivityStream } from './activity-stream';
 import { renderChatMarkdown } from './chat-markdown';
 import { ConfirmCard } from './confirm-card';
 import { type FoldedItem, foldEvents } from './fold-events';
-import { ThinkingBlock } from './thinking-block';
-import { ToolCard } from './tool-card';
 
 /** message.events is stored loose (unknown[] | null, see the ChatMessage
  * schema doc comment) — re-parse each element through ChatTurnEvent and
@@ -121,31 +120,12 @@ export function FoldedEventList({
   return (
     <>
       {items.map((item, i) => {
-        const isLast = i === items.length - 1;
         switch (item.kind) {
           case 'text':
             // Fold order is stable within a turn — index keys are safe.
             return <ChatMarkdownView key={`t${i}`} markdown={item.markdown} />;
-          case 'thinking':
-            return (
-              <ThinkingBlock key={`th${i}`} text={item.text} streaming={streaming && isLast} />
-            );
-          case 'tools':
-            return (
-              <ToolCard
-                key={`tool${i}`}
-                name={item.name}
-                count={item.count}
-                status={item.status}
-                detail={item.detail}
-              />
-            );
-          case 'stage':
-            return (
-              <div key={`s${i}`} className="chat-stage">
-                {item.label}
-              </div>
-            );
+          case 'activity':
+            return <ActivityStream key={`a${i}`} activity={item} streaming={streaming} />;
           case 'confirm':
             return (
               <ConfirmCard
