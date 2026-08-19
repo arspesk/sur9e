@@ -184,7 +184,16 @@ export function subscribeTurn(
 export function emitTurnEvent(turnId: string, event: ChatTurnEventPayload): ChatTurnEvent | null {
   const turn = turns.get(turnId);
   if (!turn) return null;
-  const full = { ...event, seq: ++turn.seq } as ChatTurnEvent;
+  // Stamp activity events (thinking/tool/stage) with wall-clock ms so the
+  // activity stream can show a real duration on settled turns. Only these
+  // types carry ts in the schema; events persisted before the field fold
+  // with no span.
+  const stamp =
+    (event.type === 'thinking' || event.type === 'tool' || event.type === 'stage') &&
+    event.ts == null
+      ? { ts: Date.now() }
+      : null;
+  const full = { ...event, ...stamp, seq: ++turn.seq } as ChatTurnEvent;
   turn.events.push(full);
   for (const fn of turn.subscribers) {
     try {

@@ -207,8 +207,15 @@ for (const viewport of VIEWPORTS) {
       await page.keyboard.press('Enter');
 
       await expect(dialog.getByText('3 offers')).toBeVisible({ timeout: 10_000 });
+      // The activity stream folds the stage + 4 tool calls into ONE summary
+      // line; step names are visible only behind the disclosure (#103).
+      const activity = dialog.getByRole('button', { name: /Worked · 5 steps/ });
+      await expect(activity).toBeVisible();
+      await activity.click();
+      await expect(dialog.getByText('reading tracker')).toBeVisible();
       await expect(dialog.getByText('get_tracker')).toBeVisible();
-      await expect(dialog.getByText('mcp__playwright__browser_navigate')).toBeVisible();
+      // mcp__<server>__ prefixes are stripped in the timeline rows.
+      await expect(dialog.getByText('browser_navigate', { exact: true })).toBeVisible();
       await expect(dialog.getByText('playwright.browser_snapshot')).toBeVisible();
       await expect(dialog.getByText('playwright_browser_network_requests')).toBeVisible();
       await expect(dialog.getByText('· $0.14')).toBeVisible();

@@ -29,77 +29,143 @@ describe('foldEvents', () => {
     expect(items).toEqual([{ kind: 'text', markdown: 'hello world' }]);
   });
 
-  it('groups consecutive same-name tool calls with ×N count and terminal status', () => {
+  it('folds contiguous thinking, tool, and stage events into ONE activity item', () => {
     const items = foldEvents([
-      e({ type: 'tool', name: 'get_report', status: 'start' }, 1),
-      e({ type: 'tool', name: 'get_report', status: 'done' }, 2),
-      e({ type: 'tool', name: 'get_report', status: 'start' }, 3),
-      e({ type: 'tool', name: 'get_report', status: 'done' }, 4),
-      e({ type: 'tool', name: 'get_tracker', status: 'start' }, 5),
+      e({ type: 'thinking', text: 'planning' }, 1),
+      e({ type: 'tool', name: 'get_tracker', status: 'start' }, 2),
+      e({ type: 'tool', name: 'get_tracker', status: 'done' }, 3),
+      e({ type: 'stage', label: 'reading tracker' }, 4),
+      e({ type: 'tool', name: 'get_report', status: 'start', detail: '#1841' }, 5),
     ]);
-    expect(items).toEqual([
-      { kind: 'tools', name: 'get_report', count: 2, status: 'done', detail: undefined },
-      { kind: 'tools', name: 'get_tracker', count: 1, status: 'running', detail: undefined },
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'activity',
+      status: 'running',
+      steps: 3, // 2 tool calls + 1 stage — thinking is not a step
+      failed: 0,
+    });
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries).toEqual([
+      { type: 'thinking', text: 'planning' },
+      { type: 'tool', name: 'get_tracker', status: 'done', detail: undefined },
+      { type: 'stage', label: 'reading tracker' },
+      { type: 'tool', name: 'get_report', status: 'running', detail: '#1841' },
     ]);
   });
 
-  it('a tool done arriving after interleaved text closes the earlier group', () => {
+  it('keeps every tool call as its own entry — repeated names never merge into ×N', () => {
+    const items = foldEvents([
+      e({ type: 'tool', name: 'get_report', status: 'start', detail: '#1841' }, 1),
+      e({ type: 'tool', name: 'get_report', status: 'done' }, 2),
+      e({ type: 'tool', name: 'get_report', status: 'start', detail: '#1852' }, 3),
+    ]);
+    expect(items).toHaveLength(1);
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries).toEqual([
+      { type: 'tool', name: 'get_report', status: 'done', detail: '#1841' },
+      { type: 'tool', name: 'get_report', status: 'running', detail: '#1852' },
+    ]);
+  });
+
+  it('text closes the burst; a later tool done still resolves its entry in the earlier activity', () => {
     const items = foldEvents([
       e({ type: 'tool', name: 'get_report', status: 'start' }, 1),
       e({ type: 'text-delta', text: 'Reading…' }, 2),
       e({ type: 'tool', name: 'get_report', status: 'done' }, 3),
     ]);
-    expect(items[0]).toEqual({
-      kind: 'tools',
-      name: 'get_report',
-      count: 1,
-      status: 'done',
-      detail: undefined,
-    });
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ kind: 'activity', status: 'done', steps: 1 });
     expect(items[1]).toEqual({ kind: 'text', markdown: 'Reading…' });
   });
 
   it('pairs a close event to its open call by id (name-less claude tool_result)', () => {
     // Claude's tool_result carries only the id, never the name — id pairing is
-    // the only way the running chip can resolve.
+    // the only way the running entry can resolve.
     const items = foldEvents([
       e({ type: 'tool', name: 'WebFetch', status: 'start', id: 'toolu_1' }, 1),
       e({ type: 'text-delta', text: 'fetching…' }, 2),
       e({ type: 'tool', name: '', status: 'done', id: 'toolu_1' }, 3),
     ]);
-    expect(items[0]).toMatchObject({ kind: 'tools', name: 'WebFetch', count: 1, status: 'done' });
+    expect(items[0]).toMatchObject({ kind: 'activity', status: 'done' });
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries[0]).toMatchObject({ type: 'tool', name: 'WebFetch', status: 'done' });
   });
 
-  it('resolves the correct chip when two different tools are open in parallel (id match)', () => {
+  it('resolves the correct entry when two different tools are open in parallel (id match)', () => {
     const items = foldEvents([
       e({ type: 'tool', name: 'Read', status: 'start', id: 'a' }, 1),
       e({ type: 'tool', name: 'Grep', status: 'start', id: 'b' }, 2),
       // Grep finishes first — id pairing must resolve Grep, not Read.
       e({ type: 'tool', name: '', status: 'done', id: 'b' }, 3),
     ]);
-    expect(items.find(i => i.kind === 'tools' && i.name === 'Grep')).toMatchObject({
-      status: 'done',
-    });
-    expect(items.find(i => i.kind === 'tools' && i.name === 'Read')).toMatchObject({
-      status: 'running',
-    });
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries).toEqual([
+      { type: 'tool', name: 'Read', status: 'running', detail: undefined },
+      { type: 'tool', name: 'Grep', status: 'done', detail: undefined },
+    ]);
+    expect(activity.status).toBe('running');
   });
 
-  it('materializes an already-resolved chip when a close has no matching open (opencode completed-only)', () => {
+  it('materializes an already-resolved entry when a close has no matching open (opencode completed-only)', () => {
     // `opencode run --format json` emits a tool part once, already completed —
-    // there is no preceding start, so the folder must still surface a ✓ chip.
+    // there is no preceding start, so the folder must still surface the step.
     const items = foldEvents([e({ type: 'tool', name: 'bash', status: 'done', id: 'call_1' }, 1)]);
-    expect(items).toEqual([
-      { kind: 'tools', name: 'bash', count: 1, status: 'done', detail: undefined },
-    ]);
+    expect(items[0]).toMatchObject({ kind: 'activity', status: 'done', steps: 1, failed: 0 });
   });
 
-  it('a tool error marks the group status error', () => {
+  it('a tool error marks the activity status error and counts toward failed', () => {
     const items = foldEvents([
-      e({ type: 'tool', name: 'start_job', status: 'start' }, 1),
-      e({ type: 'tool', name: 'start_job', status: 'error' }, 2),
+      e({ type: 'tool', name: 'get_report', status: 'start' }, 1),
+      e({ type: 'tool', name: 'get_report', status: 'done' }, 2),
+      e({ type: 'tool', name: 'start_job', status: 'start' }, 3),
+      e({ type: 'tool', name: 'start_job', status: 'error' }, 4),
     ]);
-    expect(items[0]).toMatchObject({ kind: 'tools', name: 'start_job', status: 'error' });
+    expect(items[0]).toMatchObject({ kind: 'activity', status: 'error', steps: 2, failed: 1 });
+  });
+
+  it('a confirm card breaks the burst into two activities', () => {
+    const items = foldEvents([
+      e({ type: 'tool', name: 'get_tracker', status: 'start' }, 1),
+      e({ type: 'tool', name: 'get_tracker', status: 'done' }, 2),
+      e({ type: 'confirm', token: 'tok', summary: 'Set status?', meta: '' }, 3),
+      e({ type: 'tool', name: 'set_status', status: 'start' }, 4),
+    ]);
+    expect(items.map(i => i.kind)).toEqual(['activity', 'confirm', 'activity']);
+  });
+
+  it('a tool between thinking runs splits the thinking into two entries', () => {
+    const items = foldEvents([
+      e({ type: 'thinking', text: 'first ' }, 1),
+      e({ type: 'thinking', text: 'thought' }, 2),
+      e({ type: 'tool', name: 'get_tracker', status: 'done' }, 3),
+      e({ type: 'thinking', text: 'second thought' }, 4),
+    ]);
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries.map(en => en.type)).toEqual(['thinking', 'tool', 'thinking']);
+    expect(activity.entries[0]).toMatchObject({ text: 'first thought' });
+    expect(activity.entries[2]).toMatchObject({ text: 'second thought' });
+  });
+
+  it('carries event timestamps onto entries and derives the activity span', () => {
+    const items = foldEvents([
+      e({ type: 'thinking', text: 'hmm', ts: 1000 }, 1),
+      e({ type: 'tool', name: 'get_tracker', status: 'start', ts: 3000 }, 2),
+      e({ type: 'tool', name: 'get_tracker', status: 'done', ts: 42000 }, 3),
+    ]);
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.startTs).toBe(1000);
+    expect(activity.endTs).toBe(42000);
+    expect(activity.entries[0]).toMatchObject({ type: 'thinking', ts: 1000 });
+  });
+
+  it('derives no span when events carry no timestamps (pre-migration data)', () => {
+    const items = foldEvents([
+      e({ type: 'tool', name: 'get_tracker', status: 'start' }, 1),
+      e({ type: 'tool', name: 'get_tracker', status: 'done' }, 2),
+    ]);
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.startTs).toBeUndefined();
+    expect(activity.endTs).toBeUndefined();
   });
 
   it('confirm-resolved flips the matching confirm item by token', () => {
@@ -248,7 +314,7 @@ describe('foldEvents', () => {
     ]);
   });
 
-  it('thinking runs merge; stage/usage/error pass through; ui and done are dropped', () => {
+  it('stage/thinking join the activity; usage/error pass through; ui and done are dropped', () => {
     const items = foldEvents([
       e({ type: 'stage', label: 'reading tracker' }, 1),
       e({ type: 'thinking', text: 'hmm ' }, 2),
@@ -258,9 +324,13 @@ describe('foldEvents', () => {
       e({ type: 'error', message: 'boom' }, 6),
       e({ type: 'done', messageId: 'm1' }, 7),
     ]);
-    expect(items).toEqual([
-      { kind: 'stage', label: 'reading tracker' },
-      { kind: 'thinking', text: 'hmm okay' },
+    expect(items[0]).toMatchObject({ kind: 'activity', steps: 1 }); // the stage
+    const activity = items[0] as Extract<(typeof items)[number], { kind: 'activity' }>;
+    expect(activity.entries).toEqual([
+      { type: 'stage', label: 'reading tracker' },
+      { type: 'thinking', text: 'hmm okay' },
+    ]);
+    expect(items.slice(1)).toEqual([
       { kind: 'usage', costUsd: 0.14 },
       { kind: 'error', message: 'boom' },
     ]);

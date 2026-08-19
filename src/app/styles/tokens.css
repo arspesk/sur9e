@@ -24,6 +24,7 @@
     --text-3
   ); /* WCAG one-off: tertiary text at small sizes on --surface — dark theme lifts it (see dark block) */
   --meta: #696969; /* Captions, metadata — #696969 ≈ 4.6:1 on --bg #faf9f6 */
+  --shimmer-hi: #000000; /* Shimmer sweep peak — the flash over text-3; pure black on light, pure white on dark */
 
   /* ─── Border ─── */
   --border: #dedbd6; /* Warm border (oat-tinted, never cool gray) */
@@ -281,6 +282,7 @@
   --text-muted: #858590;
   --text-3-strong: #9a9aa6; /* WCAG one-off: --text-3 #8a8a92 ≈ 4.96:1 on --surface #1c1c1f sat at the AA floor at 13px — lifted to ≈6.1:1 */
   --meta: #7a7a84; /* Captions, metadata — #7a7a84 ≈ 4.6:1 on dark --bg #0a0a0b */
+  --shimmer-hi: #ffffff; /* Shimmer sweep peak on dark */
 
   /* ─── Border ─── */
   --border: #2a2a2e;

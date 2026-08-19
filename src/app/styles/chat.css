@@ -10,23 +10,104 @@
    6 session menu · 8 tool/thinking/confirm · 9 transcript + markdown ·
    10 composer + slash · 12 empty/setup states + reduced motion. */
 
-/* ── 8: tool chip ── */
-.chat-tool {
+/* ── 8: activity stream (issue #103 rework) ──
+   One element for thinking + tool calls + stages: a shimmering live line
+   while the model works, a quiet summary line at rest, the step timeline on
+   expand. Replaces the per-call tool chips and the thinking block. */
+.chat-activity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 100%;
+}
+.chat-activity__line {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-2);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+  min-height: 20px;
 }
-.chat-tool__spin {
-  color: var(--accent);
+.chat-activity__line:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.chat-activity__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Narrow-band sweep: the flash covers ~1/5 of the text and peaks at the
+   dedicated highlight token (pure black on light, pure white on dark) — a
+   wide text-3→text ramp reads as a faint tide, not motion. linear so the
+   sweep never stalls at the loop edges. */
+.chat-activity__label--shimmer {
+  background: linear-gradient(90deg, var(--text-3) 40%, var(--shimmer-hi) 50%, var(--text-3) 60%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chatShimmer var(--dur-loop) linear infinite;
+}
+@keyframes chatShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+/* Shimmer paints text transparent — inline icons keep a steady tone. */
+.chat-activity__label--shimmer svg {
+  color: var(--text-3);
+}
+.chat-activity__sec {
+  opacity: 0.75;
   flex-shrink: 0;
+}
+/* ListChevronsUpDown is an up/down affordance: NOT rotated on expand (a
+   directional glyph flipped just reads as broken — same rule as the old
+   thinking caret). Open state is tonal. */
+.chat-activity__caret {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition:
+    opacity var(--dur-snappy),
+    color var(--dur-snappy);
+}
+.chat-activity__line[aria-expanded="true"] .chat-activity__caret {
+  color: var(--text-2);
+  opacity: 1;
+}
+.chat-activity__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.chat-activity__glyph svg {
+  width: var(--icon-size-micro);
+  height: var(--icon-size-micro);
+  stroke-width: var(--icon-stroke-default);
+}
+.chat-activity__glyph--ok {
+  color: var(--st-success);
+}
+.chat-activity__glyph--err {
+  color: var(--st-danger);
+}
+.chat-activity__spin {
+  color: var(--accent);
   animation: chatSpin 1s linear infinite;
 }
 @keyframes chatSpin {
@@ -34,85 +115,63 @@
     transform: rotate(360deg);
   }
 }
-.chat-tool__glyph--ok {
-  color: var(--st-success);
+.chat-activity__dot {
+  color: var(--text-muted);
 }
-.chat-tool__glyph--err {
-  color: var(--st-danger);
+.chat-activity__timeline {
+  margin: 4px 0 2px 4px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  gap: 4px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  align-items: baseline;
+  max-width: 100%;
 }
-.chat-tool__glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-.chat-tool__glyph svg {
-  width: var(--icon-size-micro);
-  height: var(--icon-size-micro);
-  stroke-width: var(--icon-stroke-default);
-}
-.chat-tool__name {
+.chat-activity__name {
+  color: var(--text-2);
   white-space: nowrap;
 }
-.chat-tool__detail {
+.chat-activity__detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
-
-/* ── 8: thinking block ── */
-.chat-thinking__toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.chat-activity__arrow {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+.chat-activity__stage {
+  color: var(--text-3);
+}
+.chat-activity__think-toggle {
   background: transparent;
   border: 0;
   padding: 0;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--text-3);
+  text-align: left;
+  white-space: nowrap;
+}
+button.chat-activity__think-toggle {
   cursor: pointer;
 }
-.chat-thinking__toggle:focus-visible {
+button.chat-activity__think-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.chat-thinking__label--shimmer {
-  background: linear-gradient(90deg, var(--text-3) 0%, var(--text) 50%, var(--text-3) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: chatShimmer var(--dur-loop) var(--ease-entrance) infinite;
-}
-@keyframes chatShimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-/* An icon, not a text glyph: sized in px, and NOT rotated on expand — the
-   wrap glyph is directional, so flipping it just reads as broken. Open state
-   is signalled by weight instead. */
-.chat-thinking__caret {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  color: var(--text-3);
-  opacity: 0.7;
-  transition:
-    opacity var(--dur-snappy),
-    color var(--dur-snappy);
-}
-.chat-thinking__toggle[aria-expanded="true"] .chat-thinking__caret {
-  color: var(--text-2);
-  opacity: 1;
-}
-.chat-thinking__body {
-  margin-top: 4px;
+.chat-activity__think-body {
+  grid-column: 1 / 4;
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-3);
   border-left: 2px solid var(--border);
@@ -196,11 +255,16 @@
   color: var(--st-danger);
 }
 @media (prefers-reduced-motion: reduce) {
-  .chat-tool__spin,
-  .chat-thinking__label--shimmer,
-  .chat-thinking__caret {
+  .chat-activity__spin,
+  .chat-activity__label--shimmer,
+  .chat-activity__caret {
     animation: none !important;
     transition: none !important;
+  }
+  /* With the sweep frozen, restore a readable solid color. */
+  .chat-activity__label--shimmer {
+    background: none;
+    color: var(--text-3);
   }
 }
 
@@ -2088,33 +2152,8 @@ body:has(.filter-panel.open) .chat-bubble {
   color: var(--text-3);
   font-size: 12.5px;
 }
-.chat-responding__spinner {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  border: 1.5px solid var(--rule);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: chatJobsSpin 1s linear infinite;
-}
-.chat-responding__word {
-  animation: chatRespondingPulse 2s ease-in-out infinite;
-}
-@keyframes chatRespondingPulse {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .chat-responding__spinner,
-  .chat-responding__word {
-    animation: none !important;
-  }
-}
+/* The word itself renders through .chat-activity__label--shimmer — one
+   "working" motion across the product, no spinner (issue #103 rework). */
 
 /* ── Session rows: actions hidden until hover/focus (compact) ── */
 .chat-session-menu__row .chat-session-menu__icon {
