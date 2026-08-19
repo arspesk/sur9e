@@ -128,6 +128,9 @@ describe('GET /api/applications — filtered compact shape', () => {
       '?min_score=abc',
       '?status=bogus',
       '?since=07-01-2026',
+      // Format-valid but calendar-impossible — regex alone would accept it.
+      '?since=2026-02-30',
+      '?until=2026-13-01',
       '?limit=two',
       '?fields=full',
     ]) {

@@ -14,6 +14,18 @@ import { loadApplicationsWithSummary, normalizeStatus } from './applications';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** YYYY-MM-DD that is also a real calendar date — the regex alone admits
+ * impossible values like 2026-02-30, which would then silently filter as
+ * plain string comparisons. The UTC round-trip rejects anything Date had
+ * to normalize. */
+const isoDate = z
+  .string()
+  .regex(DATE_RE, 'expected YYYY-MM-DD')
+  .refine(value => {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, 'not a real calendar date');
+
 /**
  * URL query params recognized by GET /api/applications. Presence of ANY of
  * these keys switches the route from the legacy full-summary payload to the
@@ -45,8 +57,8 @@ export const TrackerQueryParams = z.object({
   company: z.string().optional(),
   role: z.string().optional(),
   min_score: z.coerce.number().optional(),
-  since: z.string().regex(DATE_RE, 'expected YYYY-MM-DD').optional(),
-  until: z.string().regex(DATE_RE, 'expected YYYY-MM-DD').optional(),
+  since: isoDate.optional(),
+  until: isoDate.optional(),
   limit: z.coerce.number().int().optional(),
   offset: z.coerce.number().int().optional(),
   fields: z.literal('compact').optional(),

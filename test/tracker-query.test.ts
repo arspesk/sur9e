@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { queryApplications } from '@/lib/server/tracker-query';
+import { queryApplications, TrackerQueryParams } from '@/lib/server/tracker-query';
 
 const TRACKER_HEADER = `# Applications Tracker
 
@@ -260,5 +260,20 @@ describe('queryApplications — pagination', () => {
     expect(clamped.count).toBe(1);
     const clampedHigh = queryApplications(root, { limit: 5000 });
     expect(clampedHigh.count).toBe(205);
+  });
+});
+
+describe('TrackerQueryParams — date validation', () => {
+  it('rejects format-valid but calendar-impossible dates', () => {
+    for (const value of ['2026-02-30', '2026-13-01', '2025-04-31', '2026-00-10']) {
+      expect(TrackerQueryParams.safeParse({ since: value }).success, value).toBe(false);
+      expect(TrackerQueryParams.safeParse({ until: value }).success, value).toBe(false);
+    }
+  });
+
+  it('accepts real calendar dates, including leap day', () => {
+    for (const value of ['2026-07-01', '2024-02-29', '2026-12-31']) {
+      expect(TrackerQueryParams.safeParse({ since: value }).success, value).toBe(true);
+    }
   });
 });
