@@ -29,6 +29,20 @@ const TURN_ID = process.env.SUR9E_CHAT_TURN_ID ?? '';
 const PROTOCOL_VERSION = '2025-06-18';
 const SERVER_INFO = { name: 'sur9e-app', version: '1.0.0' };
 
+// Keep in sync with CANONICAL_STATUSES in src/lib/server/applications.ts.
+const CANONICAL_STATUSES = [
+  'screened',
+  'evaluated',
+  'applied',
+  'responded',
+  'interview',
+  'offer',
+  'rejected',
+  'discarded',
+];
+
+const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
+
 const READ_TOOLS = [
   {
     name: 'list_modes',
@@ -52,8 +66,60 @@ const READ_TOOLS = [
   {
     name: 'get_tracker',
     description:
-      'List every tracked application: num, date, company, role, score, status, source URL, and report summary. Read-only.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      'List tracked applications as compact rows: num, date, company, role, score, status, url, ' +
+      'location, work_mode, seniority, posted. The tracker can hold thousands of rows — ALWAYS ' +
+      'filter server-side with the arguments below instead of fetching everything and filtering ' +
+      'yourself. Returns { entries, total, count, next_offset }; pages default to 200 rows — when ' +
+      'next_offset is not null, call again with offset set to it for the next page. For full ' +
+      'detail on one application (report markdown etc.), use get_report. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', enum: CANONICAL_STATUSES },
+          description: 'Keep only rows whose canonical status is one of these',
+        },
+        location: {
+          type: 'string',
+          description: 'Case-insensitive substring match on the offer location',
+        },
+        work_mode: {
+          type: 'string',
+          description: 'Exact work mode (case-insensitive), e.g. Remote, Hybrid, On-site',
+        },
+        company: { type: 'string', description: 'Case-insensitive substring match on company' },
+        role: { type: 'string', description: 'Case-insensitive substring match on role title' },
+        min_score: {
+          type: 'number',
+          description:
+            'Keep only rows scoring at least this (e.g. 4 keeps 4.0/5 and up); rows without a numeric score are dropped',
+        },
+        since: {
+          type: 'string',
+          pattern: DATE_PATTERN,
+          description: 'Keep rows added on or after this date (YYYY-MM-DD)',
+        },
+        until: {
+          type: 'string',
+          pattern: DATE_PATTERN,
+          description: 'Keep rows added on or before this date (YYYY-MM-DD)',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 1000,
+          description: 'Page size (default 200)',
+        },
+        offset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Pagination offset — pass the previous call’s next_offset',
+        },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: 'get_report',
@@ -269,20 +335,7 @@ const ACTION_TOOLS = [
       type: 'object',
       properties: {
         num: { type: 'integer', minimum: 1 },
-        status: {
-          type: 'string',
-          // Keep in sync with CANONICAL_STATUSES in src/lib/server/applications.ts.
-          enum: [
-            'screened',
-            'evaluated',
-            'applied',
-            'responded',
-            'interview',
-            'offer',
-            'rejected',
-            'discarded',
-          ],
-        },
+        status: { type: 'string', enum: CANONICAL_STATUSES },
         terminalApproved: { type: 'boolean', description: TERMINAL_APPROVED_DESC },
       },
       required: ['num', 'status'],
@@ -461,7 +514,21 @@ async function callTool(name, args) {
       return textResult(body);
     }
     case 'get_tracker': {
-      const { status, body } = await appFetch('/api/applications');
+      // Always request the compact server-side-filtered projection — the
+      // full-summary payload blows the tool-output limit on large trackers.
+      const params = new URLSearchParams({ fields: 'compact' });
+      if (Array.isArray(args?.status) && args.status.length > 0) {
+        params.set('status', args.status.join(','));
+      }
+      for (const key of ['location', 'work_mode', 'company', 'role', 'since', 'until']) {
+        const value = args?.[key];
+        if (typeof value === 'string' && value.trim()) params.set(key, value.trim());
+      }
+      for (const key of ['min_score', 'limit', 'offset']) {
+        const value = args?.[key];
+        if (typeof value === 'number' && Number.isFinite(value)) params.set(key, String(value));
+      }
+      const { status, body } = await appFetch(`/api/applications?${params}`);
       if (status !== 200) {
         return errorResult(
           `Failed to load the tracker (HTTP ${status}): ${body?.error ?? 'unknown error'}`,
