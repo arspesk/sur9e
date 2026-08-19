@@ -17,6 +17,7 @@ import {
   _setProbeImpl,
   _setSpawnImpl,
   cancelTurn,
+  cancelTurnAndWait,
   getTurn,
   mapChatLine,
   startTurn,
@@ -843,6 +844,43 @@ describe('cancelTurn', () => {
     // The dying child's close handler must not persist a second copy.
     child!.emit('close', null);
     expect(listMessages(root, conv.id).filter(m => m.role === 'assistant')).toHaveLength(1);
+  });
+
+  it('cancelTurnAndWait resolves only after the cancelled child exits, with the lock free', async () => {
+    let child: FakeChild | null = null;
+    _setSpawnImpl(() => {
+      child = fakeChild(); // hangs — SIGTERM takes a while to be honored
+      return child as never;
+    });
+    const conv = createConversation(root);
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hello' });
+
+    let settled = false;
+    const wait = cancelTurnAndWait(turnId).then(v => {
+      settled = true;
+      return v;
+    });
+    // The child hasn't exited — the wait must still be pending (this is what
+    // lets "Send now" fire a new turn without bouncing off the FR-5 lock).
+    await new Promise(r => setTimeout(r, 150));
+    expect(settled).toBe(false);
+
+    child!.emit('close', null);
+    await expect(wait).resolves.toBe(true);
+
+    // Lock is provably free: a new startTurn succeeds with no retry.
+    _setSpawnImpl(() => fakeChild(c => happyStream(c, 'sess-1', 'next reply')) as never);
+    const t2 = await startTurn(root, { conversationId: conv.id, userMessage: 'queued text' });
+    await waitForTerminal(t2.turnId);
+    expect(getTurn(t2.turnId)?.status).toBe('done');
+  });
+
+  it('cancelTurnAndWait returns immediately for an already-settled turn', async () => {
+    _setSpawnImpl(() => fakeChild(c => happyStream(c, 'sess-1', 'done already')) as never);
+    const conv = createConversation(root);
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hello' });
+    await waitForTerminal(turnId);
+    await expect(cancelTurnAndWait(turnId)).resolves.toBe(false);
   });
 
   it('cancel before any streamed output persists no assistant message', async () => {

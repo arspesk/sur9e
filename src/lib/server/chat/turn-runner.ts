@@ -967,3 +967,24 @@ export function cancelTurn(turnId: string): boolean {
   }
   return true;
 }
+
+/**
+ * cancelTurn, then wait (bounded) for the cancelled child to truly exit —
+ * i.e. for the FR-5 conversation lock to be released. "Send now" (issue
+ * #105) stops the current reply and immediately starts a new turn; without
+ * this wait the new startTurn would bounce off the lock the dying child
+ * still holds. Waits only when THIS call did the cancelling: a false return
+ * means the turn already settled, whose terminal path released its own lock
+ * (and the lock may already belong to a newer turn we must not wait on).
+ * The cap is CANCEL_GRACE_MS plus a beat for the SIGKILL to land.
+ */
+export async function cancelTurnAndWait(turnId: string): Promise<boolean> {
+  const turn = turns.get(turnId);
+  const cancelled = cancelTurn(turnId);
+  if (!cancelled || !turn) return cancelled;
+  const deadline = Date.now() + CANCEL_GRACE_MS + 1000;
+  while (inFlightConversations.has(turn.conversationId) && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return cancelled;
+}
