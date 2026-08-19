@@ -3,7 +3,10 @@
    components reused as-is. */
 
 .home {
-  max-width: 960px;
+  /* Desktop-first cap (issue #93): 960px read as a tablet shell on 1440px+
+     monitors. The route skeleton shares this container, so it tracks the
+     loaded width automatically. */
+  max-width: 1140px;
   margin-inline: auto;
   padding: var(--space-6) var(--space-4) var(--space-8);
 }
@@ -128,7 +131,7 @@
   text-wrap: balance;
 }
 .home-hero__composer {
-  max-width: 640px;
+  max-width: 760px;
   margin-inline: auto;
   text-align: left;
 }
@@ -158,7 +161,7 @@
 }
 
 .home-hero__chips {
-  max-width: 640px;
+  max-width: 760px;
   margin: var(--space-3) auto 0;
 }
 /* The bubble stacks its starters full-width in a narrow card; the hero has
