@@ -444,17 +444,39 @@ export function useConversation(opts?: {
   const streaming = turn.status === 'streaming' && streamingTurnId != null;
 
   async function handleStop() {
-    const turnId = useChatStore.getState().streamingTurnId;
-    turn.detach();
-    setStreamingTurnId(null);
-    if (turnId) {
-      clearActiveTurn(turnId);
-      try {
-        await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, { method: 'POST' });
-      } catch {
-        // the turn may already be finished — nothing to surface
-      }
+    const store = useChatStore.getState();
+    const turnId = store.streamingTurnId;
+    const conversationId = store.activeConversationId;
+    if (!turnId) {
+      turn.detach();
+      setStreamingTurnId(null);
+      return;
     }
+    // Stay ATTACHED while cancelling (issue #106): the server emits the
+    // terminal 'cancelled' event through the stream and persists the partial
+    // assistant message synchronously before this POST returns — detaching
+    // first (the old behavior) cut off the terminal event and left the
+    // transcript looking wiped.
+    try {
+      await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, { method: 'POST' });
+    } catch {
+      // Cancel unreachable (server down, or a race with a turn that already
+      // finished) — degrade to detach-only so the composer never sticks.
+      turn.detach();
+      setStreamingTurnId(null);
+      clearActiveTurn(turnId);
+      return;
+    }
+    setStreamingTurnId(null);
+    clearActiveTurn(turnId); // idempotent with the hook's own error-path clear
+    if (conversationId) {
+      // The partial is provably persisted by now — pull it into the message
+      // list, then retire the live copy so it renders exactly once.
+      await queryClient.invalidateQueries({ queryKey: chatSessionKey(conversationId) });
+    }
+    setPendingUserMessage(null);
+    setPendingUserMessageId(null);
+    turn.reset();
   }
 
   function handleRetry() {

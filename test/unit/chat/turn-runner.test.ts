@@ -813,6 +813,50 @@ describe('cancelTurn', () => {
     expect(spawnCount).toBe(2);
     expect(getTurn(t2.turnId)?.status).toBe('done');
   });
+
+  it('persists the streamed partial as an assistant message at cancel time, exactly once', async () => {
+    let child: FakeChild | null = null;
+    _setSpawnImpl(() => {
+      child = fakeChild(c => {
+        // Streams init + some text, then hangs — the user hits Stop mid-reply.
+        c.stdout.emit(
+          'data',
+          Buffer.from(`${initLine('sess-1')}\n${textLine('partial answer so far')}\n`),
+        );
+      });
+      return child as never;
+    });
+    const conv = createConversation(root);
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hello' });
+    await vi.waitFor(() => {
+      expect(getTurn(turnId)!.events.some(e => e.type === 'text-delta')).toBe(true);
+    });
+
+    expect(cancelTurn(turnId)).toBe(true);
+
+    // Persisted synchronously at cancel — BEFORE the child exits — so the
+    // client's post-cancel refetch provably sees it.
+    const afterCancel = listMessages(root, conv.id).filter(m => m.role === 'assistant');
+    expect(afterCancel).toHaveLength(1);
+    expect(afterCancel[0].content).toBe('partial answer so far');
+
+    // The dying child's close handler must not persist a second copy.
+    child!.emit('close', null);
+    expect(listMessages(root, conv.id).filter(m => m.role === 'assistant')).toHaveLength(1);
+  });
+
+  it('cancel before any streamed output persists no assistant message', async () => {
+    let child: FakeChild | null = null;
+    _setSpawnImpl(() => {
+      child = fakeChild(); // hangs silently — nothing streamed yet
+      return child as never;
+    });
+    const conv = createConversation(root);
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hello' });
+    expect(cancelTurn(turnId)).toBe(true);
+    child!.emit('close', null);
+    expect(listMessages(root, conv.id).filter(m => m.role === 'assistant')).toHaveLength(0);
+  });
 });
 
 describe('subscribeTurn', () => {
