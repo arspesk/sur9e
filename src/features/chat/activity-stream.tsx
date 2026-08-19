@@ -114,7 +114,6 @@ function ThinkingRow({ entry, followTs }: { entry: ActivityEntry; followTs?: num
           {span ? `Thought for ${span}` : 'Thought'}
         </span>
       )}
-      <span />
       {open && hasText && (
         <div className="chat-activity__think-body" id={bodyId}>
           {/* Same safety contract as ChatMarkdownView (message-view.tsx):
@@ -173,16 +172,21 @@ function Timeline({ entries, streaming }: { entries: ActivityEntry[]; streaming:
         }
         if (entry.type === 'stage') {
           return (
-            <span key={key} className="chat-activity__stage" style={{ gridColumn: '2 / 4' }}>
+            <span key={key} className="chat-activity__stage" style={{ gridColumn: '2 / -1' }}>
               {entry.label}
             </span>
           );
         }
+        // Name + detail share ONE cell so the detail always hugs its name —
+        // a shared `auto` name column would push a short name's detail out to
+        // the widest name in the burst (`read` vs `sur9e-app_get_tracker`).
         return (
           <span key={key} style={{ display: 'contents' }}>
             <EntryGlyph entry={entry} streaming={streaming} />
-            <span className="chat-activity__name">{bareName(entry.name)}</span>
-            {entry.detail ? <DetailText detail={entry.detail} /> : <span />}
+            <span className="chat-activity__step">
+              <span className="chat-activity__name">{bareName(entry.name)}</span>
+              {entry.detail ? <DetailText detail={entry.detail} /> : null}
+            </span>
           </span>
         );
       })}
