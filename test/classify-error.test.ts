@@ -23,6 +23,12 @@ describe('classifyProviderError', () => {
     ],
     ['OAuth token revoked. Please run /login', 'auth'],
     ['Not logged in. Please run `claude login`', 'auth'],
+    [
+      // Expired CLI session (issue #118) — must retry the fallback provider,
+      // not classify as unknown. Exact provider wording.
+      'Failed to authenticate: OAuth session expired and could not be refreshed',
+      'auth',
+    ],
     ['claude: command not found', 'install'],
     [
       '{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 250000 tokens > 200000 maximum"}}',

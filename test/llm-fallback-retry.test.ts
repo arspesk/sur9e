@@ -256,6 +256,14 @@ describe('runModeLLM fallback retry', () => {
 
   it.each([
     ['claude', 'claude-sonnet-4-6', 'OAuth token revoked', 'codex', 'gpt-5.4-mini'],
+    // Expired CLI session (issue #118) — exact provider wording.
+    [
+      'claude',
+      'claude-opus-4-7',
+      'Failed to authenticate: OAuth session expired and could not be refreshed',
+      'codex',
+      'gpt-5.6-sol',
+    ],
     ['codex', 'gpt-5.4-mini', 'refresh token expired', 'claude', 'claude-sonnet-4-6'],
     [
       'opencode',
