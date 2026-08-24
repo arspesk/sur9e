@@ -34,7 +34,15 @@ const PROVIDER_SIGNATURES = {
   claude: {
     install: [],
     quota: ['session limit', 'credit balance is too low', 'monthly spend limit', 'usage-credits'],
-    auth: ['oauth token revoked', 'not logged in', 'authentication_error'],
+    auth: [
+      'oauth token revoked',
+      'not logged in',
+      'authentication_error',
+      // Expired CLI session (issue #118), observed live: "Failed to
+      // authenticate: OAuth session expired and could not be refreshed"
+      'oauth session expired',
+      'could not be refreshed',
+    ],
     model_not_found: [
       'issue with the selected model',
       'model not found',
