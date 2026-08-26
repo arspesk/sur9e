@@ -3,7 +3,12 @@
 // no store imports: safe from any client module.
 
 import { JOB_TYPES_BY_TYPE } from '@/lib/job-types';
-import { sanitizeJobLogLines } from '@/lib/terminal-noise';
+import {
+  describeProviderFailure,
+  isActionableCategory,
+  providerErrorMessage,
+} from '@/lib/provider-error-message';
+import { cleanErrorLine, sanitizeJobLogLines } from '@/lib/terminal-noise';
 
 /** 83 → "1:23". */
 export function fmtElapsed(seconds: number): string {
@@ -59,4 +64,29 @@ export function reportTarget(entry: {
   snapshot: { params?: { num?: number; id?: string } } | null;
 }): number | string | undefined {
   return entry.snapshot?.params?.num ?? entry.snapshot?.params?.id ?? entry.num;
+}
+
+/**
+ * The failed-job card's subtitle. The runner already persists a humanized
+ * cause (plus its `errorCategory`) when it recognised a provider failure, so a
+ * known category renders that category's template directly. A record WITHOUT a
+ * category — legacy on-disk records, or a raw value set by the poll layer — is
+ * run through the same classifier here so an expired-session error still reads
+ * "log back in" instead of leaking the raw provider line (issue #120). Anything
+ * unrecognised falls back to the scrubbed worker cause (never ANSI, never a
+ * `<<<SUR9E_*>>>` sentinel).
+ */
+export function jobErrorText(snapshot: {
+  error?: string;
+  errorCategory?: string;
+  provider?: string;
+}): string {
+  const raw = snapshot.error ?? '';
+  if (!raw) return '';
+  const provider = snapshot.provider ?? 'claude';
+  if (isActionableCategory(snapshot.errorCategory)) {
+    return providerErrorMessage(provider, snapshot.errorCategory);
+  }
+  const { message, category } = describeProviderFailure(provider, raw);
+  return isActionableCategory(category) ? message : cleanErrorLine(raw);
 }

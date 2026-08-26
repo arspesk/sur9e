@@ -15,6 +15,9 @@ export interface JobSnapshot {
    * elapsed timer at the real duration instead of ticking wall-clock. */
   finishedAt?: string | null;
   error?: string;
+  /** classify-error category behind `error` when the runner recognised a
+   * provider failure (see JobRecord.errorCategory). */
+  errorCategory?: string;
   /**
    * Per-job parameters mirrored from `/api/jobs/[id]`. `num` is the
    * application number for any offer-scoped job (evaluate, interview-prep,

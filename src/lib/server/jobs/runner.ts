@@ -10,6 +10,7 @@ import 'server-only';
 import { type ChildProcess, type SpawnOptions, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { describeProviderFailure, isActionableCategory } from '../../provider-error-message';
 import { type JobRecord } from '../../schemas/jobs';
 import { ProviderId } from '../../schemas/providers';
 import { cleanErrorLine, stripTerminalNoise } from '../../terminal-noise';
@@ -155,27 +156,45 @@ function resolveReportNumByUrl(rootPath: string, url: string): number | null {
 }
 
 /**
- * Human-readable failure cause for a non-zero exit. Workers print their
- * actionable cause in one of two shapes:
- *   - batch/screen.mjs (and the CLI arg guards) emit 'ERROR: …' lines
- *     (e.g. 'ERROR: …/cv.md missing');
- *   - batch/mode-runner.mjs emits '❌ …' lines for every failure branch
- *     (runtime/input/LLM-run/parse/write), e.g.
- *     '❌ output parse failed on retry: no <<<SUR9E_OUTPUT>>> sentinel…'.
- * Surface the LAST such line as the persisted error — it becomes the failed
- * card's subtitle — instead of the opaque 'exit 1'. ANSI escapes are stripped
- * and leaked `<<<SUR9E_*>>>` sentinel tokens scrubbed (via cleanErrorLine) so
- * the subtitle is a clean human sentence, never a raw terminal dump. Falls
- * back to 'exit N' when no marker is present. Capped to one subtitle-sized
- * line; the full text stays in the captured logs.
+ * Human-readable failure cause for a non-zero exit, plus the provider-error
+ * category when the worker's captured output carries a recognisable provider
+ * failure. Two tiers:
+ *
+ *   1. Provider failure (expired OAuth session, quota, model not found, …):
+ *      the tee'd CLI stream in `output` is run through the SAME classifier and
+ *      templates as a chat turn (src/lib/provider-error-message.ts), so a job
+ *      that died on `Failed to authenticate: OAuth session expired…` gets the
+ *      "run claude auth login" line rather than that raw text or the generic
+ *      `❌ LLM run failed: exit 1` (issue #120). `category` is set.
+ *   2. Otherwise, the worker's own actionable cause line. Workers print it in
+ *      one of two shapes: batch/screen.mjs (and the CLI arg guards) emit
+ *      'ERROR: …' lines (e.g. 'ERROR: …/cv.md missing'); batch/mode-runner.mjs
+ *      emits '❌ …' lines for every failure branch, e.g. '❌ output parse failed
+ *      on retry: no <<<SUR9E_OUTPUT>>> sentinel…'. The LAST such line becomes
+ *      the failed card's subtitle instead of the opaque 'exit 1'. ANSI escapes
+ *      are stripped and leaked `<<<SUR9E_*>>>` sentinel tokens scrubbed (via
+ *      cleanErrorLine); falls back to 'exit N' when no marker is present.
+ *      Capped to one subtitle-sized line; the full text stays in the logs.
+ *
+ * A null exit code = the worker was killed by a signal (OOM / crash / an
+ * external kill), not a normal non-zero exit. Say so plainly instead of the
+ * opaque "exit null" — and don't classify its partial output (mirrors
+ * humanize-error.ts's 'interrupted' short-circuit on the chat-turn side).
  */
-export function workerErrorFromOutput(output: string, code: number | null): string {
-  // A null exit code = the worker was killed by a signal (OOM / crash / an
-  // external kill), not a normal non-zero exit. Say so plainly instead of the
-  // opaque "exit null".
+export function describeWorkerFailure(
+  output: string,
+  code: number | null,
+  provider: string = 'claude',
+): { error: string; category: string | undefined } {
   const codeLabel = code === null ? 'interrupted' : `exit ${code}`;
   const noMarkerFallback =
     code === null ? 'The job was interrupted before it finished.' : `exit ${code}`;
+
+  if (code !== null && output) {
+    const { message, category } = describeProviderFailure(provider, output);
+    if (isActionableCategory(category)) return { error: message, category };
+  }
+
   // Strip terminal noise first so a cause line rendered mid-stream (or carrying
   // color codes) matches on its ERROR:/❌ prefix and doesn't leak escapes.
   const line = stripTerminalNoise(output)
@@ -185,14 +204,37 @@ export function workerErrorFromOutput(output: string, code: number | null): stri
       const t = l.trim();
       return t.startsWith('ERROR:') || t.startsWith('❌');
     });
-  if (!line) return noMarkerFallback;
+  if (!line) return { error: noMarkerFallback, category: undefined };
   const stripped = line
     .trim()
     .replace(/^ERROR:\s*/, '')
     .replace(/^❌️?\s*/, '');
   const msg = cleanErrorLine(stripped);
-  if (!msg) return noMarkerFallback;
-  return `${msg} (${codeLabel})`;
+  if (!msg) return { error: noMarkerFallback, category: undefined };
+  return { error: `${msg} (${codeLabel})`, category: undefined };
+}
+
+/**
+ * describeWorkerFailure shaped for a JobRecord spread: `error` always, and
+ * `errorCategory` only when a provider failure was recognised (so a worker-
+ * level cause never carries an explicit `undefined` field on the record).
+ */
+function describeFailureForRecord(
+  output: string,
+  code: number | null,
+  provider: string | undefined,
+): { error: string; errorCategory?: string } {
+  const { error, category } = describeWorkerFailure(output, code, provider ?? 'claude');
+  return category ? { error, errorCategory: category } : { error };
+}
+
+/** The subtitle string alone — see describeWorkerFailure. */
+export function workerErrorFromOutput(
+  output: string,
+  code: number | null,
+  provider: string = 'claude',
+): string {
+  return describeWorkerFailure(output, code, provider).error;
 }
 
 /**
@@ -538,7 +580,9 @@ export async function spawnJob(
             ...current,
             exitCode: code,
             status: code === 0 ? 'done' : 'error',
-            error: code === 0 ? null : workerErrorFromOutput(current.output, code),
+            ...(code === 0
+              ? { error: null }
+              : describeFailureForRecord(current.output, code, current.provider)),
             finishedAt: new Date().toISOString(),
           };
     // Fallback re-stamp: when the worker retried on the fallback pair, the
