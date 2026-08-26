@@ -34,15 +34,15 @@ Layout:
 
    Difficulty is a **number** (e.g. `3.2`, not `3.2/5` and not stars). Positive % is the share of reviewers who reported a positive experience. If a cell is unknown, write `unknown`.
 
-2. **Round 1 visible.** Show the first round's detail in full, directly after the table, so the reader gets concrete signal without opening anything.
+2. **All rounds under one heading.** Every round lives inside a single `### Rounds` heading that follows the table — no round sits outside a `###` wrapper. Round 1 is the first `####` block inside it, shown in full so the reader gets concrete signal without opening anything; the remaining rounds follow it at the same depth.
 
 3. **The rest in nested headings.** Each of these is a `###` heading under `## Interview Process`, so the reader can fold them on demand:
-   - Rounds 2 to 4 (one `###` heading holding the remaining rounds)
+   - Rounds (one `###` heading holding every round)
    - Likely questions
    - Prep checklist
    - Company signals
 
-   Individual rounds inside that heading are `####` headings (`#### Round 2: technical interview (60 min, virtual)`).
+   Individual rounds inside the `### Rounds` heading are `####` headings (`#### Round 2: technical interview (60 min, virtual)`).
 
    **Stages WITHIN a round (locked format).** When a single round has internal stages (e.g. a half-day onsite with four back-to-back blocks), every stage uses the SAME shape: a bold-label paragraph followed by its bullets —
 
@@ -99,11 +99,13 @@ Difficulty is a plain number (e.g. `3.2`), not `3.2/5` and not stars. Positive %
 
 ## Step 3: rounds
 
-Show **Round 1 in full** directly after the table. Put **Rounds 2 to 4 under a nested `### Rounds 2 to 4` heading** so the reader can fold them on demand. Keep all the round detail you found.
+Put **every round under one nested `### Rounds` heading** after the table so the reader can fold them on demand. **Round 1 comes first inside it, in full**, then the remaining rounds at the same `####` depth. Keep all the round detail you found.
 
-For each round:
+Shape of the block — one `### Rounds` wrapper, one `####` per round:
 
 ```markdown
+### Rounds
+
 #### Round 1: technical phone screen (45 min)
 
 - **Conducted by:** a **senior engineer** on the hiring team.
@@ -114,9 +116,13 @@ For each round:
 - **How to prepare:** drill **medium LeetCode** with a running commentary; have one **production debugging story** ready to tell in two minutes.
 
 sources: [(glassdoor)](https://www.glassdoor.com/Interview/...), [(blind)](https://www.teamblind.com/post/...)
+
+#### Round 2: technical interview (60 min, virtual)
+
+- …
 ```
 
-Duration in parentheses is optional but useful (e.g. `(30 min)`, `(60 to 90 min)`). In the example prose above, bold the facts a candidate should catch fast — the **round name and count**, who runs it, the **bar they screen for**, and the **specific topic or story** to prep — so a skim of the marked spans alone tells them what this round tests (aim for 1-3 anchors per round block). Collect the per-question sources into the single muted `sources:` line at the end of the block rather than tagging each bullet — each named source linked to its page, `inferred` left plain. If round structure is unknown, say so and give the best available read on what rounds to expect from the company's size, stage, and role level.
+Every later round repeats that `####` shape inside the same `### Rounds` heading — Round 1 is never promoted or demoted relative to its siblings. Duration in parentheses is optional but useful (e.g. `(30 min)`, `(60 to 90 min)`). In the example prose above, bold the facts a candidate should catch fast — the **round name and count**, who runs it, the **bar they screen for**, and the **specific topic or story** to prep — so a skim of the marked spans alone tells them what this round tests (aim for 1-3 anchors per round block). Collect the per-question sources into the single muted `sources:` line at the end of the block rather than tagging each bullet — each named source linked to its page, `inferred` left plain. If round structure is unknown, say so and give the best available read on what rounds to expect from the company's size, stage, and role level.
 
 ## Step 4: likely questions
 
