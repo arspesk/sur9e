@@ -39,6 +39,14 @@ describe('classifyProviderError', () => {
       'context_overflow',
     ],
     ['some totally unrelated crash', 'unknown'],
+    [
+      // The stream-json `system/init` handshake lists the CLI's built-in slash
+      // commands — including `usage-credits` on claude-code 2.1.x (issue #120).
+      // Pure infrastructure, not a failure: it must NOT read as quota, or every
+      // failed chat turn whose stdout carries the handshake becomes "quota".
+      '{"type":"system","subtype":"init","session_id":"s1","slash_commands":["compact","usage-credits","extra-usage","usage","insights"],"model":"claude-opus-4-6"}',
+      'unknown',
+    ],
   ])('claude: %s → %s', (text, expected) => {
     expect(classifyProviderError('claude', text)).toBe(expected);
   });

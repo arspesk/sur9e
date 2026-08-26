@@ -5,7 +5,7 @@
 // (UI/UX audit 2026-06-10, "Failed job card surfaces only 'exit 1'").
 
 import { describe, expect, it } from 'vitest';
-import { workerErrorFromOutput } from '../runner';
+import { describeWorkerFailure, workerErrorFromOutput } from '../runner';
 
 describe('workerErrorFromOutput', () => {
   it("surfaces the worker's ERROR line with the exit code appended", () => {
@@ -64,6 +64,38 @@ describe('workerErrorFromOutput', () => {
       '\n',
     );
     expect(workerErrorFromOutput(output, 1)).toBe('artifact write failed: ENOSPC (exit 1)');
+  });
+
+  it("an expired Claude OAuth session in the tee'd provider stream → the auth template (issue #120)", () => {
+    // A failed mode run: the worker tees the provider's stream-json (whose
+    // init handshake lists `usage-credits` among the slash commands), the CLI
+    // reports the expired session, and mode-runner prints its generic ❌ line.
+    // The card must say "log back in", not the opaque cause line and not quota.
+    const oauth = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+    const output = [
+      'mode=cover-letter provider=claude model=claude-opus (resolved from mode_default)',
+      '{"type":"system","subtype":"init","session_id":"s1","slash_commands":["compact","usage-credits","usage"],"model":"claude-opus-4-6"}',
+      `{"type":"result","subtype":"error_during_execution","is_error":true,"result":"${oauth}"}`,
+      oauth,
+      '❌ LLM run failed: exit 1',
+    ].join('\n');
+    const { error, category } = describeWorkerFailure(output, 1, 'claude');
+    expect(category).toBe('auth');
+    expect(error).toBe(
+      'Your Claude session has expired or is signed out — run "claude auth login" in a terminal, then try again.',
+    );
+    expect(error).not.toContain('rate limit or quota');
+    expect(workerErrorFromOutput(output, 1, 'claude')).toBe(error);
+  });
+
+  it('a non-provider failure keeps the worker cause line and reports no category', () => {
+    const output = ['mode=cover-letter provider=claude', '❌ artifact write failed: ENOSPC'].join(
+      '\n',
+    );
+    expect(describeWorkerFailure(output, 1, 'claude')).toEqual({
+      error: 'artifact write failed: ENOSPC (exit 1)',
+      category: undefined,
+    });
   });
 
   it('extracts a clean cause from a REAL failed run (ANSI + sentinels + HTML tail)', () => {

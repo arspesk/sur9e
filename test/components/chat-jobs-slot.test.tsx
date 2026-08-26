@@ -271,6 +271,50 @@ describe('ChatJobsSlot', () => {
     expect(preText).not.toContain('<body');
   });
 
+  it('renders the auth template for a job the runner classified as auth (issue #120)', async () => {
+    act(() => {
+      useChatJobsStore.getState().startJob('job-auth', 'cover-letter', 6);
+      useChatJobsStore.getState().setSnapshot('job-auth', {
+        status: 'error',
+        output: 'Failed to authenticate: OAuth session expired and could not be refreshed',
+        error:
+          'Your Claude session has expired or is signed out — run "claude auth login" in a terminal, then try again.',
+        errorCategory: 'auth',
+        provider: 'claude',
+        startedAt: new Date(Date.now() - 10_000).toISOString(),
+        finishedAt: new Date().toISOString(),
+        params: { num: 6 },
+      });
+    });
+    const { container } = render(<ChatJobsSlot />);
+    await waitFor(() => expect(container.querySelector('.chat-jobs__error')).toBeTruthy());
+    const errText = container.querySelector('.chat-jobs__error')?.textContent ?? '';
+    expect(errText).toContain('claude auth login');
+    expect(errText).not.toContain('rate limit or quota');
+  });
+
+  it('classifies a legacy/raw provider error string itself (no errorCategory) instead of leaking it', async () => {
+    // Records written before the runner humanized failures — or set raw by the
+    // poll layer — still get the same "log back in" line, never the raw text.
+    act(() => {
+      useChatJobsStore.getState().startJob('job-legacy', 'cover-letter', 7);
+      useChatJobsStore.getState().setSnapshot('job-legacy', {
+        status: 'error',
+        output: '',
+        error: 'Failed to authenticate: OAuth session expired and could not be refreshed (exit 1)',
+        provider: 'claude',
+        startedAt: new Date(Date.now() - 10_000).toISOString(),
+        finishedAt: new Date().toISOString(),
+        params: { num: 7 },
+      });
+    });
+    const { container } = render(<ChatJobsSlot />);
+    await waitFor(() => expect(container.querySelector('.chat-jobs__error')).toBeTruthy());
+    const errText = container.querySelector('.chat-jobs__error')?.textContent ?? '';
+    expect(errText).toContain('claude auth login');
+    expect(errText).not.toContain('could not be refreshed');
+  });
+
   it('Retry re-spawns the same mode with the same params and swaps in the fresh job', async () => {
     mockStartJobAction.mockResolvedValue(jobRecord('freshjob00000000'));
     act(() => {

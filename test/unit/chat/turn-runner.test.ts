@@ -223,6 +223,23 @@ function errorEvent(turnId: string): { message: string; category?: string } {
 
 const ESC_RE = /\x1b/;
 
+/** The claude `auth` template — what an expired/signed-out session must render. */
+const AUTH_MESSAGE =
+  'Your Claude session has expired or is signed out — run "claude auth login" in a terminal, then try again.';
+
+/** Live claude-code 2.1.x `system/init` handshake: its slash_commands list
+ * carries `usage-credits`, a former `quota` needle (issue #120). */
+const realInitLine = (sid: string) =>
+  JSON.stringify({
+    type: 'system',
+    subtype: 'init',
+    session_id: sid,
+    model: 'claude-opus-4-6',
+    slash_commands: ['compact', 'security-review', 'usage-credits', 'extra-usage', 'usage'],
+    apiKeySource: 'none',
+  });
+const OAUTH_EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+
 describe('humanizeProviderError', () => {
   it('a raw stderr dump becomes a clean one-liner (no ANSI, not the verbatim stderr)', () => {
     const rawDump =
@@ -247,7 +264,26 @@ describe('humanizeProviderError', () => {
       code: 1,
     });
     expect(category).toBe('auth');
-    expect(message).toBe("Your Claude credentials aren't working — check the API key in Settings.");
+    expect(message).toBe(AUTH_MESSAGE);
+  });
+
+  it('stream-json init noise on stdout does not out-rank an OAuth expiry (issue #120)', () => {
+    // The whole failed turn: init handshake (with `usage-credits` in its
+    // slash-command list) + an is_error result carrying the auth failure.
+    const stdout = `${realInitLine('s1')}\n${JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      result: OAUTH_EXPIRED,
+    })}\n`;
+    const { message, category } = humanizeProviderError('claude', {
+      stdout,
+      stderr: `${OAUTH_EXPIRED}\n`,
+      code: 1,
+    });
+    expect(category).toBe('auth');
+    expect(message).toBe(AUTH_MESSAGE);
+    expect(message).not.toContain('rate limit or quota');
   });
 
   it('a spawn ENOENT → a friendly install message', () => {
@@ -639,7 +675,38 @@ describe('startTurn', () => {
 
     const { message, category } = errorEvent(turnId);
     expect(category).toBe('auth');
-    expect(message).toBe("Your Claude credentials aren't working — check the API key in Settings.");
+    expect(message).toBe(AUTH_MESSAGE);
+  });
+
+  it('expired OAuth session behind a real init handshake → auth card, not "rate limit or quota" (issue #120)', async () => {
+    _setSpawnImpl(
+      () =>
+        fakeChild(c => {
+          c.stdout.emit(
+            'data',
+            Buffer.from(
+              `${realInitLine('sess-120')}\n${JSON.stringify({
+                type: 'result',
+                subtype: 'error_during_execution',
+                is_error: true,
+                num_turns: 0,
+                result: OAUTH_EXPIRED,
+              })}\n`,
+            ),
+          );
+          c.stderr.emit('data', Buffer.from(`${OAUTH_EXPIRED}\n`));
+          c.emit('close', 1);
+        }) as never,
+    );
+    const conv = createConversation(root);
+    const { turnId } = await startTurn(root, { conversationId: conv.id, userMessage: 'hi' });
+    await waitForTerminal(turnId);
+
+    expect(getTurn(turnId)?.status).toBe('error');
+    const { message, category } = errorEvent(turnId);
+    expect(category).toBe('auth');
+    expect(message).toBe(AUTH_MESSAGE);
+    expect(message).not.toContain('rate limit or quota');
   });
 
   it('exit 0 with empty output → a clean empty-reply error, not an empty bubble', async () => {

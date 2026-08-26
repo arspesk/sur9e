@@ -19,9 +19,15 @@ import { useState } from 'react';
 import { useDeleteConfirmStore } from '@/components/delete-confirm-modal';
 import { useToastStore } from '@/components/toast/toast-store';
 import type { JobType } from '@/lib/server/jobs';
-import { cleanErrorLine } from '@/lib/terminal-noise';
 import { cancelJobAction, startJobAction } from '@/server/actions/jobs';
-import { fmtElapsed, jobTitle, parseLogLines, reportTarget, timePercent } from './chat-jobs-lib';
+import {
+  fmtElapsed,
+  jobErrorText,
+  jobTitle,
+  parseLogLines,
+  reportTarget,
+  timePercent,
+} from './chat-jobs-lib';
 import { useChatJobsStore } from './chat-jobs-store';
 import { useJobElapsed } from './use-chat-job-poll';
 
@@ -65,11 +71,12 @@ function ChatJobsRow({ jobId, total }: { jobId: string; total: number }) {
   const target = reportTarget(entry);
   const logLines = parseLogLines(snapshot?.output ?? '');
   const fallback = snapshot?.fallback;
-  // Scrub the persisted error one more time before it hits the DOM: the runner
-  // already writes a clean cause via workerErrorFromOutput, but the poll layer
-  // can set a raw fallback (e.g. the 404 "outcome unknown" path) and legacy
-  // records predate the sanitize — never render ANSI or a `<<<SUR9E_*>>>` leak.
-  const errorText = isError && snapshot?.error ? cleanErrorLine(snapshot.error) : '';
+  // Humanize + scrub the persisted error before it hits the DOM: the runner
+  // already writes a classified cause via describeWorkerFailure, but the poll
+  // layer can set a raw fallback (e.g. the 404 "outcome unknown" path) and
+  // legacy records predate both passes — never render a raw provider error,
+  // ANSI, or a `<<<SUR9E_*>>>` leak.
+  const errorText = isError && snapshot ? jobErrorText(snapshot) : '';
   // Terminal-state announcement for SR users — mirrors chat-card's
   // stream-status live region. Non-terminal states stay silent; the
   // spinner + elapsed tick would spam an aria-live region every second.

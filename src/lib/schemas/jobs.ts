@@ -109,6 +109,11 @@ export const JobRecord = z.object({
   finishedAt: z.string().nullable(),
   output: z.string().default(''),
   error: z.string().nullable(),
+  // classify-error category of the failure behind `error` ('auth'|'quota'|…)
+  // when the runner recognised a provider failure in the worker output; the
+  // UI branches on it (e.g. "log back in"). Absent for worker-level causes
+  // (missing input, parse failure) and for records that predate it.
+  errorCategory: z.string().optional(),
   exitCode: z.number().int().nullable(),
   // Optional workflow parent metadata. Legacy standalone records omit it;
   // workflow children carry both ids so the UI and recovery path can group

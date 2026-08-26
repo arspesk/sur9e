@@ -33,7 +33,12 @@ const SHARED = {
 const PROVIDER_SIGNATURES = {
   claude: {
     install: [],
-    quota: ['session limit', 'credit balance is too low', 'monthly spend limit', 'usage-credits'],
+    // NOT 'usage-credits': the org spend-limit message mentions the
+    // `/usage-credits` slash command, but so does the stream-json `system/init`
+    // handshake's slash_commands list on claude-code 2.1.x — every failed turn
+    // whose stdout carried the handshake mis-classified as quota (issue #120).
+    // 'monthly spend limit' already catches the real message.
+    quota: ['session limit', 'credit balance is too low', 'monthly spend limit'],
     auth: [
       'oauth token revoked',
       'not logged in',
