@@ -10,8 +10,11 @@
 //
 //   npm run diagnose > diag.txt 2>&1
 //
-// Prints: env + PATH, a direct `<cli> --version` probe with timing + error
-// codes, a `which` lookup, and the wizard's own nested provider probe.
+// Prints: env + PATH, a raw inherited-PATH `<cli> --version` probe with timing
+// + error codes, a `which` lookup, and the provider adapters' nested probe.
+// The final probe appends sur9e's standard user install directories and is the
+// authoritative result; the raw probes explain why a shell/server mismatch
+// existed in the first place.
 
 import { execFileSync } from 'node:child_process';
 
@@ -35,7 +38,7 @@ for (const p of (process.env.PATH || '').split(':')) {
   console.log('  ', p);
 }
 
-section('direct `<cli> --version` probe (this is what checkInstalled does)');
+section('raw inherited-PATH `<cli> --version` probe');
 for (const bin of CLIS) {
   const start = process.hrtime.bigint();
   try {
@@ -62,7 +65,7 @@ for (const bin of CLIS) {
   }
 }
 
-section('wizard nested probe (node -> npx tsx providers-probe.mjs)');
+section('provider adapter probe (includes standard user install directories)');
 try {
   const out = execFileSync(
     'npx',

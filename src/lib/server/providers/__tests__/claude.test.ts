@@ -19,7 +19,8 @@
 // proven against the real fixture data, not a stripped-down version.
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import claudeProvider, { __testing } from '../claude';
 
@@ -63,12 +64,13 @@ claude-sonnet-4@20250514
 describe('claude provider', () => {
   describe('buildHeadlessArgs', () => {
     it('produces the same command shape as today', () => {
-      const { cmd, args } = claudeProvider.buildHeadlessArgs({
+      const { cmd, args, env } = claudeProvider.buildHeadlessArgs({
         prompt: 'Evaluate offer #42',
         model: 'claude-sonnet-4-6',
       });
       expect(cmd).toBe('/bin/bash');
       expect(args).toMatchSnapshot();
+      expect(env?.PATH?.split(delimiter)).toContain(join(homedir(), '.local', 'bin'));
     });
   });
 

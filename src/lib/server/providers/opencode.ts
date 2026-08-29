@@ -57,6 +57,7 @@ import { getEncoding } from 'js-tiktoken';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
 import { PLAYWRIGHT_CHAT_TOOLS, readTurnMcpConfig, readTurnMcpServers } from '../chat/mcp-config';
+import { providerCliEnv, withProviderCliPath } from './cli-path';
 import { escapeForBash } from './shell';
 import type { ExitClassification, Provider } from './types';
 
@@ -174,7 +175,7 @@ const opencode: Provider = {
     // it OpenCode can log the terminal error privately and remain alive until
     // sur9e's outer timeout instead of triggering the configured fallback.
     const cmdline = `opencode run --pure --print-logs --log-level ERROR -m ${model} ${escapeForBash(prompt)}`;
-    return { cmd: '/bin/bash', args: ['-c', cmdline] };
+    return { cmd: '/bin/bash', args: ['-c', cmdline], env: providerCliEnv() };
   },
 
   buildInteractiveLaunch({ promptFilePath, model }) {
@@ -185,6 +186,7 @@ const opencode: Provider = {
     return {
       cmd: '/bin/bash',
       args: ['-c', `opencode run -m ${model} "$(cat ${promptFilePath})"`],
+      env: providerCliEnv(),
     };
   },
 
@@ -296,7 +298,7 @@ const opencode: Provider = {
     return {
       cmd: '/bin/bash',
       args: ['-c', cmdline],
-      env: { OPENCODE_CONFIG: configPath },
+      env: providerCliEnv({ OPENCODE_CONFIG: configPath }),
     };
   },
 
@@ -376,7 +378,11 @@ const opencode: Provider = {
     // version doesn't ship the subcommand, timeout, etc.). The timeout
     // is intentionally short — model-picker UI must not block.
     try {
-      const out = execFileSync('opencode', ['models'], { encoding: 'utf-8', timeout: 5000 });
+      const out = execFileSync('opencode', ['models'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: withProviderCliPath(),
+      });
       const ids = out
         .split('\n')
         .map(l => l.trim())
@@ -390,7 +396,11 @@ const opencode: Provider = {
 
   async checkInstalled() {
     try {
-      const out = execFileSync('opencode', ['--version'], { encoding: 'utf-8', timeout: 3000 });
+      const out = execFileSync('opencode', ['--version'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+        env: withProviderCliPath(),
+      });
       const m = out.match(/(\d+\.\d+\.\d+)/);
       return { ok: true, version: m?.[1] };
     } catch (err) {

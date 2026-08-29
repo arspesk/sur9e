@@ -11,8 +11,8 @@
 // either would produce surprising runs.
 
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import codex from '../codex';
 
@@ -30,6 +30,7 @@ describe('codex provider', () => {
       expect(args[1]).toContain('--dangerously-bypass-approvals-and-sandbox');
       expect(args[1]).toContain('--model gpt-5.5');
       expect(env).toMatchObject({ CODEX_QUIET_MODE: '1' });
+      expect(env?.PATH?.split(delimiter)).toContain(join(homedir(), '.local', 'bin'));
     });
 
     it('respects outputFormat: "text" by omitting --json', () => {
