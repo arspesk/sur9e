@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/arspesk/sur9e/compare/v0.5.0...v0.5.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **providers:** discover user-installed CLIs ([#126](https://github.com/arspesk/sur9e/issues/126)) ([75343f8](https://github.com/arspesk/sur9e/commit/75343f8c8d2c14ed706a6cd24eea7f689c8cd30c))
+
 ## [0.5.0](https://github.com/arspesk/sur9e/compare/v0.4.1...v0.5.0) (2026-08-26)
 
 
