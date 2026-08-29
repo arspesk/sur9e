@@ -82,6 +82,7 @@ import { execFileSync } from 'node:child_process';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
 import { PLAYWRIGHT_CHAT_TOOLS, readTurnMcpServers } from '../chat/mcp-config';
+import { providerCliEnv, withProviderCliPath } from './cli-path';
 import { escapeForBash } from './shell';
 import type { ExitClassification, Provider } from './types';
 
@@ -198,7 +199,7 @@ const codex: Provider = {
       // Collapse any double-spaces from flag-group omission to keep argv tidy
       // and the test substring assertions stable.
       args: ['-c', cmdline.replace(/\s+/g, ' ').trim()],
-      env: { CODEX_QUIET_MODE: '1' },
+      env: providerCliEnv({ CODEX_QUIET_MODE: '1' }),
     };
   },
 
@@ -209,6 +210,7 @@ const codex: Provider = {
     return {
       cmd: '/bin/bash',
       args: ['-c', `codex --model ${model} < ${promptFilePath}`],
+      env: providerCliEnv(),
     };
   },
 
@@ -323,7 +325,11 @@ const codex: Provider = {
 
     parts.push(`--model ${escapeForBash(model)}`);
     const cmdline = `${parts.join(' ')} "$(cat ${escapeForBash(promptFile)})"`;
-    return { cmd: '/bin/bash', args: ['-c', cmdline], env: { CODEX_QUIET_MODE: '1' } };
+    return {
+      cmd: '/bin/bash',
+      args: ['-c', cmdline],
+      env: providerCliEnv({ CODEX_QUIET_MODE: '1' }),
+    };
   },
 
   extractSessionId(_streamLine) {
@@ -523,7 +529,11 @@ const codex: Provider = {
 
   async checkInstalled() {
     try {
-      const out = execFileSync('codex', ['--version'], { encoding: 'utf-8', timeout: 3000 });
+      const out = execFileSync('codex', ['--version'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+        env: withProviderCliPath(),
+      });
       const m = out.match(/(\d+\.\d+\.\d+)/);
       return { ok: true, version: m?.[1] };
     } catch (err) {

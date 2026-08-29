@@ -46,6 +46,7 @@ import { dirname, join } from 'node:path';
 import { classifyProviderError } from '../../../../cli/classify-error.mjs';
 import type { UnifiedStreamEvent } from '../../schemas/providers';
 import { PLAYWRIGHT_CHAT_TOOLS } from '../chat/mcp-config';
+import { providerCliEnv, withProviderCliPath } from './cli-path';
 import { escapeForBash } from './shell';
 import type { ExitClassification, ModelChoice, Provider } from './types';
 
@@ -139,7 +140,11 @@ function _pickClaudeBinaryFromReal(real: string, fs: BinaryProbes): string | nul
 // STATIC_MODELS rather than crashing the Settings dropdown.
 function _resolveClaudeBinary(): string | null {
   try {
-    const which = execFileSync('which', ['claude'], { encoding: 'utf-8', timeout: 2000 }).trim();
+    const which = execFileSync('which', ['claude'], {
+      encoding: 'utf-8',
+      timeout: 2000,
+      env: withProviderCliPath(),
+    }).trim();
     if (!which) return null;
     const real = realpathSync(which);
     return _pickClaudeBinaryFromReal(real, {
@@ -296,7 +301,7 @@ const claude: Provider = {
     const pipe = usePipe ? ' | node cli/stream-claude-parser.mjs' : '';
 
     const cmdline = `claude -p ${parts.join(' ')} ${escapeForBash(prompt)}${pipe}`;
-    return { cmd: '/bin/bash', args: ['-c', cmdline] };
+    return { cmd: '/bin/bash', args: ['-c', cmdline], env: providerCliEnv() };
   },
 
   buildInteractiveLaunch({ promptFilePath, model }) {
@@ -306,6 +311,7 @@ const claude: Provider = {
     return {
       cmd: '/bin/bash',
       args: ['-c', `claude --model ${model} < ${promptFilePath}`],
+      env: providerCliEnv(),
     };
   },
 
@@ -343,7 +349,7 @@ const claude: Provider = {
     // unambiguous — claude consumes the whole file then hits EOF and proceeds.
     // (Headless jobs never saw this: they attach no MCP server.)
     const cmdline = `claude -p ${parts.join(' ')} < ${escapeForBash(promptFile)}`;
-    return { cmd: '/bin/bash', args: ['-c', cmdline] };
+    return { cmd: '/bin/bash', args: ['-c', cmdline], env: providerCliEnv() };
   },
 
   extractSessionId(streamLine) {
@@ -501,7 +507,11 @@ const claude: Provider = {
 
   async checkInstalled() {
     try {
-      const out = execFileSync('claude', ['--version'], { encoding: 'utf-8', timeout: 3000 });
+      const out = execFileSync('claude', ['--version'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+        env: withProviderCliPath(),
+      });
       const m = out.match(/(\d+\.\d+\.\d+)/);
       return { ok: true, version: m?.[1] };
     } catch (err) {

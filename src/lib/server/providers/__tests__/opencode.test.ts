@@ -21,14 +21,15 @@
 //     installed locally (falls back to a small curated static list).
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import opencode from '../opencode';
 
 describe('opencode provider', () => {
   describe('buildHeadlessArgs', () => {
     it('prints OpenCode error logs while preserving the plain-text report stream', () => {
-      const { cmd, args } = opencode.buildHeadlessArgs({
+      const { cmd, args, env } = opencode.buildHeadlessArgs({
         prompt: 'Evaluate offer #42',
         model: 'anthropic/claude-3-haiku',
       });
@@ -38,6 +39,7 @@ describe('opencode provider', () => {
       expect(args[1]).toContain('--print-logs');
       expect(args[1]).toContain('--log-level ERROR');
       expect(args[1]).toContain('-m anthropic/claude-3-haiku');
+      expect(env?.PATH?.split(delimiter)).toContain(join(homedir(), '.opencode', 'bin'));
     });
 
     it('throws on outputFormat other than "text"', () => {

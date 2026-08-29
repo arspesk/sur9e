@@ -11,6 +11,7 @@
 import 'server-only';
 import { execFileSync } from 'node:child_process';
 import type { ProviderId } from '../../schemas/providers';
+import { withProviderCliPath } from './cli-path';
 import type { Provider } from './types';
 
 export type ChatCapabilities = { resume: boolean };
@@ -18,7 +19,12 @@ export type ChatCapabilities = { resume: boolean };
 type ExecImpl = (cmd: string, args: string[]) => string;
 
 const defaultExec: ExecImpl = (cmd, args) =>
-  execFileSync(cmd, args, { encoding: 'utf-8', timeout: 5000, maxBuffer: 4 * 1024 * 1024 });
+  execFileSync(cmd, args, {
+    encoding: 'utf-8',
+    timeout: 5000,
+    maxBuffer: 4 * 1024 * 1024,
+    env: withProviderCliPath(),
+  });
 
 let execImpl: ExecImpl = defaultExec;
 

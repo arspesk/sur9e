@@ -15,6 +15,7 @@ import { type JobRecord } from '../../schemas/jobs';
 import { ProviderId } from '../../schemas/providers';
 import { cleanErrorLine, stripTerminalNoise } from '../../terminal-noise';
 import { atomicWrite } from '../atomic-write';
+import { withProviderCliPath } from '../providers/cli-path';
 import {
   getProvider,
   type ModeRuntime,
@@ -452,7 +453,7 @@ export async function spawnJob(
   // bypass the config.yml fallthrough. The runner already used the
   // override above for the JOB RECORD stamping; this propagates it to
   // the subprocess so the actual CLI invocation matches.
-  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  const childEnv = withProviderCliPath();
   if (runOverride) {
     childEnv.SUR9E_OVERRIDE_PLATFORM = runOverride.platform;
     childEnv.SUR9E_OVERRIDE_MODEL = runOverride.model;
